@@ -168,6 +168,19 @@ export const activitiesAPI = {
   torreControl: (params) => api.get('/activities/torre-control', { params }),
 }
 
+// ─── Lean Pro ────────────────────────────────────────────────────────────
+export const leanProAPI = {
+  createStandup: (data) => api.post('/lean-pro/standup', data),
+  listStandups: (params) => api.get('/lean-pro/standup', { params }),
+  myStandup: () => api.get('/lean-pro/standup/my'),
+  createRetro: (data) => api.post('/lean-pro/retro', data),
+  listRetros: (params) => api.get('/lean-pro/retro', { params }),
+  createKaizen: (data) => api.post('/lean-pro/kaizen', data),
+  listKaizen: (params) => api.get('/lean-pro/kaizen', { params }),
+  updateKaizen: (id, data) => api.patch(`/lean-pro/kaizen/${id}`, data),
+  dashboard: () => api.get('/lean-pro/dashboard'),
+}
+
 // ─── Dashboard Builder ───────────────────────────────────────────────────
 export const dashboardBuilderAPI = {
   list: (params) => api.get('/dashboard-builder', { params }),

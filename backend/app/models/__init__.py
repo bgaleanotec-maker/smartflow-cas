@@ -21,6 +21,9 @@ from app.models.activities import (
     RecurringActivity, ActivityInstance, ActivityFrequency, ActivityStatus,
     ActivityScope, DashboardWidget,
 )
+from app.models.lean_pro import (
+    DailyStandup, Retrospective, SprintMetrics, KaizenItem,
+)
 
 __all__ = [
     "User", "UserRole", "TeamType", "ContractType",
@@ -40,4 +43,5 @@ __all__ = [
     "HechoRelevante", "PremisaNegocio", "PremisaStatus", "PremisaTimeline",
     "RecurringActivity", "ActivityInstance", "ActivityFrequency", "ActivityStatus",
     "ActivityScope", "DashboardWidget",
+    "DailyStandup", "Retrospective", "SprintMetrics", "KaizenItem",
 ]

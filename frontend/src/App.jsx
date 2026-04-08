@@ -19,6 +19,7 @@ import HechosPage from './pages/hechos/HechosPage'
 import PremisasPage from './pages/premisas/PremisasPage'
 import TorreControlPage from './pages/torre-control/TorreControlPage'
 import CentroInfoPage from './pages/centro-info/CentroInfoPage'
+import LeanProPage from './pages/lean-pro/LeanProPage'
 
 function ProtectedRoute({ children, requireAdmin = false, requireLeader = false }) {
   const { isAuthenticated, user } = useAuthStore()
@@ -73,6 +74,7 @@ export default function App() {
           <Route path="premisas" element={<PremisasPage />} />
           <Route path="torre-control" element={<TorreControlPage />} />
           <Route path="centro-info" element={<CentroInfoPage />} />
+          <Route path="lean-pro" element={<LeanProPage />} />
           <Route
             path="admin"
             element={
