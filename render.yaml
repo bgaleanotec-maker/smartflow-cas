@@ -1,7 +1,7 @@
 services:
   - type: web
     name: smartflow-api
-    runtime: docker
+    env: docker
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /health
@@ -19,19 +19,13 @@ services:
         value: "false"
       - key: FRONTEND_URL
         value: https://smartflow-cas.onrender.com
-      - key: ALLOWED_ORIGINS
-        value: '["https://smartflow-cas.onrender.com"]'
 
   - type: web
     name: smartflow-cas
-    runtime: static
+    env: static
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: ./frontend/dist
     plan: free
-    headers:
-      - path: /*
-        name: Cache-Control
-        value: public, max-age=0, must-revalidate
     routes:
       - type: rewrite
         source: /api/*
@@ -45,4 +39,3 @@ databases:
     plan: free
     databaseName: smartflow_db
     user: smartflow
-    postgresMajorVersion: "16"
