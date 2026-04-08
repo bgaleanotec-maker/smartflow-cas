@@ -33,14 +33,14 @@ services:
     plan: free
     envVars:
       # URL absoluta del backend — debe coincidir con el nombre del servicio backend
-      # arriba (smartflow-api → https://smartflow-api-0ric.onrender.com)
+      # arriba (smartflow-api → https://smartflow-api.onrender.com)
       - key: VITE_API_URL
-        value: https://smartflow-api-0ric.onrender.com/api/v1
+        value: https://smartflow-api.onrender.com/api/v1
     routes:
       # Fallback rewrite para requests /api/* (también sirve si VITE_API_URL no está seteado)
       - type: rewrite
         source: /api/*
-        destination: https://smartflow-api-0ric.onrender.com/api/*
+        destination: https://smartflow-api.onrender.com/api/*
       - type: rewrite
         source: /*
         destination: /index.html
