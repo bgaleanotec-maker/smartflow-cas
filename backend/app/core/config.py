@@ -33,13 +33,15 @@ class Settings(BaseSettings):
     ULTRA_API_KEY: Optional[str] = None
     ULTRA_INSTANCE_ID: Optional[str] = None
 
-    # CORS
+    # CORS — all known frontend origins
     ALLOWED_ORIGINS: list[str] = [
         "http://localhost:5173",
         "http://localhost:3000",
+        "http://localhost:8000",
         "https://smartflow.onrender.com",
         "https://smartflow-cas.onrender.com",
         "https://smartflow-casbo.onrender.com",
+        "https://smartflow-api.onrender.com",
     ]
 
     class Config:
