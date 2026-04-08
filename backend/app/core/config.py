@@ -1,6 +1,5 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
-import secrets
 
 
 class Settings(BaseSettings):
@@ -17,8 +16,10 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://localhost:6379"
 
-    # JWT
-    SECRET_KEY: str = secrets.token_urlsafe(32)
+    # JWT — IMPORTANT: always set SECRET_KEY as env var in production.
+    # A fixed fallback is used here so tokens survive server restarts in dev.
+    # In production (Render) this MUST be overridden with a stable secret.
+    SECRET_KEY: str = "dev-only-secret-key-change-in-production-min32ch"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480   # 8 horas
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30

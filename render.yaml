@@ -1,4 +1,5 @@
 services:
+  # ─── BACKEND ──────────────────────────────────────────────────────────────
   - type: web
     name: smartflow-api
     env: docker
@@ -11,6 +12,9 @@ services:
         fromDatabase:
           name: smartflow-db
           property: connectionString
+      # IMPORTANTE: genera un valor una vez y NO lo cambies — cambiar SECRET_KEY
+      # invalida todos los tokens activos (todos los usuarios quedan deslogueados).
+      # Genera con: python -c "import secrets; print(secrets.token_urlsafe(32))"
       - key: SECRET_KEY
         generateValue: true
       - key: ENVIRONMENT
@@ -18,15 +22,22 @@ services:
       - key: DEBUG
         value: "false"
       - key: FRONTEND_URL
-        value: https://smartflow-cas.onrender.com
+        value: https://smartflow-casbo.onrender.com
 
+  # ─── FRONTEND ─────────────────────────────────────────────────────────────
   - type: web
-    name: smartflow-cas
+    name: smartflow-casbo
     env: static
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: ./frontend/dist
     plan: free
+    envVars:
+      # URL absoluta del backend — debe coincidir con el nombre del servicio backend
+      # arriba (smartflow-api → https://smartflow-api.onrender.com)
+      - key: VITE_API_URL
+        value: https://smartflow-api.onrender.com/api/v1
     routes:
+      # Fallback rewrite para requests /api/* (también sirve si VITE_API_URL no está seteado)
       - type: rewrite
         source: /api/*
         destination: https://smartflow-api.onrender.com/api/*
@@ -34,6 +45,7 @@ services:
         source: /*
         destination: /index.html
 
+# ─── BASE DE DATOS ──────────────────────────────────────────────────────────
 databases:
   - name: smartflow-db
     plan: free

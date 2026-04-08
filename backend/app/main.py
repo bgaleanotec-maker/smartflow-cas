@@ -32,21 +32,31 @@ async def seed_defaults():
     from app.models.catalog import Priority, TaskStatus
     from app.models.business import Business
 
+    # Canonical admin credentials — keep in sync with Render env var ADMIN_PASSWORD
+    ADMIN_EMAIL = "admin@smartflow.app"
+    ADMIN_PASSWORD = "SmartFlow2026!"
+
     async with AsyncSessionLocal() as db:
-        # Create admin user if none exists
+        # Upsert admin: create if missing, sync password if already exists
         result = await db.execute(
-            select(User).where(User.role == UserRole.ADMIN).limit(1)
+            select(User).where(User.email == ADMIN_EMAIL).limit(1)
         )
-        if not result.scalar_one_or_none():
+        existing_admin = result.scalar_one_or_none()
+        if existing_admin is None:
             admin = User(
                 full_name="Administrador SmartFlow",
-                email="admin@smartflow.app",
-                hashed_password=get_password_hash("SmartFlow2024!"),
+                email=ADMIN_EMAIL,
+                hashed_password=get_password_hash(ADMIN_PASSWORD),
                 role=UserRole.ADMIN,
                 must_change_password=True,
                 is_active=True,
             )
             db.add(admin)
+        else:
+            # Sync password and ensure account is active on every deploy
+            existing_admin.hashed_password = get_password_hash(ADMIN_PASSWORD)
+            existing_admin.is_active = True
+            existing_admin.role = UserRole.ADMIN
 
         # Seed priorities
         result = await db.execute(select(Priority).limit(1))
