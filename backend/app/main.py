@@ -198,6 +198,7 @@ app.include_router(dashboard_builder.router, prefix=API_PREFIX)
 app.include_router(lean_pro.router, prefix=API_PREFIX)
 
 
+# force redeploy 2026-04-08
 @app.get("/health")
 async def health():
     return {"status": "ok", "app": settings.APP_NAME, "version": settings.VERSION}
