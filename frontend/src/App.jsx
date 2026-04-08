@@ -17,6 +17,8 @@ import DemandDetailPage from './pages/demands/DemandDetailPage'
 import DemandDashboardPage from './pages/demands/DemandDashboardPage'
 import HechosPage from './pages/hechos/HechosPage'
 import PremisasPage from './pages/premisas/PremisasPage'
+import TorreControlPage from './pages/torre-control/TorreControlPage'
+import CentroInfoPage from './pages/centro-info/CentroInfoPage'
 
 function ProtectedRoute({ children, requireAdmin = false, requireLeader = false }) {
   const { isAuthenticated, user } = useAuthStore()
@@ -69,6 +71,8 @@ export default function App() {
           <Route path="demands/:id" element={<DemandDetailPage />} />
           <Route path="hechos" element={<HechosPage />} />
           <Route path="premisas" element={<PremisasPage />} />
+          <Route path="torre-control" element={<TorreControlPage />} />
+          <Route path="centro-info" element={<CentroInfoPage />} />
           <Route
             path="admin"
             element={

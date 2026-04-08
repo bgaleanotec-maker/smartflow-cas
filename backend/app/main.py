@@ -9,7 +9,7 @@ from app.core.database import engine, Base
 # Import all models to ensure they're registered before create_all
 import app.models  # noqa: F401
 
-from app.routers import auth, users, projects, tasks, incidents, admin, pomodoro, demands, demand_admin, hechos, premisas, ai_assistant
+from app.routers import auth, users, projects, tasks, incidents, admin, pomodoro, demands, demand_admin, hechos, premisas, ai_assistant, activities, dashboard_builder
 
 
 @asynccontextmanager
@@ -132,20 +132,39 @@ app = FastAPI(
     title=settings.APP_NAME,
     version=settings.VERSION,
     description="Sistema integrado de gestión de equipos, proyectos e incidentes",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
+    docs_url="/api/docs" if settings.DEBUG else None,
+    redoc_url="/api/redoc" if settings.DEBUG else None,
     openapi_url="/api/openapi.json",
     lifespan=lifespan,
 )
 
 # ─── Middleware ───────────────────────────────────────────────────────────────
 
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if settings.ENVIRONMENT == "production":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
@@ -164,6 +183,8 @@ app.include_router(demand_admin.router, prefix=API_PREFIX)
 app.include_router(hechos.router, prefix=API_PREFIX)
 app.include_router(premisas.router, prefix=API_PREFIX)
 app.include_router(ai_assistant.router, prefix=API_PREFIX)
+app.include_router(activities.router, prefix=API_PREFIX)
+app.include_router(dashboard_builder.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

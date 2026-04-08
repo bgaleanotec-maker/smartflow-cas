@@ -157,6 +157,26 @@ export const aiAPI = {
   assist: (data) => api.post('/ai/assist', data),
 }
 
+// ─── Activities (Torre de Control) ───────────────────────────────────────
+export const activitiesAPI = {
+  list: (params) => api.get('/activities', { params }),
+  create: (data) => api.post('/activities', data),
+  update: (id, data) => api.patch(`/activities/${id}`, data),
+  delete: (id) => api.delete(`/activities/${id}`),
+  instances: (params) => api.get('/activities/instances', { params }),
+  updateInstance: (id, data) => api.patch(`/activities/instances/${id}`, data),
+  torreControl: (params) => api.get('/activities/torre-control', { params }),
+}
+
+// ─── Dashboard Builder ───────────────────────────────────────────────────
+export const dashboardBuilderAPI = {
+  list: (params) => api.get('/dashboard-builder', { params }),
+  create: (data) => api.post('/dashboard-builder', data),
+  update: (id, data) => api.patch(`/dashboard-builder/${id}`, data),
+  delete: (id) => api.delete(`/dashboard-builder/${id}`),
+  getData: (source, params) => api.get(`/dashboard-builder/data/${source}`, { params }),
+}
+
 // ─── Pomodoro ─────────────────────────────────────────────────────────────
 export const pomodoroAPI = {
   start: (data) => api.post('/pomodoro/start', data),

@@ -4,6 +4,7 @@ import {
   LayoutDashboard, FolderKanban, AlertTriangle, Timer,
   Users, Settings, LogOut, ChevronLeft, ChevronRight,
   Bell, Search, Menu, X, FileText, BarChart3, Newspaper, Landmark,
+  Plane, LayoutGrid,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { usePomodoroStore } from '../../stores/pomodoroStore'
@@ -11,6 +12,8 @@ import clsx from 'clsx'
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/torre-control', icon: Plane, label: 'Torre de Control' },
+  { to: '/centro-info', icon: LayoutGrid, label: 'Centro Info' },
   { to: '/demands', icon: FileText, label: 'Demandas' },
   { to: '/demands/dashboard', icon: BarChart3, label: 'Dashboard Demandas', roles: ['admin', 'leader', 'herramientas'] },
   { to: '/hechos', icon: Newspaper, label: 'Hechos Relevantes' },

@@ -17,6 +17,10 @@ from app.models.demand import (
 from app.models.business_intel import (
     HechoRelevante, PremisaNegocio, PremisaStatus, PremisaTimeline,
 )
+from app.models.activities import (
+    RecurringActivity, ActivityInstance, ActivityFrequency, ActivityStatus,
+    ActivityScope, DashboardWidget,
+)
 
 __all__ = [
     "User", "UserRole", "TeamType", "ContractType",
@@ -34,4 +38,6 @@ __all__ = [
     "DemandRequest", "DemandStatus", "BeneficioTipo", "RequirementStatus",
     "DemandTimeline", "DemandMeetingNote", "DemandRequirement",
     "HechoRelevante", "PremisaNegocio", "PremisaStatus", "PremisaTimeline",
+    "RecurringActivity", "ActivityInstance", "ActivityFrequency", "ActivityStatus",
+    "ActivityScope", "DashboardWidget",
 ]
