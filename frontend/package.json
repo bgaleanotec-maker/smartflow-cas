@@ -1,0 +1,44 @@
+{
+  "name": "smartflow-frontend",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --ext js,jsx --report-unused-disable-directives"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.27.0",
+    "axios": "^1.7.9",
+    "zustand": "^5.0.2",
+    "@tanstack/react-query": "^5.62.2",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^8.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "recharts": "^2.14.1",
+    "date-fns": "^4.1.0",
+    "react-hook-form": "^7.54.1",
+    "zod": "^3.23.8",
+    "@hookform/resolvers": "^3.9.1",
+    "lucide-react": "^0.468.0",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.5.5",
+    "react-hot-toast": "^2.4.1",
+    "react-markdown": "^9.0.1",
+    "framer-motion": "^11.12.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.5",
+    "vite-plugin-pwa": "^0.21.1",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "eslint": "^9.17.0",
+    "eslint-plugin-react": "^7.37.3",
+    "eslint-plugin-react-hooks": "^5.1.0"
+  }
+}
