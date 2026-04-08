@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manual de Usuario - SmartFlow CAS BO</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; color: #1e293b; line-height: 1.7; background: #fff; }
+  .container { max-width: 900px; margin: 0 auto; padding: 40px 30px; }
+  h1 { font-size: 32px; color: #4f46e5; margin-bottom: 8px; }
+  h2 { font-size: 22px; color: #1e293b; margin: 40px 0 12px; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0; }
+  h3 { font-size: 16px; color: #4f46e5; margin: 24px 0 8px; }
+  p { margin-bottom: 12px; font-size: 14px; }
+  .subtitle { color: #64748b; font-size: 14px; margin-bottom: 4px; }
+  .author { color: #4f46e5; font-weight: 600; font-size: 15px; margin-bottom: 30px; display: block; }
+  .badge { display: inline-block; background: #4f46e5; color: white; padding: 3px 10px; border-radius: 12px; font-size: 11px; margin-right: 6px; }
+  .module { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 16px 0; }
+  .module-title { font-size: 16px; font-weight: 700; color: #1e293b; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .module-icon { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; font-weight: bold; }
+  .url { font-family: monospace; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; font-size: 13px; color: #4f46e5; }
+  ul { padding-left: 20px; margin-bottom: 12px; }
+  li { font-size: 14px; margin-bottom: 4px; }
+  .table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+  .table th { background: #4f46e5; color: white; padding: 10px 14px; text-align: left; }
+  .table td { padding: 8px 14px; border-bottom: 1px solid #e2e8f0; }
+  .table tr:nth-child(even) { background: #f8fafc; }
+  .tip { background: #eff6ff; border-left: 4px solid #3b82f6; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 13px; }
+  .warning { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 13px; }
+  .footer { margin-top: 60px; padding-top: 20px; border-top: 2px solid #e2e8f0; text-align: center; color: #94a3b8; font-size: 12px; }
+  @media print { .container { padding: 20px; } h1 { font-size: 28px; } h2 { page-break-before: auto; } .module { page-break-inside: avoid; } }
+  .logo { width: 48px; height: 48px; background: #4f46e5; border-radius: 14px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 20px; margin-bottom: 16px; }
+  .version { background: #f1f5f9; padding: 12px 20px; border-radius: 8px; margin: 20px 0; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">SF</div>
+  <h1>SmartFlow CAS BO</h1>
+  <p class="subtitle">Manual de Usuario - Sistema Integrado de Gestion</p>
+  <span class="author">Elaborado por: Brayan Galeano Tobon | Jefe Sr CAS BO & Lean Expert</span>
+
+  <div class="version">
+    <strong>Version:</strong> 2.0 | <strong>Fecha:</strong> Abril 2026 | <strong>URL:</strong> <span class="url">https://smartflow-casbo.onrender.com</span>
+  </div>
+
+  <h2>1. Introduccion</h2>
+  <p>SmartFlow es el sistema integrado de gestion para CAS BO (Centro de Atencion y Servicios - Back Office). Centraliza la gestion de demandas TI, proyectos, incidentes, actividades recurrentes, premisas de negocio y la metodologia Lean/Agil en una sola plataforma.</p>
+
+  <h2>2. Acceso al Sistema</h2>
+  <p>Ingresa a <span class="url">https://smartflow-casbo.onrender.com</span> y usa las credenciales proporcionadas por el administrador.</p>
+  <div class="tip">El primer inicio de sesion requiere cambio de contrasena obligatorio por seguridad.</div>
+
+  <h3>Roles del Sistema</h3>
+  <table class="table">
+    <tr><th>Rol</th><th>Descripcion</th><th>Acceso</th></tr>
+    <tr><td><span class="badge">Admin</span></td><td>Administrador del sistema</td><td>Acceso total, configuracion, catalogos, usuarios</td></tr>
+    <tr><td><span class="badge">Leader</span></td><td>Lider de equipo / Coordinador</td><td>Gestion de proyectos, equipos, dashboards gerenciales</td></tr>
+    <tr><td><span class="badge">Herramientas</span></td><td>Gestion de herramientas TI</td><td>Demandas, radicados, torre de control</td></tr>
+    <tr><td><span class="badge">Negocio</span></td><td>Usuario de area de negocio</td><td>Crear demandas, ver estado, hechos relevantes</td></tr>
+    <tr><td><span class="badge">Member</span></td><td>Miembro del equipo</td><td>Tareas, proyectos, pomodoro, standup diario</td></tr>
+  </table>
+
+  <h2>3. Modulos del Sistema</h2>
+
+  <div class="module">
+    <div class="module-title"><div class="module-icon" style="background:#6366f1">D</div> Dashboard Principal</div>
+    <p><span class="url">/dashboard</span></p>
+    <p>Vista general con KPIs: tareas asignadas, proyectos activos, incidentes abiertos, sesiones pomodoro. Muestra un resumen rapido del estado de gestion.</p>
+  </div>
+
+  <div class="module">
+    <div class="module-title"><div class="module-icon" style="background:#8b5cf6">TC</div> Torre de Control</div>
+    <p><span class="url">/torre-control</span></p>
+    <p>Centro de gestion de actividades recurrentes. Permite crear actividades con frecuencia diaria, semanal, mensual, etc. Muestra:</p>
+    <ul>
+      <li><strong>KPIs:</strong> Pendientes, Vencidas, Completadas, % Cumplimiento</li>
+      <li><strong>Alertas rojas:</strong> Actividades vencidas con accion directa</li>
+      <li><strong>Alertas naranja:</strong> Proximas a vencer esta semana</li>
+      <li><strong>Filtro por equipo:</strong> CAS / BO / Todos</li>
+      <li><strong>IA:</strong> Recomendaciones de priorizacion</li>
+    </ul>
+  </div>
+
+  <div class="module">
+    <div class="module-title"><div class="module-icon" style="background:#f59e0b">LP</div> Lean Pro</div>
+    <p><span class="url">/lean-pro</span></p>
+    <p>Modulo de gestion agil basado en principios Lean, Scrum y gerenciamiento diario:</p>
+    <ul>
+      <li><strong>Standup Diario:</strong> Cada miembro reporta que hizo, que hara y bloqueantes. Incluye mood y nivel de energia del equipo.</li>
+      <li><strong>Kaizen Board:</strong> Tablero de mejora continua. Cualquiera puede proponer mejoras clasificadas por impacto/esfuerzo.</li>
+      <li><strong>Retrospectivas:</strong> Que salio bien, que mejorar, acciones concretas y kudos.</li>
+      <li><strong>Velocity:</strong> Tracking de puntos completados por sprint.</li>
+    </ul>
+    <div class="tip">El boton "Mi Standup" parpadea si aun no has registrado tu gerenciamiento diario.</div>
+  </div>
+
+  <div class="module">
+    <div class="module-title"><div class="module-icon" style="background:#10b981">CI</div> Centro de Informacion</div>
+    <p><span class="url">/centro-info</span></p>
+    <p>Dashboard interactivo configurable. Los coordinadores crean widgets personalizados:</p>
+    <ul>
+      <li><strong>KPI:</strong> Numero grande con etiqueta</li>
+      <li><strong>Graficos:</strong> Barras, torta, lineas</li>
+      <li><strong>Texto:</strong> Informacion libre</li>
+      <li><strong>Progreso:</strong> Barra de avance</li>
+    </ul>
+    <p>Fuentes de datos: Actividades, Demandas, Incidentes, Proyectos o datos personalizados.</p>
+  </div>
+
+  <div class="module">
+    <div class="module-title"><div class="module-icon" style="background:#3b82f6">GD</div> Gestion de Demanda</div>
+    <p><span class="url">/demands</span></p>
+    <p>Formulario wizard de 9 pasos para registrar demandas TI. Incluye:</p>
+    <ul>
+      <li>Vicepresidencia solicitante, enfoque, situacion actual</li>
+      <li>Impacto en pilares estrategicos, procesos, usuarios</li>
+      <li>Riesgo operacional, SOX, regulatorio</li>
+      <li>Beneficio economico (ahorro/ingreso)</li>
+      <li>Requerimientos funcionales detallados</li>
+      <li>Timeline, notas de reunion, estados</li>
+    </ul>
+    <p><strong>Dashboard de Demandas</strong> (<span class="url">/demands/dashboard</span>): KPIs gerenciales, embudo de estados, impacto economico, alertas de retraso.</p>
+  </div>
+
+  <div class="module">
+    <div class="module-title"><div class="module-icon" style="background:#22c55e">HR</div> Hechos Relevantes</div>
+    <p><span class="url">/hechos</span></p>
+    <p>Registro semanal de hitos comerciales importantes. Categorias: comercial, operativo, estrategico, regulatorio. Niveles de impacto: alto, medio, bajo.</p>
+  </div>
+
+  <div class="module">
+    <div class="module-title"><div class="module-icon" style="background:#eab308">P</div> Premisas del Negocio</div>
+    <p><span class="url">/premisas</span></p>
+    <p>Seguimiento de premisas presupuestarias. Compara monto estimado vs real con varianza automatica. Categorias: presupuesto, ingresos, costos, mercado, regulatorio.</p>
+  </div>
+
+  <div class="module">
+    <div class="module-title"><div class="module-icon" style="background:#6366f1">P</div> Proyectos</div>
+    <p><span class="url">/projects</span></p>
+    <p>Gestion de proyectos con epicos, sprints, tareas, kanban board. Asignacion de equipos y seguimiento de progreso.</p>
+  </div>
+
+  <div class="module">
+    <div class="module-title"><div class="module-icon" style="background:#ef4444">I</div> Incidentes</div>
+    <p><span class="url">/incidents</span></p>
+    <p>Gestion de incidentes con severidad (critico/alto/medio/bajo), impacto economico, causa raiz, timeline. Posibilidad de escalar a Demanda TI.</p>
+  </div>
+
+  <div class="module">
+    <div class="module-title"><div class="module-icon" style="background:#f97316">T</div> Pomodoro</div>
+    <p><span class="url">/pomodoro</span></p>
+    <p>Timer Pomodoro integrado con tareas. Sesiones de 25 min de trabajo + descansos. Registra tiempo automaticamente en las tareas asociadas.</p>
+  </div>
+
+  <h2>4. Administracion</h2>
+  <p><span class="url">/admin</span> - Solo accesible para rol Admin.</p>
+  <ul>
+    <li><strong>Catalogos de Demanda:</strong> Vicepresidencias, enfoques, pilares, procesos, riesgos</li>
+    <li><strong>Form Builder:</strong> Campos personalizados para formularios</li>
+    <li><strong>Integraciones:</strong> API keys de Resend, SendGrid, Ultra MSG, Gemini IA, Lite</li>
+    <li><strong>Usuarios:</strong> Crear, editar, desactivar usuarios con roles y equipos</li>
+    <li><strong>Negocios:</strong> Gestionar unidades de negocio</li>
+  </ul>
+
+  <h2>5. Asistente IA</h2>
+  <p>SmartFlow integra inteligencia artificial (Google Gemini) para:</p>
+  <ul>
+    <li>Recomendaciones de priorizacion de demandas</li>
+    <li>Analisis de premisas presupuestarias</li>
+    <li>Insights sobre hechos relevantes</li>
+    <li>Asesoria en la torre de control</li>
+  </ul>
+  <div class="tip">Configura la API Key de Gemini en Administracion > Integraciones para activar la IA.</div>
+
+  <h2>6. Equipos</h2>
+  <table class="table">
+    <tr><th>Equipo</th><th>Descripcion</th></tr>
+    <tr><td><strong>CAS</strong></td><td>Centro de Atencion y Servicios - Soporte al cliente</td></tr>
+    <tr><td><strong>BO</strong></td><td>Back Office - Operaciones internas</td></tr>
+  </table>
+  <p>Cada modulo permite filtrar por equipo para ver informacion segmentada o de todos.</p>
+
+  <h2>7. Flujo de Trabajo Recomendado</h2>
+  <ol style="padding-left: 20px; margin-bottom: 12px;">
+    <li>Iniciar el dia con <strong>Standup Diario</strong> en Lean Pro</li>
+    <li>Revisar la <strong>Torre de Control</strong> para actividades vencidas/proximas</li>
+    <li>Consultar el <strong>Centro de Informacion</strong> para KPIs transversales</li>
+    <li>Gestionar <strong>Demandas</strong> e <strong>Incidentes</strong> segun prioridad</li>
+    <li>Usar <strong>Pomodoro</strong> para sesiones de trabajo enfocado</li>
+    <li>Registrar <strong>Hechos Relevantes</strong> de la semana</li>
+    <li>Al cierre de sprint: <strong>Retrospectiva</strong> en Lean Pro</li>
+  </ol>
+
+  <div class="warning"><strong>Nota:</strong> El servidor free de Render se duerme tras 15 min de inactividad. La primera carga puede tardar ~50 segundos. Esto es normal.</div>
+
+  <div class="footer">
+    <p><strong>SmartFlow CAS BO v2.0</strong></p>
+    <p>Elaborado por Brayan Galeano Tobon | Jefe Sr CAS BO & Lean Expert</p>
+    <p>Abril 2026 | Todos los derechos reservados</p>
+  </div>
+</div>
+</body>
+</html>

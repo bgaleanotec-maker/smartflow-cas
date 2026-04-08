@@ -113,9 +113,19 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-xs text-slate-600 mt-6">
-          SmartFlow v1.0 · Tu cuenta es gestionada por el administrador
-        </p>
+        <div className="text-center mt-6 space-y-2">
+          <a
+            href="/manual-smartflow.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-brand-400 hover:text-brand-300 underline"
+          >
+            Descargar Manual de Usuario (PDF)
+          </a>
+          <p className="text-xs text-slate-600">
+            SmartFlow v2.0 · Tu cuenta es gestionada por el administrador
+          </p>
+        </div>
       </div>
     </div>
   )
