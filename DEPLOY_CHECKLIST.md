@@ -51,14 +51,14 @@ Configura estas variables en **Render → tu servicio backend → Environment**:
 
 ```bash
 # Health check del backend
-curl https://smartflow-api.onrender.com/health
+curl https://smartflow-api-0ric.onrender.com/health
 # Respuesta esperada: {"status":"ok","app":"SmartFlow","version":"1.0.0"}
 
 # Si el servicio está en cold start (free tier), puede tardar 30-60 segundos
 # en responder la primera vez. Reintenta si hay timeout.
 
 # Probar login desde terminal
-curl -X POST https://smartflow-api.onrender.com/api/v1/auth/login \
+curl -X POST https://smartflow-api-0ric.onrender.com/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@smartflow.app","password":"SmartFlow2026!"}'
 # Respuesta esperada: {"access_token":"...","refresh_token":"...","token_type":"bearer"}
@@ -98,7 +98,7 @@ asyncio.run(reset())
 ### Opción C — Via endpoint de reset (requiere estar logueado como admin)
 ```bash
 # Primero obtén un token con las credenciales actuales, luego:
-curl -X POST https://smartflow-api.onrender.com/api/v1/users/{user_id}/reset-password \
+curl -X POST https://smartflow-api-0ric.onrender.com/api/v1/users/{user_id}/reset-password \
   -H "Authorization: Bearer {access_token}"
 ```
 
@@ -109,7 +109,7 @@ curl -X POST https://smartflow-api.onrender.com/api/v1/users/{user_id}/reset-pas
 | Síntoma | Causa probable | Solución |
 |---------|---------------|----------|
 | 502 Bad Gateway | Backend en cold start o caído | Espera 60s y reintenta; revisa logs en Render |
-| 502 en `/api/*` | URL del backend incorrecta en rewrite | Verifica que `smartflow-api.onrender.com` sea la URL correcta del backend |
+| 502 en `/api/*` | URL del backend incorrecta en rewrite | Verifica que `smartflow-api-0ric.onrender.com` sea la URL correcta del backend |
 | 401 en login | Contraseña incorrecta o SECRET_KEY cambió | Re-deploy para sincronizar contraseña; verificar SECRET_KEY en env vars |
 | 403 en login | Cuenta desactivada (`is_active=False`) | Re-deploy sincroniza `is_active=True` para el admin |
 | CORS error en browser | Origen no está en `ALLOWED_ORIGINS` | Agregar URL del frontend a la lista en `config.py` |
@@ -125,7 +125,7 @@ Browser → https://smartflow-casbo.onrender.com
             │
             ├── /admin, /, /login  →  index.html (React SPA)
             │
-            └── /api/*  →  rewrite  →  https://smartflow-api.onrender.com/api/*
+            └── /api/*  →  rewrite  →  https://smartflow-api-0ric.onrender.com/api/*
                                               │
                                         FastAPI backend
                                               │
