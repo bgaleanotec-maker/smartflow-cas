@@ -38,6 +38,7 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "https://smartflow.onrender.com",
         "https://smartflow-cas.onrender.com",
+        "https://smartflow-casbo.onrender.com",
     ]
 
     class Config:
