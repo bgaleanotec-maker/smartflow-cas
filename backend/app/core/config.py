@@ -5,7 +5,7 @@ from typing import Optional
 class Settings(BaseSettings):
     # App
     APP_NAME: str = "SmartFlow"
-    VERSION: str = "1.0.1"  # force docker rebuild 2026-04-09
+    VERSION: str = "1.0.2"  # bcrypt rounds 12→10 for free tier 2026-04-09
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
     FRONTEND_URL: str = "http://localhost:5173"
