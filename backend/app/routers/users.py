@@ -116,7 +116,16 @@ async def update_user(user_id: int, payload: UserUpdate, db: DB, admin: LeaderOr
         setattr(user, field, value)
 
     await db.flush()
-    await db.refresh(user)
+    # Reload with eager-loaded relationships to avoid async lazy-load error
+    result2 = await db.execute(
+        select(User)
+        .options(
+            selectinload(User.main_business),
+            selectinload(User.secondary_business),
+        )
+        .where(User.id == user.id)
+    )
+    user = result2.scalar_one()
     return user
 
 

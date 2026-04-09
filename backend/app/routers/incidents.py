@@ -97,7 +97,17 @@ async def create_incident(payload: IncidentCreate, db: DB, current_user: Current
     )
     db.add(timeline_entry)
     await db.flush()
-    await db.refresh(incident)
+    # Reload with eager-loaded relationships to avoid async lazy-load error
+    result2 = await db.execute(
+        select(Incident)
+        .options(
+            selectinload(Incident.responsible),
+            selectinload(Incident.reporter),
+            selectinload(Incident.timeline).selectinload(IncidentTimeline.user),
+        )
+        .where(Incident.id == incident.id)
+    )
+    incident = result2.scalar_one()
     return incident
 
 
@@ -158,7 +168,17 @@ async def update_incident(
         incident.resolution_date = datetime.now(timezone.utc)
 
     await db.flush()
-    await db.refresh(incident)
+    # Reload with eager-loaded relationships to avoid async lazy-load error
+    result2 = await db.execute(
+        select(Incident)
+        .options(
+            selectinload(Incident.responsible),
+            selectinload(Incident.reporter),
+            selectinload(Incident.timeline).selectinload(IncidentTimeline.user),
+        )
+        .where(Incident.id == incident.id)
+    )
+    incident = result2.scalar_one()
     return incident
 
 

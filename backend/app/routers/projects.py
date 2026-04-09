@@ -81,7 +81,16 @@ async def create_project(payload: ProjectCreate, db: DB, current_user: LeaderOrA
                 )
             )
 
-    await db.refresh(project)
+    # Reload with eager-loaded relationships to avoid async lazy-load error
+    result = await db.execute(
+        select(Project)
+        .options(
+            selectinload(Project.leader),
+            selectinload(Project.members),
+        )
+        .where(Project.id == project.id)
+    )
+    project = result.scalar_one()
     return project
 
 
@@ -137,7 +146,16 @@ async def update_project(
             )
 
     await db.flush()
-    await db.refresh(project)
+    # Reload with eager-loaded relationships to avoid async lazy-load error
+    result2 = await db.execute(
+        select(Project)
+        .options(
+            selectinload(Project.leader),
+            selectinload(Project.members),
+        )
+        .where(Project.id == project_id)
+    )
+    project = result2.scalar_one()
     return project
 
 

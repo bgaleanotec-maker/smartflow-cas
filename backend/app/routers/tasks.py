@@ -78,7 +78,17 @@ async def create_task(payload: TaskCreate, db: DB, current_user: CurrentUser):
     )
     db.add(task)
     await db.flush()
-    await db.refresh(task)
+    # Reload with eager-loaded relationships to avoid async lazy-load error
+    result2 = await db.execute(
+        select(Task)
+        .options(
+            selectinload(Task.assignee),
+            selectinload(Task.reporter),
+            selectinload(Task.subtasks),
+        )
+        .where(Task.id == task.id)
+    )
+    task = result2.scalar_one()
     return task
 
 
@@ -144,7 +154,17 @@ async def update_task(task_id: int, payload: TaskUpdate, db: DB, current_user: C
             task.completed_at = datetime.now(timezone.utc)
 
     await db.flush()
-    await db.refresh(task)
+    # Reload with eager-loaded relationships to avoid async lazy-load error
+    result2 = await db.execute(
+        select(Task)
+        .options(
+            selectinload(Task.assignee),
+            selectinload(Task.reporter),
+            selectinload(Task.subtasks),
+        )
+        .where(Task.id == task.id)
+    )
+    task = result2.scalar_one()
     return task
 
 
@@ -170,5 +190,11 @@ async def add_subtask(task_id: int, payload: SubTaskCreate, db: DB, current_user
     )
     db.add(subtask)
     await db.flush()
-    await db.refresh(subtask)
+    # Reload with eager-loaded relationships to avoid async lazy-load error
+    result2 = await db.execute(
+        select(SubTask)
+        .options(selectinload(SubTask.assignee))
+        .where(SubTask.id == subtask.id)
+    )
+    subtask = result2.scalar_one()
     return subtask
