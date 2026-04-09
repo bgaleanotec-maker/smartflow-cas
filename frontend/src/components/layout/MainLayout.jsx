@@ -9,6 +9,7 @@ import {
 import { useAuthStore } from '../../stores/authStore'
 import { usePomodoroStore } from '../../stores/pomodoroStore'
 import clsx from 'clsx'
+import AIChatWidget from '../AIChatWidget'
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -207,6 +208,9 @@ export default function MainLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* AI Chat Widget */}
+      <AIChatWidget />
     </div>
   )
 }

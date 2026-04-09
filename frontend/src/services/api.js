@@ -155,6 +155,8 @@ export const premisasAPI = {
 // ─── AI Assistant ────────────────────────────────────────────────────────
 export const aiAPI = {
   assist: (data) => api.post('/ai/assist', data),
+  chat: (data) => api.post('/ai/chat', data),
+  executeAction: (data) => api.post('/ai/chat/execute', data),
 }
 
 // ─── Activities (Torre de Control) ───────────────────────────────────────
