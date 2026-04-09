@@ -70,7 +70,17 @@ async def create_user(payload: UserCreate, db: DB, admin: LeaderOrAdmin):
     )
     db.add(new_user)
     await db.flush()
-    await db.refresh(new_user)
+
+    # Reload with eager-loaded relationships to avoid async lazy-load error
+    result = await db.execute(
+        select(User)
+        .options(
+            selectinload(User.main_business),
+            selectinload(User.secondary_business),
+        )
+        .where(User.id == new_user.id)
+    )
+    new_user = result.scalar_one()
 
     # TODO: Send welcome email with temp_password
     # await send_welcome_email(new_user.email, new_user.full_name, temp_password)
