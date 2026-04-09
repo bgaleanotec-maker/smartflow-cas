@@ -86,7 +86,7 @@ export default function MainLayout() {
           </NavLink>
         ))}
 
-        {user?.role === 'admin' && (
+        {['admin', 'leader'].includes(user?.role) && (
           <>
             <div className={clsx('px-3 pt-4 pb-1', collapsed && 'hidden')}>
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">

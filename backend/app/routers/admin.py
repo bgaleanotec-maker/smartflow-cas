@@ -1,7 +1,7 @@
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select, func, delete
-from app.core.deps import DB, AdminUser
+from app.core.deps import DB, AdminUser, LeaderOrAdmin
 from app.models.business import Business
 from app.models.catalog import Priority, TaskStatus, IncidentCategory
 from app.models.user import User
@@ -21,13 +21,13 @@ router = APIRouter(prefix="/admin", tags=["Administración"])
 # ─── Businesses ───────────────────────────────────────────────────────────────
 
 @router.get("/businesses", response_model=List[BusinessResponse])
-async def list_businesses(db: DB, admin: AdminUser):
+async def list_businesses(db: DB, admin: LeaderOrAdmin):
     result = await db.execute(select(Business).order_by(Business.name))
     return result.scalars().all()
 
 
 @router.post("/businesses", response_model=BusinessResponse, status_code=201)
-async def create_business(payload: BusinessCreate, db: DB, admin: AdminUser):
+async def create_business(payload: BusinessCreate, db: DB, admin: LeaderOrAdmin):
     existing = await db.execute(select(Business).where(Business.name == payload.name))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Ya existe un negocio con ese nombre")
@@ -39,7 +39,7 @@ async def create_business(payload: BusinessCreate, db: DB, admin: AdminUser):
 
 
 @router.patch("/businesses/{biz_id}", response_model=BusinessResponse)
-async def update_business(biz_id: int, payload: BusinessUpdate, db: DB, admin: AdminUser):
+async def update_business(biz_id: int, payload: BusinessUpdate, db: DB, admin: LeaderOrAdmin):
     result = await db.execute(select(Business).where(Business.id == biz_id))
     biz = result.scalar_one_or_none()
     if not biz:
@@ -54,13 +54,13 @@ async def update_business(biz_id: int, payload: BusinessUpdate, db: DB, admin: A
 # ─── Priorities ───────────────────────────────────────────────────────────────
 
 @router.get("/priorities")
-async def list_priorities(db: DB, admin: AdminUser):
+async def list_priorities(db: DB, admin: LeaderOrAdmin):
     result = await db.execute(select(Priority).order_by(Priority.order_index))
     return result.scalars().all()
 
 
 @router.post("/priorities", status_code=201)
-async def create_priority(name: str, color: str, order_index: int, db: DB, admin: AdminUser):
+async def create_priority(name: str, color: str, order_index: int, db: DB, admin: LeaderOrAdmin):
     p = Priority(name=name, color=color, order_index=order_index)
     db.add(p)
     await db.flush()
@@ -71,7 +71,7 @@ async def create_priority(name: str, color: str, order_index: int, db: DB, admin
 # ─── Task Statuses ────────────────────────────────────────────────────────────
 
 @router.get("/task-statuses")
-async def list_task_statuses(db: DB, admin: AdminUser, project_id: Optional[int] = None):
+async def list_task_statuses(db: DB, admin: LeaderOrAdmin, project_id: Optional[int] = None):
     query = select(TaskStatus).where(TaskStatus.is_active == True)
     if project_id:
         query = query.where(
@@ -87,7 +87,7 @@ async def list_task_statuses(db: DB, admin: AdminUser, project_id: Optional[int]
 @router.post("/task-statuses", status_code=201)
 async def create_task_status(
     name: str, color: str, order_index: int, is_done_state: bool,
-    db: DB, admin: AdminUser, project_id: Optional[int] = None
+    db: DB, admin: LeaderOrAdmin, project_id: Optional[int] = None
 ):
     ts = TaskStatus(
         name=name, color=color, order_index=order_index,
@@ -102,14 +102,14 @@ async def create_task_status(
 # ─── Incident Categories ──────────────────────────────────────────────────────
 
 @router.get("/incident-categories")
-async def list_incident_categories(db: DB, admin: AdminUser):
+async def list_incident_categories(db: DB, admin: LeaderOrAdmin):
     result = await db.execute(select(IncidentCategory).where(IncidentCategory.is_active == True))
     return result.scalars().all()
 
 
 @router.post("/incident-categories", status_code=201)
 async def create_incident_category(
-    name: str, description: Optional[str], color: str, db: DB, admin: AdminUser
+    name: str, description: Optional[str], color: str, db: DB, admin: LeaderOrAdmin
 ):
     cat = IncidentCategory(name=name, description=description, color=color)
     db.add(cat)
@@ -121,7 +121,7 @@ async def create_incident_category(
 # ─── Dashboard Stats ──────────────────────────────────────────────────────────
 
 @router.get("/stats")
-async def get_admin_stats(db: DB, admin: AdminUser):
+async def get_admin_stats(db: DB, admin: LeaderOrAdmin):
     total_users = await db.execute(select(func.count(User.id)))
     active_users = await db.execute(
         select(func.count(User.id)).where(User.is_active == True)

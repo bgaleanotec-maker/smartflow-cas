@@ -2,7 +2,7 @@ from typing import Optional, List
 from fastapi import APIRouter, HTTPException, status, Query
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
-from app.core.deps import DB, AdminUser, CurrentUser
+from app.core.deps import DB, AdminUser, LeaderOrAdmin, CurrentUser
 from app.core.security import get_password_hash, generate_temp_password
 from app.models.user import User, UserRole
 from app.schemas.user import UserCreate, UserUpdate, UserResponse, UserListResponse
@@ -43,7 +43,7 @@ async def list_users(
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def create_user(payload: UserCreate, db: DB, admin: AdminUser):
+async def create_user(payload: UserCreate, db: DB, admin: LeaderOrAdmin):
     # Check email unique
     existing = await db.execute(select(User).where(User.email == payload.email.lower()))
     if existing.scalar_one_or_none():
@@ -95,7 +95,7 @@ async def get_user(user_id: int, db: DB, current_user: CurrentUser):
 
 
 @router.patch("/{user_id}", response_model=UserResponse)
-async def update_user(user_id: int, payload: UserUpdate, db: DB, admin: AdminUser):
+async def update_user(user_id: int, payload: UserUpdate, db: DB, admin: LeaderOrAdmin):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -111,7 +111,7 @@ async def update_user(user_id: int, payload: UserUpdate, db: DB, admin: AdminUse
 
 
 @router.post("/{user_id}/reset-password", status_code=status.HTTP_200_OK)
-async def reset_user_password(user_id: int, db: DB, admin: AdminUser):
+async def reset_user_password(user_id: int, db: DB, admin: LeaderOrAdmin):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -127,7 +127,7 @@ async def reset_user_password(user_id: int, db: DB, admin: AdminUser):
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def deactivate_user(user_id: int, db: DB, admin: AdminUser):
+async def deactivate_user(user_id: int, db: DB, admin: LeaderOrAdmin):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:

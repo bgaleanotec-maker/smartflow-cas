@@ -78,7 +78,7 @@ export default function App() {
           <Route
             path="admin"
             element={
-              <ProtectedRoute requireAdmin>
+              <ProtectedRoute requireLeader>
                 <AdminPage />
               </ProtectedRoute>
             }
@@ -86,7 +86,7 @@ export default function App() {
           <Route
             path="admin/users"
             element={
-              <ProtectedRoute requireAdmin>
+              <ProtectedRoute requireLeader>
                 <UsersPage />
               </ProtectedRoute>
             }

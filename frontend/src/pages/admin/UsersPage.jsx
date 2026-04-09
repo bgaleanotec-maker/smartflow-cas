@@ -49,7 +49,19 @@ function CreateUserModal({ onClose }) {
           <h2 className="font-semibold text-white">Crear usuario</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-200">✕</button>
         </div>
-        <form onSubmit={handleSubmit(d => mutation.mutate(d))} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit(d => {
+          // Clean empty string fields to null for the API
+          const clean = { ...d }
+          if (!clean.phone) delete clean.phone
+          if (!clean.team) delete clean.team
+          if (!clean.main_business_id) delete clean.main_business_id
+          else clean.main_business_id = Number(clean.main_business_id)
+          if (!clean.secondary_business_id) delete clean.secondary_business_id
+          else clean.secondary_business_id = Number(clean.secondary_business_id)
+          if (!clean.contract_start_date) delete clean.contract_start_date
+          if (!clean.contract_renewal_date) delete clean.contract_renewal_date
+          mutation.mutate(clean)
+        })} className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className="label">Nombre completo *</label>
