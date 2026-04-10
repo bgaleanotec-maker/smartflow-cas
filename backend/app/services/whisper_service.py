@@ -61,18 +61,42 @@ async def transcribe_audio(
             tmp_path = tmp.name
 
         try:
-            kwargs = {"beam_size": 5, "language": language or "es", "vad_filter": True}
+            kwargs = {
+                "beam_size": 5,
+                "language": language or "es",
+                "vad_filter": True,
+                "vad_parameters": {
+                    "min_silence_duration_ms": 500,   # pausa natural español
+                    "speech_pad_ms": 200,              # no cortar sílabas finales
+                    "threshold": 0.4,                  # más sensible (menos agresivo)
+                },
+                "condition_on_previous_text": True,   # coherencia entre chunks
+                "compression_ratio_threshold": 2.4,  # detecta repeticiones
+                "no_speech_threshold": 0.6,
+                "word_timestamps": True,              # timestamps por palabra
+            }
             segments, info = model.transcribe(tmp_path, **kwargs)
             text_parts = []
             total_confidence = []
+            words_data = []
             duration = 0.0
             for segment in segments:
-                text_parts.append(segment.text.strip())
+                seg_text = segment.text.strip()
+                if seg_text:
+                    text_parts.append(seg_text)
                 if hasattr(segment, "avg_logprob"):
                     import math
                     conf = min(1.0, math.exp(segment.avg_logprob))
                     total_confidence.append(conf)
                 duration = max(duration, segment.end)
+                # Collect word timestamps if available
+                for word in (segment.words or []):
+                    words_data.append({
+                        "word": word.word,
+                        "start": round(word.start, 3),
+                        "end": round(word.end, 3),
+                        "probability": round(getattr(word, "probability", 0.9), 3),
+                    })
 
             full_text = " ".join(text_parts).strip()
             avg_confidence = sum(total_confidence) / len(total_confidence) if total_confidence else 0.8
@@ -82,6 +106,7 @@ async def transcribe_audio(
                 "language": info.language if hasattr(info, "language") else (language or "es"),
                 "confidence": round(avg_confidence, 3),
                 "duration": round(duration, 2),
+                "words": words_data,  # word-level timestamps for karaoke view
             }
         except Exception as e:
             logger.error(f"Transcription error: {e}")

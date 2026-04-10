@@ -542,12 +542,12 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       setIsRecordingMeeting(true)
       setRecordingStart(Date.now())
 
-      // Request data every 8 seconds
+      // Request data every 10 seconds — longer chunks give Whisper more context per segment
       chunkIntervalRef.current = setInterval(() => {
         if (mr.state === 'recording') {
           mr.requestData()
         }
-      }, 8000)
+      }, 10000)
     } catch (err) {
       alert(err.message || 'No se pudo acceder al audio. Verifica los permisos del navegador.')
     }
