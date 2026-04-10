@@ -1,0 +1,177 @@
+"""
+Pydantic schemas for Business Plan (BP) module.
+"""
+from typing import Optional
+from datetime import date, datetime
+from pydantic import BaseModel, field_validator
+from app.models.business_plan import BPStatus, BPLineCategory, BPActivityStatus, BPActivityPriority, BPActivityCategory
+
+
+# ─── BusinessPlan ─────────────────────────────────────────────────────────────
+
+class BusinessPlanCreate(BaseModel):
+    business_id: int
+    year: int
+    name: Optional[str] = None
+    description: Optional[str] = None
+    status: BPStatus = BPStatus.BORRADOR
+    scope: str = "CAS"
+
+
+class BusinessPlanUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[BPStatus] = None
+    version: Optional[int] = None
+    scope: Optional[str] = None
+    total_ingresos_plan: Optional[float] = None
+    total_costos_plan: Optional[float] = None
+    margen_bruto_plan: Optional[float] = None
+
+
+class BusinessPlanResponse(BaseModel):
+    id: int
+    business_id: int
+    business_name: Optional[str] = None
+    year: int
+    status: BPStatus
+    version: int
+    name: Optional[str] = None
+    description: Optional[str] = None
+    scope: str
+    total_ingresos_plan: Optional[float] = None
+    total_costos_plan: Optional[float] = None
+    margen_bruto_plan: Optional[float] = None
+    created_by_id: int
+    created_by_name: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    # Stats computed in router
+    activities_total: int = 0
+    activities_completed: int = 0
+    activities_overdue: int = 0
+
+
+# ─── BPLine ───────────────────────────────────────────────────────────────────
+
+class BPLineCreate(BaseModel):
+    category: BPLineCategory
+    subcategory: Optional[str] = None
+    name: str
+    unit: str = "COP"
+    monthly_plan: Optional[dict] = None
+    monthly_actual: Optional[dict] = None
+    annual_plan: Optional[float] = None
+    annual_actual: Optional[float] = None
+    notes: Optional[str] = None
+    order_index: int = 0
+
+
+class BPLineUpdate(BaseModel):
+    category: Optional[BPLineCategory] = None
+    subcategory: Optional[str] = None
+    name: Optional[str] = None
+    unit: Optional[str] = None
+    monthly_plan: Optional[dict] = None
+    monthly_actual: Optional[dict] = None
+    annual_plan: Optional[float] = None
+    annual_actual: Optional[float] = None
+    notes: Optional[str] = None
+    order_index: Optional[int] = None
+
+
+class BPLineResponse(BaseModel):
+    id: int
+    bp_id: int
+    category: BPLineCategory
+    subcategory: Optional[str] = None
+    name: str
+    unit: str
+    monthly_plan: Optional[dict] = None
+    monthly_actual: Optional[dict] = None
+    annual_plan: Optional[float] = None
+    annual_actual: Optional[float] = None
+    notes: Optional[str] = None
+    order_index: int
+
+
+# ─── BPActivity ───────────────────────────────────────────────────────────────
+
+class BPActivityCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    category: BPActivityCategory = BPActivityCategory.OPERATIVO
+    priority: BPActivityPriority = BPActivityPriority.MEDIA
+    status: BPActivityStatus = BPActivityStatus.PENDIENTE
+    owner_id: Optional[int] = None
+    due_date: Optional[date] = None
+    completion_date: Optional[date] = None
+    progress: int = 0
+    premisa_id: Optional[int] = None
+    notes: Optional[str] = None
+    evidence: Optional[str] = None
+    order_index: int = 0
+
+
+class BPActivityUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[BPActivityCategory] = None
+    priority: Optional[BPActivityPriority] = None
+    status: Optional[BPActivityStatus] = None
+    owner_id: Optional[int] = None
+    due_date: Optional[date] = None
+    completion_date: Optional[date] = None
+    progress: Optional[int] = None
+    notes: Optional[str] = None
+    evidence: Optional[str] = None
+    order_index: Optional[int] = None
+
+
+class BPActivityResponse(BaseModel):
+    id: int
+    bp_id: int
+    title: str
+    description: Optional[str] = None
+    category: BPActivityCategory
+    priority: BPActivityPriority
+    status: BPActivityStatus
+    owner_id: Optional[int] = None
+    owner_name: Optional[str] = None
+    due_date: Optional[date] = None
+    completion_date: Optional[date] = None
+    progress: int
+    premisa_id: Optional[int] = None
+    notes: Optional[str] = None
+    evidence: Optional[str] = None
+    order_index: int
+    is_overdue: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
+# ─── Dashboard ────────────────────────────────────────────────────────────────
+
+class BPBusinessSummary(BaseModel):
+    business_id: int
+    business_name: str
+    business_color: Optional[str] = None
+    latest_bp_id: Optional[int] = None
+    year: Optional[int] = None
+    status: Optional[BPStatus] = None
+    total_ingresos_plan: Optional[float] = None
+    total_costos_plan: Optional[float] = None
+    margen_bruto_plan: Optional[float] = None
+    activities_total: int = 0
+    activities_completed: int = 0
+    activities_overdue: int = 0
+    completion_pct: float = 0.0
+
+
+class BPDashboardStats(BaseModel):
+    total_bps: int
+    total_businesses_with_bp: int
+    total_activities: int
+    total_overdue: int
+    by_status: dict
+    businesses: list[BPBusinessSummary]

@@ -201,3 +201,36 @@ export const pomodoroAPI = {
   sessions: (params) => api.get('/pomodoro/my-sessions', { params }),
   stats: () => api.get('/pomodoro/stats'),
 }
+
+// ─── Business Plan (BP) ───────────────────────────────────────────────────
+export const bpAPI = {
+  // Business Plans
+  list: (params) => api.get('/bp', { params }),
+  create: (data) => api.post('/bp', data),
+  get: (id) => api.get(`/bp/${id}`),
+  update: (id, data) => api.patch(`/bp/${id}`, data),
+  delete: (id) => api.delete(`/bp/${id}`),
+  dashboard: (params) => api.get('/bp/dashboard', { params }),
+
+  // Lines
+  listLines: (bpId) => api.get(`/bp/${bpId}/lines`),
+  createLine: (bpId, data) => api.post(`/bp/${bpId}/lines`, data),
+  updateLine: (bpId, lineId, data) => api.patch(`/bp/${bpId}/lines/${lineId}`, data),
+  deleteLine: (bpId, lineId) => api.delete(`/bp/${bpId}/lines/${lineId}`),
+
+  // Activities
+  listActivities: (bpId, params) => api.get(`/bp/${bpId}/activities`, { params }),
+  createActivity: (bpId, data) => api.post(`/bp/${bpId}/activities`, data),
+  updateActivity: (bpId, actId, data) => api.patch(`/bp/${bpId}/activities/${actId}`, data),
+  deleteActivity: (bpId, actId) => api.delete(`/bp/${bpId}/activities/${actId}`),
+
+  // Excel analysis
+  analyzeExcel: (bpId, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post(`/bp/${bpId}/analyze-excel`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  listAnalyses: (bpId) => api.get(`/bp/${bpId}/analyses`),
+}

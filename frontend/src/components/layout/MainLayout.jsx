@@ -4,7 +4,7 @@ import {
   LayoutDashboard, FolderKanban, AlertTriangle, Timer,
   Users, Settings, LogOut, ChevronLeft, ChevronRight,
   Bell, Search, Menu, X, FileText, BarChart3, Newspaper, Landmark,
-  Plane, LayoutGrid, Zap,
+  Plane, LayoutGrid, Zap, TrendingUp,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { usePomodoroStore } from '../../stores/pomodoroStore'
@@ -20,6 +20,7 @@ const navItems = [
   { to: '/demands/dashboard', icon: BarChart3, label: 'Dashboard Demandas', roles: ['admin', 'leader', 'herramientas'] },
   { to: '/hechos', icon: Newspaper, label: 'Hechos Relevantes' },
   { to: '/premisas', icon: Landmark, label: 'Premisas' },
+  { to: '/bp', icon: TrendingUp, label: 'Plan de Negocio', cas: true },
   { to: '/projects', icon: FolderKanban, label: 'Proyectos' },
   { to: '/incidents', icon: AlertTriangle, label: 'Incidentes' },
   { to: '/pomodoro', icon: Timer, label: 'Pomodoro' },
@@ -67,7 +68,7 @@ export default function MainLayout() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1">
-        {navItems.filter(item => !item.roles || item.roles.includes(user?.role)).map(({ to, icon: Icon, label }) => (
+        {navItems.filter(item => !item.roles || item.roles.includes(user?.role)).map(({ to, icon: Icon, label, cas }) => (
           <NavLink
             key={to}
             to={to}
@@ -82,7 +83,16 @@ export default function MainLayout() {
             }
           >
             <Icon size={18} className="flex-shrink-0" />
-            {!collapsed && label}
+            {!collapsed && (
+              <span className="flex items-center gap-1.5 flex-1 min-w-0">
+                <span className="truncate">{label}</span>
+                {cas && (
+                  <span className="text-[9px] font-bold px-1 py-0 rounded bg-brand-500/20 text-brand-400 border border-brand-500/30 flex-shrink-0">
+                    CAS
+                  </span>
+                )}
+              </span>
+            )}
           </NavLink>
         ))}
 
