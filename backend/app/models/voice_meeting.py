@@ -60,12 +60,18 @@ class VoiceMeeting(Base):
     # Who started it
     created_by_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
 
-    # Optional BP link
-    bp_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("business_plans.id"), nullable=True)
+    # ── Context links — keeps every transcription anchored ──
+    business_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("businesses.id"), nullable=True, index=True)
+    bp_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("business_plans.id"), nullable=True, index=True)
+    bp_activity_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("bp_activities.id"), nullable=True, index=True)
+
+    # After finalize, AI-generated action items can be auto-linked to bp_activity
+    auto_linked_actions: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # {linked: bool, activity_ids_created: [...]}
 
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     created_by: Mapped["User"] = relationship("User", foreign_keys=[created_by_id], lazy="select")
+    business: Mapped[Optional["Business"]] = relationship("Business", foreign_keys=[business_id], lazy="select")
     chunks: Mapped[list["TranscriptChunk"]] = relationship(
         "TranscriptChunk",
         back_populates="meeting",

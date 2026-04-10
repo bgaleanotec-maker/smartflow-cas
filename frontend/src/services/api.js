@@ -299,6 +299,8 @@ export const voiceAPI = {
   ariaChat: (data) => api.post('/voice/aria-chat', data),
   getVoices: () => api.get('/voice/voices'),
   teamMeetings: (params) => api.get('/voice/team-meetings', { params }),
+  meetingsByActivity: (actId) => api.get(`/voice/meetings/by-activity/${actId}`),
+  meetingsByBusiness: (bizId) => api.get(`/voice/meetings/by-business/${bizId}`),
 }
 
 // ─── ARIA Financial Intelligence ─────────────────────────────────────────────

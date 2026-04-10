@@ -84,7 +84,12 @@ def _meeting_to_dict(m: VoiceMeeting) -> dict:
         "created_by_id": m.created_by_id,
         "created_by_name": m.created_by.full_name if m.created_by else None,
         "whisper_model_used": m.whisper_model_used,
+        "business_id": m.business_id,
+        "business_name": m.business.name if m.business else None,
+        "business_color": m.business.color if m.business else None,
         "bp_id": m.bp_id,
+        "bp_activity_id": m.bp_activity_id,
+        "auto_linked_actions": m.auto_linked_actions,
         "chunks": [_chunk_to_dict(c) for c in (m.chunks or [])],
     }
 
@@ -120,7 +125,9 @@ async def _call_gemini(api_key: str, model: str, prompt: str, temperature: float
 class CreateMeetingBody(BaseModel):
     title: str
     meeting_type: str = "aria_chat"
-    bp_id: Optional[int] = None
+    business_id: Optional[int] = None   # link to a business (negocio)
+    bp_id: Optional[int] = None         # link to a specific BP
+    bp_activity_id: Optional[int] = None  # link to a specific BP activity/task
 
 
 class TTSBody(BaseModel):
@@ -163,12 +170,14 @@ async def create_meeting(body: CreateMeetingBody, db: DB, user: CurrentUser):
         meeting_type=mtype,
         status=MeetingStatus.RECORDING,
         created_by_id=user.id,
+        business_id=body.business_id,
         bp_id=body.bp_id,
+        bp_activity_id=body.bp_activity_id,
         participant_ids={"user_ids": [user.id]},
     )
     db.add(meeting)
     await db.flush()
-    await db.refresh(meeting, ["created_by", "chunks"])
+    await db.refresh(meeting, ["created_by", "chunks", "business"])
     await db.commit()
     return _meeting_to_dict(meeting)
 
@@ -207,33 +216,80 @@ async def list_meetings(
     user: CurrentUser,
     meeting_type: Optional[str] = None,
     status: Optional[str] = None,
+    business_id: Optional[int] = None,
+    bp_id: Optional[int] = None,
+    bp_activity_id: Optional[int] = None,
 ):
-    """List meetings the current user created or participated in, last 50."""
+    """List meetings the current user created or participated in, last 50.
+    Filterable by business, BP, or BP activity for full context traceability."""
     query = select(VoiceMeeting).where(VoiceMeeting.is_deleted == False)
 
-    # Filter by creator or participant (JSON contains user id)
-    query = query.where(VoiceMeeting.created_by_id == user.id)
+    # Leaders/admins see all; others only see their own
+    if user.role not in (UserRole.ADMIN, UserRole.LEADER, UserRole.DIRECTIVO):
+        query = query.where(VoiceMeeting.created_by_id == user.id)
 
     if meeting_type:
         try:
-            mtype = MeetingType(meeting_type)
-            query = query.where(VoiceMeeting.meeting_type == mtype)
+            query = query.where(VoiceMeeting.meeting_type == MeetingType(meeting_type))
         except ValueError:
             pass
-
     if status:
         try:
-            mstatus = MeetingStatus(status)
-            query = query.where(VoiceMeeting.status == mstatus)
+            query = query.where(VoiceMeeting.status == MeetingStatus(status))
         except ValueError:
             pass
+    if business_id:
+        query = query.where(VoiceMeeting.business_id == business_id)
+    if bp_id:
+        query = query.where(VoiceMeeting.bp_id == bp_id)
+    if bp_activity_id:
+        query = query.where(VoiceMeeting.bp_activity_id == bp_activity_id)
 
-    query = query.order_by(VoiceMeeting.started_at.desc()).limit(50)
+    query = query.order_by(VoiceMeeting.started_at.desc()).limit(100)
     meetings = (await db.execute(query)).scalars().all()
 
     results = []
     for m in meetings:
-        await db.refresh(m, ["created_by", "chunks"])
+        await db.refresh(m, ["created_by", "chunks", "business"])
+        results.append(_meeting_to_dict(m))
+    return results
+
+
+@router.get("/meetings/by-activity/{activity_id}")
+async def meetings_by_activity(activity_id: int, db: DB, user: CurrentUser):
+    """All transcriptions linked to a specific BP activity — used in the activity drawer."""
+    query = (
+        select(VoiceMeeting)
+        .where(
+            VoiceMeeting.bp_activity_id == activity_id,
+            VoiceMeeting.is_deleted == False,
+        )
+        .order_by(VoiceMeeting.started_at.desc())
+    )
+    meetings = (await db.execute(query)).scalars().all()
+    results = []
+    for m in meetings:
+        await db.refresh(m, ["created_by", "chunks", "business"])
+        results.append(_meeting_to_dict(m))
+    return results
+
+
+@router.get("/meetings/by-business/{business_id}")
+async def meetings_by_business(business_id: int, db: DB, user: CurrentUser):
+    """All transcriptions linked to a business — for the leader overview."""
+    query = (
+        select(VoiceMeeting)
+        .where(
+            VoiceMeeting.business_id == business_id,
+            VoiceMeeting.is_deleted == False,
+        )
+        .order_by(VoiceMeeting.started_at.desc())
+        .limit(100)
+    )
+    meetings = (await db.execute(query)).scalars().all()
+    results = []
+    for m in meetings:
+        await db.refresh(m, ["created_by", "chunks", "business"])
         results.append(_meeting_to_dict(m))
     return results
 
@@ -456,8 +512,28 @@ Transcripción:
                 meeting.ai_summary = ai_text[:500] if ai_text else None
 
     meeting.status = MeetingStatus.COMPLETED
+
+    # ── Auto-link: if tied to a BP activity, add a comment with summary ──────
+    if meeting.bp_activity_id and meeting.ai_summary:
+        try:
+            from app.models.business_plan import BPComment
+            comment_text = (
+                f"📝 **Reunión transcrita:** {meeting.title}\n"
+                f"🕐 Duración: {meeting.duration_seconds // 60 if meeting.duration_seconds else 0} min\n\n"
+                f"**Resumen IA:** {meeting.ai_summary}"
+            )
+            auto_comment = BPComment(
+                activity_id=meeting.bp_activity_id,
+                author_id=meeting.created_by_id,
+                content=comment_text,
+            )
+            db.add(auto_comment)
+            meeting.auto_linked_actions = {"linked": True, "meeting_comment_added": True}
+        except Exception as e:
+            logger.warning(f"Could not auto-link meeting to BP activity: {e}")
+
     await db.flush()
-    await db.refresh(meeting, ["created_by", "chunks"])
+    await db.refresh(meeting, ["created_by", "chunks", "business"])
     await db.commit()
     return _meeting_to_dict(meeting)
 

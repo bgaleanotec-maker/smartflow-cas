@@ -2,11 +2,11 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   X, Check, Plus, Trash2, MessageSquare, Clock, User, Calendar,
-  Tag, Bell, Link2, ChevronDown, Send, Loader2, AlertCircle,
+  Tag, Bell, Link2, ChevronDown, Send, Loader2, AlertCircle, Mic,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
-import { bpAPI, usersAPI } from '../../../services/api'
+import { bpAPI, usersAPI, voiceAPI } from '../../../services/api'
 import { useAuthStore } from '../../../stores/authStore'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -299,6 +299,82 @@ function CommentsSection({ bpId, activity }) {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ─── Transcriptions Section ───────────────────────────────────────────────────
+
+function TranscriptionsSection({ activityId }) {
+  const [expanded, setExpanded] = useState(null)
+  const { data: meetings = [], isLoading } = useQuery({
+    queryKey: ['voice-meetings-activity', activityId],
+    queryFn: () => voiceAPI.meetingsByActivity(activityId).then(r => r.data),
+    enabled: !!activityId,
+  })
+
+  if (isLoading) return <div className="py-3 flex justify-center"><Loader2 size={16} className="animate-spin text-slate-500" /></div>
+  if (meetings.length === 0) return (
+    <p className="text-xs text-slate-500 text-center py-3">
+      No hay transcripciones vinculadas. Graba una reunión con ARIA y vincúlala a esta actividad.
+    </p>
+  )
+
+  return (
+    <div className="space-y-2">
+      {meetings.map(m => (
+        <div key={m.id} className="bg-slate-800/40 rounded-lg border border-slate-700/40 overflow-hidden">
+          <button
+            className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-slate-800/60 transition-colors"
+            onClick={() => setExpanded(expanded === m.id ? null : m.id)}
+          >
+            <div className="flex-1 min-w-0 mr-2">
+              <p className="text-xs font-semibold text-slate-200 truncate">{m.title}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">
+                {m.started_at ? new Date(m.started_at).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                {m.duration_seconds ? ` · ${Math.round(m.duration_seconds / 60)}min` : ''}
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium border ${
+                m.status === 'completed' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                : m.status === 'recording' ? 'bg-red-500/15 text-red-400 border-red-500/30'
+                : 'bg-slate-600/20 text-slate-400 border-slate-600/30'
+              }`}>{m.status === 'completed' ? '✓ Lista' : m.status === 'recording' ? '⏺ Grabando' : m.status}</span>
+              <ChevronDown size={12} className={clsx('text-slate-500 transition-transform', expanded === m.id && 'rotate-180')} />
+            </div>
+          </button>
+          {expanded === m.id && (
+            <div className="px-3 pb-3 border-t border-slate-700/30 pt-2 space-y-2">
+              {m.ai_summary && (
+                <p className="text-xs text-slate-300 leading-relaxed bg-slate-900/50 rounded-lg p-2.5">
+                  <span className="text-purple-400 font-semibold block mb-1">Resumen IA</span>
+                  {m.ai_summary}
+                </p>
+              )}
+              {m.ai_action_items?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider mb-1.5">Acciones</p>
+                  {m.ai_action_items.map((item, i) => (
+                    <div key={i} className="flex gap-1.5 text-xs text-slate-300 mb-1">
+                      <span className="text-amber-500 flex-shrink-0">→</span>
+                      {item.text || item}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {m.full_transcript && (
+                <details className="text-xs">
+                  <summary className="text-slate-500 cursor-pointer hover:text-slate-400">Ver transcripción completa</summary>
+                  <pre className="mt-1 text-slate-400 whitespace-pre-wrap font-sans leading-relaxed text-[11px] max-h-40 overflow-y-auto bg-slate-900/40 rounded p-2">
+                    {m.full_transcript}
+                  </pre>
+                </details>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   )
 }
@@ -648,6 +724,11 @@ export default function BPActivityDetailDrawer({ bpId, activity, onClose, onUpda
                 </button>
               </div>
             )}
+          </Section>
+
+          {/* Transcriptions */}
+          <Section title="Transcripciones de reuniones" icon={Mic} defaultOpen={false}>
+            <TranscriptionsSection activityId={activity.id} />
           </Section>
 
           {/* Notes */}

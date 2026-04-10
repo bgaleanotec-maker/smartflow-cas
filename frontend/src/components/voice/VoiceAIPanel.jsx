@@ -3,7 +3,7 @@ import {
   Mic, MicOff, X, Users, Radio, Square, Copy, Check,
   Play, Loader2, ChevronDown, Volume2, VolumeX, Monitor, Headphones,
 } from 'lucide-react'
-import { voiceAPI } from '../../services/api'
+import { voiceAPI, adminAPI, bpAPI } from '../../services/api'
 import SoundVisualizer from './SoundVisualizer'
 import clsx from 'clsx'
 
@@ -246,6 +246,13 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   const [hasNotif] = useState(false)
   // Audio source: 'mic' = solo micrófono | 'system' = sistema + mic (para Teams/auriculares)
   const [audioSource, setAudioSource] = useState('mic')
+  // Context linking: business / BP / activity
+  const [businesses, setBusinesses] = useState([])
+  const [bpList, setBpList] = useState([])
+  const [activityList, setActivityList] = useState([])
+  const [selectedBusinessId, setSelectedBusinessId] = useState('')
+  const [selectedBpId, setSelectedBpId] = useState('')
+  const [selectedActivityId, setSelectedActivityId] = useState('')
 
   const mediaRecorderRef = useRef(null)
   const streamRef = useRef(null)
@@ -263,6 +270,43 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chat])
+
+  // Load businesses when panel opens
+  useEffect(() => {
+    if (isOpen && businesses.length === 0) {
+      adminAPI.businesses().then(r => setBusinesses(r.data || [])).catch(() => {})
+    }
+  }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load BPs when business changes
+  useEffect(() => {
+    if (selectedBusinessId) {
+      bpAPI.list({ business_id: selectedBusinessId, limit: 100 }).then(r => {
+        setBpList(r.data || [])
+        setSelectedBpId('')
+        setSelectedActivityId('')
+        setActivityList([])
+      }).catch(() => {})
+    } else {
+      setBpList([])
+      setSelectedBpId('')
+      setSelectedActivityId('')
+      setActivityList([])
+    }
+  }, [selectedBusinessId])
+
+  // Load activities when BP changes
+  useEffect(() => {
+    if (selectedBpId) {
+      bpAPI.listActivities(selectedBpId, { limit: 100 }).then(r => {
+        setActivityList(r.data || [])
+        setSelectedActivityId('')
+      }).catch(() => {})
+    } else {
+      setActivityList([])
+      setSelectedActivityId('')
+    }
+  }, [selectedBpId])
 
   // Greet on panel open (ARIA mode)
   useEffect(() => {
@@ -435,10 +479,14 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   const startMeeting = async () => {
     if (!meetingTitle.trim()) return
     try {
-      const res = await voiceAPI.createMeeting({
+      const payload = {
         title: meetingTitle,
         meeting_type: 'meeting',
-      })
+      }
+      if (selectedBusinessId) payload.business_id = parseInt(selectedBusinessId)
+      if (selectedBpId) payload.bp_id = parseInt(selectedBpId)
+      if (selectedActivityId) payload.bp_activity_id = parseInt(selectedActivityId)
+      const res = await voiceAPI.createMeeting(payload)
       setMeeting(res.data)
       setTranscript([])
       setAnalysis(null)
@@ -730,6 +778,58 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
                       )}
                     </div>
 
+                    {/* Context linking */}
+                    {businesses.length > 0 && (
+                      <div className="w-full space-y-2">
+                        <p className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
+                          Vincular a negocio (opcional)
+                        </p>
+                        <select
+                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-brand-500"
+                          value={selectedBusinessId}
+                          onChange={(e) => setSelectedBusinessId(e.target.value)}
+                        >
+                          <option value="">— Sin negocio —</option>
+                          {businesses.map(b => (
+                            <option key={b.id} value={b.id}>{b.name}</option>
+                          ))}
+                        </select>
+
+                        {selectedBusinessId && bpList.length > 0 && (
+                          <select
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-brand-500"
+                            value={selectedBpId}
+                            onChange={(e) => setSelectedBpId(e.target.value)}
+                          >
+                            <option value="">— Sin plan de negocio —</option>
+                            {bpList.map(bp => (
+                              <option key={bp.id} value={bp.id}>{bp.name} ({bp.year})</option>
+                            ))}
+                          </select>
+                        )}
+
+                        {selectedBpId && activityList.length > 0 && (
+                          <select
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-brand-500"
+                            value={selectedActivityId}
+                            onChange={(e) => setSelectedActivityId(e.target.value)}
+                          >
+                            <option value="">— Sin actividad —</option>
+                            {activityList.map(a => (
+                              <option key={a.id} value={a.id}>{a.title}</option>
+                            ))}
+                          </select>
+                        )}
+
+                        {selectedActivityId && (
+                          <p className="text-[11px] text-emerald-400/80 bg-emerald-900/20 border border-emerald-800/30 rounded-lg px-3 py-1.5">
+                            ✓ La transcripción se vinculará automáticamente a esa actividad y quedará como comentario al finalizar.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     <button
                       onClick={startMeeting}
                       disabled={!meetingTitle.trim()}
@@ -800,7 +900,7 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
                     )}
 
                     <button
-                      onClick={() => { setMeeting(null); setTranscript([]); setAnalysis(null); setMeetingTitle('') }}
+                      onClick={() => { setMeeting(null); setTranscript([]); setAnalysis(null); setMeetingTitle(''); setSelectedBusinessId(''); setSelectedBpId(''); setSelectedActivityId('') }}
                       className="w-full py-2 text-sm text-slate-400 hover:text-slate-200 border border-slate-700 rounded-lg transition-colors"
                     >
                       Nueva Reunión
@@ -827,6 +927,21 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
                           {meeting.session_code}
                         </p>
                         <p className="text-[10px] text-slate-500 mt-0.5">Otros usuarios pueden unirse con este código</p>
+                        {/* Context badges */}
+                        {(meeting.business_name || meeting.bp_activity_id) && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {meeting.business_name && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-900/40 text-brand-400 border border-brand-700/30 font-medium">
+                                🏢 {meeting.business_name}
+                              </span>
+                            )}
+                            {meeting.bp_activity_id && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-400 border border-emerald-700/30 font-medium">
+                                ✓ Vinculado a tarea
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <button
                         onClick={copyCode}

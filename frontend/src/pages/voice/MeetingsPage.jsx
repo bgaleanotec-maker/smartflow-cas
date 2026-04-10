@@ -4,7 +4,7 @@ import {
   Loader2, Radio, CheckCircle, AlertCircle, XCircle, X,
   Calendar, Tag, Zap,
 } from 'lucide-react'
-import { voiceAPI } from '../../services/api'
+import { voiceAPI, adminAPI } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import clsx from 'clsx'
 
@@ -81,9 +81,26 @@ function MeetingDetailDrawer({ meeting, onClose }) {
         <div className="flex items-start justify-between px-6 py-4 border-b border-slate-800">
           <div className="flex-1 min-w-0 pr-4">
             <h2 className="text-lg font-bold text-slate-100 truncate">{meeting.title}</h2>
-            <div className="flex items-center gap-2 mt-1.5">
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               <TypeBadge type={meeting.meeting_type} />
               <StatusBadge status={meeting.status} />
+              {meeting.business_name && (
+                <span
+                  className="text-[11px] px-2 py-0.5 rounded-full font-medium border"
+                  style={{
+                    backgroundColor: (meeting.business_color || '#4f46e5') + '20',
+                    color: meeting.business_color || '#818cf8',
+                    borderColor: (meeting.business_color || '#4f46e5') + '40',
+                  }}
+                >
+                  🏢 {meeting.business_name}
+                </span>
+              )}
+              {meeting.bp_activity_id && (
+                <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  ✓ Vinculado a tarea
+                </span>
+              )}
               <span className="text-xs text-slate-500">{formatDate(meeting.started_at)}</span>
             </div>
           </div>
@@ -232,7 +249,26 @@ function MeetingCard({ meeting, onClick }) {
               {meeting.ai_summary.slice(0, 120)}{meeting.ai_summary.length > 120 ? '...' : ''}
             </p>
           )}
-          <div className="flex items-center gap-4 mt-2 text-[11px] text-slate-500">
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
+            {meeting.business_name && (
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded font-medium border"
+                style={{
+                  backgroundColor: (meeting.business_color || '#4f46e5') + '20',
+                  color: meeting.business_color || '#818cf8',
+                  borderColor: (meeting.business_color || '#4f46e5') + '40',
+                }}
+              >
+                🏢 {meeting.business_name}
+              </span>
+            )}
+            {meeting.bp_activity_id && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium border bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
+                ✓ Vinculado
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-4 mt-1.5 text-[11px] text-slate-500">
             <span className="flex items-center gap-1">
               <Calendar size={10} />
               {formatDate(meeting.started_at)}
@@ -267,8 +303,14 @@ export default function MeetingsPage() {
   const [filterStatus, setFilterStatus] = useState('')
   const [selectedMeeting, setSelectedMeeting] = useState(null)
   const [stats, setStats] = useState({ total: 0, totalHours: 0, totalActions: 0 })
+  const [businesses, setBusinesses] = useState([])
+  const [filterBusiness, setFilterBusiness] = useState('')
 
   const isLeader = ['admin', 'leader'].includes(user?.role)
+
+  useEffect(() => {
+    adminAPI.businesses().then(r => setBusinesses(r.data || [])).catch(() => {})
+  }, [])
 
   const loadMeetings = async () => {
     setLoading(true)
@@ -276,6 +318,7 @@ export default function MeetingsPage() {
       const params = {}
       if (filterType) params.meeting_type = filterType
       if (filterStatus) params.status = filterStatus
+      if (filterBusiness) params.business_id = filterBusiness
 
       let data
       if (isLeader) {
@@ -306,7 +349,7 @@ export default function MeetingsPage() {
   useEffect(() => {
     loadMeetings()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterType, filterStatus])
+  }, [filterType, filterStatus, filterBusiness])
 
   return (
     <div className="space-y-5 max-w-4xl mx-auto">
@@ -361,9 +404,21 @@ export default function MeetingsPage() {
           <option value="completed">Completadas</option>
           <option value="failed">Fallidas</option>
         </select>
-        {(filterType || filterStatus) && (
+        {businesses.length > 0 && (
+          <select
+            value={filterBusiness}
+            onChange={(e) => setFilterBusiness(e.target.value)}
+            className="bg-slate-800 border border-slate-700 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-brand-500"
+          >
+            <option value="">Todos los negocios</option>
+            {businesses.map(b => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+        )}
+        {(filterType || filterStatus || filterBusiness) && (
           <button
-            onClick={() => { setFilterType(''); setFilterStatus('') }}
+            onClick={() => { setFilterType(''); setFilterStatus(''); setFilterBusiness('') }}
             className="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1"
           >
             <X size={12} /> Limpiar filtros
