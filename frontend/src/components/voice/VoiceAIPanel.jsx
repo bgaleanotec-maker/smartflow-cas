@@ -172,9 +172,24 @@ function MicButton({ state, onClick, conversationListening = false }) {
   )
 }
 
-// ─── Chat bubble ─────────────────────────────────────────────────────────────
-function ChatBubble({ role, text, audioB64, onReplay }) {
+// ─── Chat bubble with streaming text effect ──────────────────────────────────
+function ChatBubble({ role, text, audioB64, onReplay, stream = false }) {
   const isARIA = role === 'aria'
+  const [displayed, setDisplayed] = useState(stream ? '' : text)
+  const [typing, setTyping] = useState(stream)
+
+  useEffect(() => {
+    if (!stream || !isARIA) { setDisplayed(text); setTyping(false); return }
+    setDisplayed(''); setTyping(true)
+    let i = 0
+    const iv = setInterval(() => {
+      i++
+      setDisplayed(text.slice(0, i))
+      if (i >= text.length) { clearInterval(iv); setTyping(false) }
+    }, 14)
+    return () => clearInterval(iv)
+  }, [text, stream, isARIA])
+
   return (
     <div className={clsx('flex gap-2 animate-fade-in', isARIA ? 'flex-row' : 'flex-row-reverse')}>
       {isARIA && (
@@ -190,7 +205,7 @@ function ChatBubble({ role, text, audioB64, onReplay }) {
             : 'bg-slate-700 text-slate-100 rounded-tr-sm',
         )}
       >
-        <p>{text}</p>
+        <p>{displayed}{typing && <span className="animate-pulse text-purple-400 ml-0.5">▌</span>}</p>
         {isARIA && audioB64 && (
           <button
             onClick={() => onReplay(audioB64)}
@@ -262,6 +277,7 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
 
   const [isConversationActive, setIsConversationActive] = useState(false)
   const [textInput, setTextInput] = useState('')
+  const [slowWarning, setSlowWarning] = useState(false)
 
   const mediaRecorderRef = useRef(null)
   const streamRef = useRef(null)
@@ -354,37 +370,44 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   const sendAriaMessage = async (text) => {
     if (ariaStatus === 'processing') return
     setAriaStatus('processing')
+    setSlowWarning(false)
 
-    // Safety timeout — if still processing after 20s, reset to idle
+    // Show "server waking up" warning after 5s (Render free tier cold start)
+    const slowTimer = setTimeout(() => setSlowWarning(true), 5000)
+
+    // Safety timeout — if still processing after 25s, reset to idle
     const safetyTimer = setTimeout(() => {
+      setSlowWarning(false)
       setAriaStatus((s) => s === 'processing' ? 'idle' : s)
-    }, 20000)
+    }, 25000)
+
+    // Build recent chat history to pass to backend (last 6 messages for context)
+    const history = chat.slice(-6).map(m => ({ role: m.role === 'aria' ? 'assistant' : 'user', content: m.text }))
 
     try {
       const res = await voiceAPI.ariaChat(
-        { text, user_name: currentUser?.full_name || 'Usuario', meeting_id: null },
-        { timeout: 18000 },   // axios timeout: 18s (before safety timer fires)
+        { text, user_name: currentUser?.full_name || 'Usuario', meeting_id: null, history },
+        { timeout: 22000 },   // axios timeout: 22s
       )
+      clearTimeout(slowTimer)
       clearTimeout(safetyTimer)
+      setSlowWarning(false)
       const data = res.data
       if (text !== 'saludo_inicial') {
         setChat((prev) => [...prev, { role: 'user', text }])
       }
-      setChat((prev) => [...prev, { role: 'aria', text: data.response_text, audioB64: data.audio_base64 }])
+      setChat((prev) => [...prev, { role: 'aria', text: data.response_text, audioB64: data.audio_base64, isNew: true }])
 
       if (data.audio_base64) {
         playAudio(data.audio_base64)
       } else {
-        setAriaStatus('idle')
-        // No audio (ElevenLabs not configured) → still continue conversation
-        if (conversationActiveRef.current) {
-          setTimeout(() => {
-            if (conversationActiveRef.current) startAriaRecordingRef.current?.()
-          }, 800)
-        }
+        // No ElevenLabs audio → use browser TTS (free, always available)
+        speakWithBrowser(data.response_text)
       }
     } catch {
+      clearTimeout(slowTimer)
       clearTimeout(safetyTimer)
+      setSlowWarning(false)
       setAriaStatus(conversationActiveRef.current ? 'idle' : 'error')
       if (!conversationActiveRef.current) setTimeout(() => setAriaStatus('idle'), 2000)
       // On error in conversation, give a moment before re-listening
@@ -421,6 +444,53 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       }
     }
   }
+
+  // Browser TTS fallback — free, no ElevenLabs key needed
+  const speakWithBrowser = useCallback((text) => {
+    if (!window.speechSynthesis) {
+      // No TTS at all — just auto-continue conversation
+      setAriaStatus('idle')
+      setIsARIASpeaking(false)
+      if (conversationActiveRef.current) {
+        setTimeout(() => { if (conversationActiveRef.current) startAriaRecordingRef.current?.() }, 500)
+      }
+      return
+    }
+    window.speechSynthesis.cancel()
+    const utt = new SpeechSynthesisUtterance(text)
+    utt.lang = 'es-CO'
+    utt.rate = 1.05
+    utt.pitch = 1.05
+    // Pick best Spanish voice available
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices()
+      const preferred = voices.find(v => v.lang === 'es-CO')
+        || voices.find(v => v.lang === 'es-US')
+        || voices.find(v => v.lang.startsWith('es'))
+      if (preferred) utt.voice = preferred
+    }
+    loadVoices()
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = loadVoices
+    }
+    setAriaStatus('speaking')
+    setIsARIASpeaking(true)
+    utt.onend = () => {
+      setAriaStatus('idle')
+      setIsARIASpeaking(false)
+      if (conversationActiveRef.current) {
+        setTimeout(() => { if (conversationActiveRef.current) startAriaRecordingRef.current?.() }, 450)
+      }
+    }
+    utt.onerror = () => {
+      setAriaStatus('idle')
+      setIsARIASpeaking(false)
+      if (conversationActiveRef.current) {
+        setTimeout(() => { if (conversationActiveRef.current) startAriaRecordingRef.current?.() }, 450)
+      }
+    }
+    window.speechSynthesis.speak(utt)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Start ARIA mic recording → transcribe → send to ARIA
   const startAriaRecording = async () => {
@@ -772,6 +842,16 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
                   </div>
                 )}
 
+                {/* Slow warning — server cold start */}
+                {slowWarning && ariaStatus === 'processing' && (
+                  <div className="mx-4 mb-2 px-3 py-2 rounded-lg bg-amber-900/30 border border-amber-700/40 flex items-start gap-2">
+                    <span className="text-amber-400 text-base flex-shrink-0">⏳</span>
+                    <p className="text-[11px] text-amber-300 leading-relaxed">
+                      El servidor se está despertando… puede tardar hasta 60s la primera vez.
+                    </p>
+                  </div>
+                )}
+
                 {/* Status */}
                 <p className="text-center text-xs text-slate-400 mt-1 mb-3 px-4">
                   {isConversationActive && ariaStatus === 'idle'
@@ -815,9 +895,22 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
                       text={msg.text}
                       audioB64={msg.audioB64}
                       onReplay={playAudio}
+                      stream={!!msg.isNew && msg.role === 'aria' && i === chat.length - 1}
                     />
                   ))}
                   <div ref={chatEndRef} />
+                </div>
+
+                {/* Quick link to Meetings page */}
+                <div className="flex-shrink-0 px-4 py-1.5 flex items-center justify-end">
+                  <a
+                    href="/meetings"
+                    onClick={handleClose}
+                    className="text-[11px] text-slate-500 hover:text-brand-400 transition-colors flex items-center gap-1"
+                  >
+                    <Radio size={11} />
+                    Ver mis reuniones
+                  </a>
                 </div>
 
                 {/* Text input — always available as fallback when mic/Whisper doesn't work */}

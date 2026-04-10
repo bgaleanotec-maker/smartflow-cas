@@ -34,13 +34,18 @@ logger = logging.getLogger(__name__)
 
 # ─── ARIA system prompt ───────────────────────────────────────────────────────
 
-ARIA_VOICE_PROMPT = """Eres ARIA — asistente de voz inteligente de SmartFlow.
-Hablas de forma natural, cálida y profesional en español.
-Siempre te diriges al usuario por su nombre cuando lo conoces.
-Eres concisa (máximo 3-4 oraciones en una respuesta) porque esto es voz.
-Tienes acceso al contexto del sistema SmartFlow y ayudas con el negocio CAS.
-Cuando no tienes información específica, lo dices honestamente.
-Responde siempre en español colombiano natural, sin tecnicismos innecesarios."""
+ARIA_VOICE_PROMPT = """Eres ARIA — asistente de voz inteligente de SmartFlow, la plataforma de gestión del equipo CAS de Vanti.
+
+Instrucciones de conversación:
+- Habla de forma natural, cálida y profesional en español colombiano.
+- Siempre llama al usuario por su nombre cuando lo conoces.
+- Sé concisa: máximo 3-4 oraciones por respuesta (es una conversación de voz).
+- Si el usuario hace una pregunta sobre sus actividades, negocios, o tareas, usa el contexto que te dan.
+- Saluda con entusiasmo la primera vez. Después del saludo inicial ve directo al punto.
+- Cuando no tengas información específica, dilo honestamente y ofrece ayuda alternativa.
+- Usa frases naturales como "Claro", "Con gusto", "Perfecto" al inicio cuando sea apropiado.
+- Si el usuario pregunta por reuniones, dile que puede verlas en el módulo Reuniones de SmartFlow.
+- Responde siempre en español colombiano natural, sin tecnicismos innecesarios."""
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -94,15 +99,57 @@ def _meeting_to_dict(m: VoiceMeeting) -> dict:
     }
 
 
-async def _call_gemini(api_key: str, model: str, prompt: str, temperature: float = 0.7) -> Optional[str]:
+async def _get_smartflow_context(db, user) -> str:
+    """Query SmartFlow data to give ARIA relevant context about the user's work."""
+    try:
+        from app.models.business_plan import BPActivity, BPActivityStatus, BusinessPlan
+        from app.models.user import User as UserModel
+
+        # Pending/in-progress activities (max 8 for cost efficiency)
+        acts_q = (
+            select(BPActivity, BusinessPlan.name.label("bp_name"))
+            .join(BusinessPlan, BPActivity.bp_id == BusinessPlan.id)
+            .where(
+                BPActivity.is_deleted == False,
+                BPActivity.status.in_([BPActivityStatus.PENDIENTE, BPActivityStatus.EN_PROGRESO]),
+            )
+        )
+        # Leaders/admins see all; others only their assigned activities
+        if user.role not in (UserRole.ADMIN, UserRole.LEADER, UserRole.DIRECTIVO):
+            acts_q = acts_q.where(BPActivity.owner_id == user.id)
+
+        acts_q = acts_q.order_by(BPActivity.due_date.asc().nullslast()).limit(8)
+        rows = (await db.execute(acts_q)).all()
+
+        if not rows:
+            return "El usuario no tiene actividades pendientes registradas en SmartFlow."
+
+        lines = [f"Actividades pendientes en SmartFlow para {user.full_name}:"]
+        for act, bp_name in rows:
+            due = f" — vence {act.due_date}" if act.due_date else ""
+            grupo = f" [{act.grupo}]" if act.grupo else ""
+            lines.append(
+                f"• {act.title} | Estado: {act.status.value} | Prioridad: {act.priority.value}"
+                f"{grupo} | Plan: {bp_name or 'N/A'}{due}"
+            )
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning(f"_get_smartflow_context error: {exc}")
+        return ""
+
+
+async def _call_gemini(api_key: str, model: str, prompt: str, temperature: float = 0.7, max_tokens: int = 512) -> Optional[str]:
     """Call Gemini API and return the text response."""
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        # Use v1beta for newer models (1.5-flash, 2.0-flash); v1 for legacy
+        api_version = "v1beta" if any(x in model for x in ("1.5", "2.0", "flash", "pro-latest")) else "v1"
+        timeout = 18.0 if max_tokens <= 512 else 60.0
+        async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(
-                f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent?key={api_key}",
+                f"https://generativelanguage.googleapis.com/{api_version}/models/{model}:generateContent?key={api_key}",
                 json={
                     "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"temperature": temperature, "maxOutputTokens": 2048},
+                    "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens},
                 },
             )
             if resp.status_code == 200:
@@ -139,6 +186,7 @@ class AriaChatBody(BaseModel):
     text: str
     meeting_id: Optional[int] = None
     user_name: str
+    history: Optional[list] = None   # [{role: "user"|"assistant", content: "..."}]
 
 
 class JoinMeetingBody(BaseModel):
@@ -476,7 +524,9 @@ async def finalize_meeting(meeting_id: int, db: DB, user: CurrentUser):
     # AI Analysis via Gemini
     api_key = await get_service_config_value(db, "gemini", "api_key")
     if api_key and full_transcript.strip():
-        model = await get_service_config_value(db, "gemini", "model") or "gemini-pro"
+        model = await get_service_config_value(db, "gemini", "model") or "gemini-1.5-flash"
+        if model in ("gemini-pro", "gemini-1.0-pro"):
+            model = "gemini-1.5-flash"
 
         analysis_prompt = f"""Analiza esta transcripción de reunión del equipo CAS de Vanti y responde en JSON válido:
 {{
@@ -492,7 +542,7 @@ async def finalize_meeting(meeting_id: int, db: DB, user: CurrentUser):
 Transcripción:
 {full_transcript}"""
 
-        ai_text = await _call_gemini(api_key, model, analysis_prompt, temperature=0.3)
+        ai_text = await _call_gemini(api_key, model, analysis_prompt, temperature=0.3, max_tokens=1500)
 
         if ai_text:
             # Extract JSON from response (may be wrapped in markdown code block)
@@ -623,25 +673,27 @@ async def aria_voice_chat(body: AriaChatBody, db: DB, user: CurrentUser):
     3. Convert ARIA response to speech via ElevenLabs
     4. Return {response_text, audio_base64, meeting_id}
     """
-    # Build context from recent conversation if meeting_id provided
-    context_str = ""
-    if body.meeting_id:
-        recent_chunks = (
-            await db.execute(
-                select(TranscriptChunk)
-                .where(TranscriptChunk.meeting_id == body.meeting_id)
-                .order_by(TranscriptChunk.sequence_num.desc())
-                .limit(10)
-            )
-        ).scalars().all()
-        if recent_chunks:
-            context_parts = [f"{c.speaker_name}: {c.text}" for c in reversed(recent_chunks)]
-            context_str = "\n\nContexto reciente de la conversación:\n" + "\n".join(context_parts)
-
     # Check for initial greeting
     is_greeting = body.text.strip() == "saludo_inicial"
+
+    # Get SmartFlow context (pending activities, etc.) — only for real messages
+    smartflow_ctx = ""
+    if not is_greeting:
+        smartflow_ctx = await _get_smartflow_context(db, user)
+
+    # Build conversation history string from passed history
+    history_str = ""
+    if body.history:
+        hist_lines = []
+        for h in body.history[-6:]:  # max 6 turns for cost efficiency
+            role_label = "ARIA" if h.get("role") == "assistant" else body.user_name
+            content = str(h.get("content", ""))[:200]  # cap each message
+            hist_lines.append(f"{role_label}: {content}")
+        if hist_lines:
+            history_str = "\n\nHistorial reciente de la conversación:\n" + "\n".join(hist_lines)
+
     if is_greeting:
-        user_message = f"Saluda al usuario {body.user_name} de forma cálida y breve. Pregunta en qué puedes ayudarle hoy."
+        user_message = f"Saluda a {body.user_name} de forma cálida y entusiasta. Menciona brevemente que estás aquí para ayudar con SmartFlow. Máximo 2 oraciones."
     else:
         user_message = body.text
 
@@ -649,17 +701,25 @@ async def aria_voice_chat(body: AriaChatBody, db: DB, user: CurrentUser):
 
     response_text = ""
     if gemini_api_key:
-        model = await get_service_config_value(db, "gemini", "model") or "gemini-pro"
+        # Prefer flash models for speed/cost efficiency
+        model = await get_service_config_value(db, "gemini", "model") or "gemini-1.5-flash"
+        # If model is the old default gemini-pro, upgrade to flash
+        if model in ("gemini-pro", "gemini-1.0-pro"):
+            model = "gemini-1.5-flash"
+
+        ctx_block = f"\n\n{smartflow_ctx}" if smartflow_ctx else ""
         full_prompt = (
             f"{ARIA_VOICE_PROMPT}\n\n"
-            f"Usuario: {body.user_name}\n"
-            f"{context_str}\n\n"
-            f"Mensaje del usuario: {user_message}"
+            f"Usuario actual: {body.user_name}\n"
+            f"Rol en sistema: {user.role.value if hasattr(user.role, 'value') else user.role}"
+            f"{ctx_block}"
+            f"{history_str}\n\n"
+            f"Mensaje actual del usuario: {user_message}"
         )
-        response_text = await _call_gemini(gemini_api_key, model, full_prompt, temperature=0.8) or ""
+        response_text = await _call_gemini(gemini_api_key, model, full_prompt, temperature=0.75) or ""
 
     if not response_text:
-        response_text = f"Hola {body.user_name}, soy ARIA, tu asistente de SmartFlow. ¿En qué puedo ayudarte hoy?"
+        response_text = f"¡Hola {body.user_name}! Soy ARIA, tu asistente de SmartFlow. ¿En qué puedo ayudarte hoy?"
 
     # Save to meeting if provided
     if body.meeting_id and not is_greeting:
