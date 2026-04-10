@@ -27,11 +27,10 @@ export default function LoginPage() {
       const res = await authAPI.login(data)
       const { access_token, refresh_token } = res.data
 
-      // Get user profile
-      const meRes = await fetch('/api/v1/auth/me', {
-        headers: { Authorization: `Bearer ${access_token}` },
-      })
-      const user = await meRes.json()
+      // Temporarily set token so authAPI.me() can use it
+      useAuthStore.getState().setTokens(access_token, refresh_token)
+      const meRes = await authAPI.me()
+      const user = meRes.data
 
       login(user, access_token, refresh_token)
 
