@@ -78,6 +78,7 @@ class BusinessPlan(Base):
     lines: Mapped[list["BPLine"]] = relationship("BPLine", back_populates="bp", cascade="all, delete-orphan", lazy="select")
     activities: Mapped[list["BPActivity"]] = relationship("BPActivity", back_populates="bp", cascade="all, delete-orphan", lazy="select")
     excel_analyses: Mapped[list["BPExcelAnalysis"]] = relationship("BPExcelAnalysis", back_populates="bp", cascade="all, delete-orphan", lazy="select")
+    recommendations: Mapped[list["BPRecommendation"]] = relationship("BPRecommendation", back_populates="bp", cascade="all, delete-orphan", lazy="select")
 
 
 class BPLine(Base):
@@ -103,6 +104,12 @@ class BPLine(Base):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     order_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # AI-generated fields
+    is_ai_generated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    ai_confidence: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 0-100
+    ai_rationale: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    line_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     bp: Mapped["BusinessPlan"] = relationship("BusinessPlan", back_populates="lines", lazy="select")
 
@@ -141,7 +148,7 @@ class BPActivity(Base):
 
 
 class BPExcelAnalysis(Base):
-    """Stored Excel file upload with AI-generated analysis."""
+    """Stored Excel/image file upload with AI-generated analysis."""
     __tablename__ = "bp_excel_analyses"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -158,5 +165,33 @@ class BPExcelAnalysis(Base):
     uploaded_by_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    # New fields for enhanced AI analysis
+    file_type: Mapped[str] = mapped_column(String(20), default="excel", nullable=False)  # excel/image
+    structured_extraction: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    applied_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
     bp: Mapped["BusinessPlan"] = relationship("BusinessPlan", back_populates="excel_analyses", lazy="select")
     uploaded_by: Mapped[Optional["User"]] = relationship("User", foreign_keys=[uploaded_by_id], lazy="select")
+
+
+class BPRecommendation(Base):
+    """AI-generated or manual strategic recommendations for a BP."""
+    __tablename__ = "bp_recommendations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    bp_id: Mapped[int] = mapped_column(Integer, ForeignKey("business_plans.id"), nullable=False, index=True)
+
+    source: Mapped[str] = mapped_column(String(20), default="ai", nullable=False)  # ai / manual
+    category: Mapped[str] = mapped_column(String(50), nullable=False)  # comercial/financiero/operativo/estrategico/riesgo/oportunidad
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    priority: Mapped[str] = mapped_column(String(20), default="media", nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="pendiente", nullable=False)  # pendiente/aceptada/en_revision/descartada
+    impact_level: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # alto/medio/bajo
+    rec_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    is_ai_generated: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    bp: Mapped["BusinessPlan"] = relationship("BusinessPlan", back_populates="recommendations", lazy="select")

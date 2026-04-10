@@ -93,6 +93,9 @@ class BPLineResponse(BaseModel):
     annual_actual: Optional[float] = None
     notes: Optional[str] = None
     order_index: int
+    is_ai_generated: bool = False
+    ai_confidence: Optional[int] = None
+    ai_rationale: Optional[str] = None
 
 
 # ─── BPActivity ───────────────────────────────────────────────────────────────
@@ -146,6 +149,41 @@ class BPActivityResponse(BaseModel):
     evidence: Optional[str] = None
     order_index: int
     is_overdue: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
+# ─── BPRecommendation ─────────────────────────────────────────────────────────
+
+class BPRecommendationCreate(BaseModel):
+    category: str
+    title: str
+    description: Optional[str] = None
+    priority: str = "media"
+    impact_level: Optional[str] = None
+    source: str = "manual"
+
+
+class BPRecommendationUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[str] = None
+    status: Optional[str] = None
+    impact_level: Optional[str] = None
+
+
+class BPRecommendationResponse(BaseModel):
+    id: int
+    bp_id: int
+    source: str
+    category: str
+    title: str
+    description: Optional[str] = None
+    priority: str
+    status: str
+    impact_level: Optional[str] = None
+    is_ai_generated: bool
+    rec_metadata: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
 

@@ -224,7 +224,7 @@ export const bpAPI = {
   updateActivity: (bpId, actId, data) => api.patch(`/bp/${bpId}/activities/${actId}`, data),
   deleteActivity: (bpId, actId) => api.delete(`/bp/${bpId}/activities/${actId}`),
 
-  // Excel analysis
+  // Excel analysis (legacy)
   analyzeExcel: (bpId, file) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -233,4 +233,20 @@ export const bpAPI = {
     })
   },
   listAnalyses: (bpId) => api.get(`/bp/${bpId}/analyses`),
+
+  // File analysis (Excel or image) — new enhanced endpoint
+  analyzeFile: (bpId, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post(`/bp/${bpId}/analyze-file`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  applyAnalysis: (bpId, analysisId) => api.post(`/bp/${bpId}/apply-analysis/${analysisId}`),
+
+  // Recommendations
+  listRecommendations: (bpId, params) => api.get(`/bp/${bpId}/recommendations`, { params }),
+  createRecommendation: (bpId, data) => api.post(`/bp/${bpId}/recommendations`, data),
+  updateRecommendation: (bpId, recId, data) => api.patch(`/bp/${bpId}/recommendations/${recId}`, data),
+  deleteRecommendation: (bpId, recId) => api.delete(`/bp/${bpId}/recommendations/${recId}`),
 }

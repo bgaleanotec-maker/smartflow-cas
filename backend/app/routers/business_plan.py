@@ -2,8 +2,9 @@
 Business Plan (BP) router — CAS team
 """
 from typing import Optional, Annotated
-from datetime import date
+from datetime import date, datetime
 import io
+import base64
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
 from sqlalchemy import select
@@ -14,7 +15,7 @@ from app.core.database import get_db
 from app.core.deps import DB, CurrentUser, LeaderOrAdmin, get_current_user
 from app.models.user import User
 from app.models.business_plan import (
-    BusinessPlan, BPLine, BPActivity, BPExcelAnalysis,
+    BusinessPlan, BPLine, BPActivity, BPExcelAnalysis, BPRecommendation,
     BPLineCategory, BPActivityStatus,
 )
 from app.models.business import Business
@@ -22,9 +23,21 @@ from app.schemas.business_plan import (
     BusinessPlanCreate, BusinessPlanUpdate,
     BPLineCreate, BPLineUpdate,
     BPActivityCreate, BPActivityUpdate,
+    BPRecommendationCreate, BPRecommendationUpdate,
 )
 
 router = APIRouter(prefix="/bp", tags=["Business Plan"])
+
+# Supported image MIME types
+IMAGE_MIME_TYPES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+EXCEL_EXTENSIONS = (".xlsx", ".xls", ".xlsm")
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -86,6 +99,9 @@ def _line_to_dict(line: BPLine) -> dict:
         "annual_actual": line.annual_actual,
         "notes": line.notes,
         "order_index": line.order_index,
+        "is_ai_generated": line.is_ai_generated,
+        "ai_confidence": line.ai_confidence,
+        "ai_rationale": line.ai_rationale,
     }
 
 
@@ -123,12 +139,33 @@ def _analysis_to_dict(a: BPExcelAnalysis) -> dict:
         "bp_id": a.bp_id,
         "filename": a.filename,
         "file_size": a.file_size,
+        "file_type": a.file_type,
         "parsed_data": a.parsed_data,
         "ai_summary": a.ai_summary,
         "ai_insights": a.ai_insights,
+        "structured_extraction": a.structured_extraction,
+        "applied_at": a.applied_at,
         "uploaded_by_id": a.uploaded_by_id,
         "uploaded_by_name": a.uploaded_by.full_name if a.uploaded_by else None,
         "uploaded_at": a.uploaded_at,
+    }
+
+
+def _recommendation_to_dict(r: BPRecommendation) -> dict:
+    return {
+        "id": r.id,
+        "bp_id": r.bp_id,
+        "source": r.source,
+        "category": r.category,
+        "title": r.title,
+        "description": r.description,
+        "priority": r.priority,
+        "status": r.status,
+        "impact_level": r.impact_level,
+        "is_ai_generated": r.is_ai_generated,
+        "rec_metadata": r.rec_metadata,
+        "created_at": r.created_at,
+        "updated_at": r.updated_at,
     }
 
 
@@ -144,6 +181,119 @@ async def _get_activity_stats(db: AsyncSession, bp_id: int) -> dict:
     completed = sum(1 for a in activities if a.status == BPActivityStatus.COMPLETADA)
     overdue = sum(1 for a in activities if _is_overdue(a))
     return {"total": total, "completed": completed, "overdue": overdue}
+
+
+async def _call_gemini_structured(db: AsyncSession, bp_year: int, contents_parts: list) -> dict:
+    """Call Gemini API with the structured BP extraction prompt. Returns parsed JSON dict."""
+    target_year = bp_year + 1
+
+    prompt = (
+        f"Eres un analista experto en planes de negocio para Vanti (empresa de gas/energía en Colombia), equipo CAS.\n"
+        f"Analiza el contenido del archivo del Plan de Negocio anterior y genera el nuevo BP proyectado para {target_year}.\n\n"
+        "IMPORTANTE: Responde ÚNICAMENTE con JSON válido, sin texto adicional, sin markdown, sin bloques de código.\n\n"
+        "Estructura requerida:\n"
+        "{\n"
+        f'  "year_suggested": {target_year},\n'
+        '  "summary": "Resumen ejecutivo del análisis (3-4 oraciones con cifras concretas)",\n'
+        '  "financial_lines": [\n'
+        '    {\n'
+        '      "category": "ingreso|costo_fijo|costo_variable|magnitud|margen",\n'
+        '      "subcategory": "subcategoría (ej: Ventas, Nómina, Marketing)",\n'
+        '      "name": "nombre descriptivo de la línea",\n'
+        '      "unit": "COP|USD|%|clientes|unidades|contratos|usuarios",\n'
+        '      "monthly_plan": {"1": valor_num, "2": valor_num, "3": valor_num, "4": valor_num, "5": valor_num, "6": valor_num, "7": valor_num, "8": valor_num, "9": valor_num, "10": valor_num, "11": valor_num, "12": valor_num},\n'
+        '      "ai_confidence": 85,\n'
+        '      "ai_rationale": "Proyectado con base en tendencia histórica +8%"\n'
+        '    }\n'
+        '  ],\n'
+        '  "activities": [\n'
+        '    {\n'
+        '      "title": "Título accionable y específico",\n'
+        '      "description": "Descripción breve de qué se debe hacer",\n'
+        '      "category": "comercial|operativo|financiero|estrategico|regulatorio|tecnologia",\n'
+        '      "priority": "critica|alta|media|baja",\n'
+        '      "due_date": "YYYY-MM-DD o null",\n'
+        '      "notes": "Contexto o dependencias"\n'
+        '    }\n'
+        '  ],\n'
+        '  "recommendations": [\n'
+        '    {\n'
+        '      "category": "comercial|financiero|operativo|estrategico|riesgo|oportunidad",\n'
+        '      "title": "Título conciso de la recomendación",\n'
+        '      "description": "Descripción detallada con argumentos cuantitativos cuando sea posible",\n'
+        '      "priority": "critica|alta|media|baja",\n'
+        '      "impact_level": "alto|medio|bajo"\n'
+        '    }\n'
+        '  ],\n'
+        '  "risks": ["descripción riesgo 1", "descripción riesgo 2"],\n'
+        '  "opportunities": ["oportunidad 1", "oportunidad 2"]\n'
+        '}'
+    )
+
+    try:
+        from app.core.config import get_service_config_value
+        import httpx
+
+        api_key = await get_service_config_value(db, "gemini", "api_key")
+        model_name = await get_service_config_value(db, "gemini", "model") or "gemini-1.5-flash"
+
+        if not api_key:
+            return _fallback_extraction("Gemini no configurado. Configure la API key en Configuración > Integraciones.")
+
+        # Build the request parts: text prompt + any file content
+        request_parts = contents_parts + [{"text": prompt}]
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}",
+                json={
+                    "contents": [{"parts": request_parts}],
+                    "generationConfig": {
+                        "temperature": 0.3,
+                        "maxOutputTokens": 8192,
+                        "responseMimeType": "application/json",
+                    },
+                },
+            )
+            if resp.status_code != 200:
+                return _fallback_extraction(f"Error Gemini {resp.status_code}: {resp.text[:200]}")
+
+            rdata = resp.json()
+            raw_text = (
+                rdata.get("candidates", [{}])[0]
+                .get("content", {})
+                .get("parts", [{}])[0]
+                .get("text", "")
+            )
+
+            # Try to parse JSON — strip any accidental markdown fences
+            import json
+            clean = raw_text.strip()
+            if clean.startswith("```"):
+                clean = clean.split("```")[1]
+                if clean.startswith("json"):
+                    clean = clean[4:]
+                clean = clean.strip()
+            if clean.endswith("```"):
+                clean = clean[:-3].strip()
+
+            parsed = json.loads(clean)
+            return parsed
+
+    except Exception as exc:
+        return _fallback_extraction(f"Error al procesar con IA: {str(exc)[:200]}")
+
+
+def _fallback_extraction(message: str) -> dict:
+    return {
+        "year_suggested": None,
+        "summary": message,
+        "financial_lines": [],
+        "activities": [],
+        "recommendations": [],
+        "risks": [],
+        "opportunities": [],
+    }
 
 
 # ─── Dashboard ────────────────────────────────────────────────────────────────
@@ -307,6 +457,7 @@ async def get_bp(bp_id: int, db: DB, user: CurrentUser):
             selectinload(BusinessPlan.lines),
             selectinload(BusinessPlan.activities).selectinload(BPActivity.owner),
             selectinload(BusinessPlan.excel_analyses).selectinload(BPExcelAnalysis.uploaded_by),
+            selectinload(BusinessPlan.recommendations),
         )
     )
     bp = result.scalar_one_or_none()
@@ -317,6 +468,7 @@ async def get_bp(bp_id: int, db: DB, user: CurrentUser):
     data["lines"] = [_line_to_dict(l) for l in bp.lines if not l.is_deleted]
     data["activities"] = [_activity_to_dict(a) for a in bp.activities if not a.is_deleted]
     data["excel_analyses"] = [_analysis_to_dict(a) for a in bp.excel_analyses]
+    data["recommendations"] = [_recommendation_to_dict(r) for r in bp.recommendations if not r.is_deleted]
 
     # Recompute totals from lines
     ingreso_lines = [l for l in bp.lines if not l.is_deleted and l.category == BPLineCategory.INGRESO]
@@ -493,7 +645,296 @@ async def delete_activity(bp_id: int, activity_id: int, db: DB, user: LeaderOrAd
     await db.flush()
 
 
-# ─── Excel Analysis ───────────────────────────────────────────────────────────
+# ─── File Analysis (Excel or Image) ──────────────────────────────────────────
+
+@router.post("/{bp_id}/analyze-file", status_code=201)
+async def analyze_file(
+    bp_id: int,
+    file: UploadFile,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Upload Excel OR image file, analyze with Gemini, store structured extraction."""
+    bp_result = await db.execute(
+        select(BusinessPlan).where(BusinessPlan.id == bp_id, BusinessPlan.is_deleted == False)
+    )
+    bp = bp_result.scalar_one_or_none()
+    if not bp:
+        raise HTTPException(status_code=404, detail="Business Plan no encontrado")
+
+    fname = file.filename or ""
+    fname_lower = fname.lower()
+
+    # Detect file type
+    is_excel = any(fname_lower.endswith(ext) for ext in EXCEL_EXTENSIONS)
+    img_ext = next((ext for ext in IMAGE_MIME_TYPES if fname_lower.endswith(ext)), None)
+    is_image = img_ext is not None
+
+    if not is_excel and not is_image:
+        raise HTTPException(
+            status_code=400,
+            detail="Formato no soportado. Use .xlsx, .xls, .xlsm, .png, .jpg, .jpeg, .gif o .webp",
+        )
+
+    contents = await file.read()
+    file_size = len(contents)
+    file_type = "excel" if is_excel else "image"
+
+    parsed_data: dict = {}
+    gemini_parts: list = []
+
+    if is_excel:
+        # Parse with openpyxl and build text preview for Gemini
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True, data_only=True)
+            sheets_data: dict = {}
+            for sheet_name in wb.sheetnames[:3]:
+                ws = wb[sheet_name]
+                rows = []
+                for i, row in enumerate(ws.iter_rows(values_only=True)):
+                    if i >= 50:
+                        break
+                    rows.append([str(cell) if cell is not None else "" for cell in row])
+                sheets_data[sheet_name] = rows
+            parsed_data = {
+                "sheets": sheets_data,
+                "total_sheets": len(wb.sheetnames),
+                "sheet_names": list(wb.sheetnames),
+            }
+            wb.close()
+
+            # Build text preview for Gemini
+            preview_lines = []
+            for sname, rows in list(sheets_data.items())[:3]:
+                preview_lines.append(f"=== Hoja: {sname} ===")
+                for row in rows[:40]:
+                    line = " | ".join(r for r in row if r)
+                    if line.strip():
+                        preview_lines.append(line)
+            preview_text = "\n".join(preview_lines[:200])
+            gemini_parts = [{"text": f"Contenido del archivo Excel del BP anterior:\n\n{preview_text}"}]
+
+        except ImportError:
+            parsed_data = {"error": "openpyxl no instalado"}
+            gemini_parts = [{"text": f"Archivo Excel '{fname}' (openpyxl no disponible para parsear)"}]
+        except Exception as exc:
+            parsed_data = {"error": str(exc)}
+            gemini_parts = [{"text": f"Archivo Excel '{fname}' (error al parsear: {exc})"}]
+
+    else:
+        # Image: encode as base64 inline_data for Gemini
+        mime_type = IMAGE_MIME_TYPES[img_ext]
+        b64_data = base64.b64encode(contents).decode("utf-8")
+        parsed_data = {"file_type": "image", "mime_type": mime_type, "size": file_size}
+        gemini_parts = [
+            {
+                "inline_data": {
+                    "mime_type": mime_type,
+                    "data": b64_data,
+                }
+            },
+            {"text": f"La imagen anterior es un dashboard/screenshot del Plan de Negocio anterior de Vanti CAS ({bp.year})."},
+        ]
+
+    # Call Gemini structured extraction
+    structured_extraction = await _call_gemini_structured(db, bp.year, gemini_parts)
+
+    # Build ai_summary from the result
+    ai_summary = structured_extraction.get("summary", "")
+
+    analysis = BPExcelAnalysis(
+        bp_id=bp_id,
+        filename=fname,
+        file_size=file_size,
+        file_type=file_type,
+        parsed_data=parsed_data,
+        ai_summary=ai_summary,
+        ai_insights={"risks": structured_extraction.get("risks", []), "opportunities": structured_extraction.get("opportunities", [])},
+        structured_extraction=structured_extraction,
+        uploaded_by_id=user.id,
+    )
+    db.add(analysis)
+    await db.flush()
+
+    result = await db.execute(
+        select(BPExcelAnalysis)
+        .where(BPExcelAnalysis.id == analysis.id)
+        .options(selectinload(BPExcelAnalysis.uploaded_by))
+    )
+    analysis = result.scalar_one()
+    return _analysis_to_dict(analysis)
+
+
+@router.post("/{bp_id}/apply-analysis/{analysis_id}")
+async def apply_analysis(
+    bp_id: int,
+    analysis_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Apply a stored structured extraction: create BPLines, BPActivities, BPRecommendations."""
+    bp_check = await db.execute(
+        select(BusinessPlan).where(BusinessPlan.id == bp_id, BusinessPlan.is_deleted == False)
+    )
+    if not bp_check.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Business Plan no encontrado")
+
+    analysis_result = await db.execute(
+        select(BPExcelAnalysis).where(
+            BPExcelAnalysis.id == analysis_id,
+            BPExcelAnalysis.bp_id == bp_id,
+        )
+    )
+    analysis = analysis_result.scalar_one_or_none()
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Análisis no encontrado")
+
+    if not analysis.structured_extraction:
+        raise HTTPException(status_code=400, detail="El análisis no tiene extracción estructurada disponible")
+
+    extraction = analysis.structured_extraction
+    lines_created = 0
+    activities_created = 0
+    recommendations_created = 0
+
+    # Valid category values
+    valid_line_categories = {"ingreso", "costo_fijo", "costo_variable", "magnitud", "margen"}
+    valid_activity_categories = {"comercial", "operativo", "financiero", "estrategico", "regulatorio", "tecnologia"}
+    valid_priorities = {"critica", "alta", "media", "baja"}
+
+    # Create financial lines
+    for item in extraction.get("financial_lines", []):
+        try:
+            raw_cat = str(item.get("category", "magnitud")).lower()
+            category = raw_cat if raw_cat in valid_line_categories else "magnitud"
+            monthly_plan = item.get("monthly_plan") or {}
+            # Ensure keys are strings and values are numbers
+            clean_monthly = {}
+            for k, v in monthly_plan.items():
+                try:
+                    clean_monthly[str(k)] = float(v) if v is not None else 0.0
+                except (TypeError, ValueError):
+                    clean_monthly[str(k)] = 0.0
+            annual_plan = _compute_annual_plan(clean_monthly)
+            line = BPLine(
+                bp_id=bp_id,
+                category=category,
+                subcategory=item.get("subcategory"),
+                name=str(item.get("name", "Línea sin nombre"))[:200],
+                unit=str(item.get("unit", "COP"))[:30],
+                monthly_plan=clean_monthly if clean_monthly else None,
+                annual_plan=annual_plan,
+                is_ai_generated=True,
+                ai_confidence=int(item.get("ai_confidence", 70)) if item.get("ai_confidence") is not None else 70,
+                ai_rationale=str(item.get("ai_rationale", ""))[:500] if item.get("ai_rationale") else None,
+            )
+            db.add(line)
+            lines_created += 1
+        except Exception:
+            continue
+
+    # Create custom_metrics as magnitud lines if present
+    for item in extraction.get("custom_metrics", []):
+        try:
+            monthly_plan = item.get("monthly_plan") or {}
+            clean_monthly = {}
+            for k, v in monthly_plan.items():
+                try:
+                    clean_monthly[str(k)] = float(v) if v is not None else 0.0
+                except (TypeError, ValueError):
+                    clean_monthly[str(k)] = 0.0
+            line = BPLine(
+                bp_id=bp_id,
+                category="magnitud",
+                subcategory=item.get("subcategory"),
+                name=str(item.get("name", "Métrica"))[:200],
+                unit=str(item.get("unit", "unidades"))[:30],
+                monthly_plan=clean_monthly if clean_monthly else None,
+                annual_plan=_compute_annual_plan(clean_monthly),
+                is_ai_generated=True,
+                ai_confidence=int(item.get("ai_confidence", 70)) if item.get("ai_confidence") is not None else 70,
+                ai_rationale=str(item.get("ai_rationale", ""))[:500] if item.get("ai_rationale") else None,
+                line_metadata={"source": "custom_metric"},
+            )
+            db.add(line)
+            lines_created += 1
+        except Exception:
+            continue
+
+    # Create activities
+    for item in extraction.get("activities", []):
+        try:
+            raw_cat = str(item.get("category", "operativo")).lower()
+            category = raw_cat if raw_cat in valid_activity_categories else "operativo"
+            raw_prio = str(item.get("priority", "media")).lower()
+            priority = raw_prio if raw_prio in valid_priorities else "media"
+
+            due_date = None
+            raw_due = item.get("due_date")
+            if raw_due and raw_due != "null":
+                try:
+                    from datetime import date as _date
+                    due_date = _date.fromisoformat(str(raw_due))
+                except (ValueError, TypeError):
+                    due_date = None
+
+            act = BPActivity(
+                bp_id=bp_id,
+                title=str(item.get("title", "Actividad sin título"))[:300],
+                description=str(item.get("description", ""))[:1000] if item.get("description") else None,
+                category=category,
+                priority=priority,
+                status="pendiente",
+                due_date=due_date,
+                notes=str(item.get("notes", ""))[:500] if item.get("notes") else None,
+            )
+            db.add(act)
+            activities_created += 1
+        except Exception:
+            continue
+
+    # Create recommendations
+    valid_rec_categories = {"comercial", "financiero", "operativo", "estrategico", "riesgo", "oportunidad"}
+    valid_impact_levels = {"alto", "medio", "bajo"}
+
+    for item in extraction.get("recommendations", []):
+        try:
+            raw_cat = str(item.get("category", "estrategico")).lower()
+            category = raw_cat if raw_cat in valid_rec_categories else "estrategico"
+            raw_prio = str(item.get("priority", "media")).lower()
+            priority = raw_prio if raw_prio in valid_priorities else "media"
+            raw_impact = str(item.get("impact_level", "medio")).lower() if item.get("impact_level") else None
+            impact_level = raw_impact if raw_impact in valid_impact_levels else "medio"
+
+            rec = BPRecommendation(
+                bp_id=bp_id,
+                source="ai",
+                category=category,
+                title=str(item.get("title", "Recomendación"))[:300],
+                description=str(item.get("description", ""))[:2000] if item.get("description") else None,
+                priority=priority,
+                status="pendiente",
+                impact_level=impact_level,
+                is_ai_generated=True,
+            )
+            db.add(rec)
+            recommendations_created += 1
+        except Exception:
+            continue
+
+    # Mark analysis as applied
+    analysis.applied_at = datetime.utcnow()
+    await db.flush()
+
+    return {
+        "lines_created": lines_created,
+        "activities_created": activities_created,
+        "recommendations_created": recommendations_created,
+    }
+
+
+# ─── Legacy Excel Analysis (backward compat) ─────────────────────────────────
 
 @router.post("/{bp_id}/analyze-excel", status_code=201)
 async def analyze_excel(
@@ -502,120 +943,8 @@ async def analyze_excel(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ):
-    """Upload Excel file, parse with openpyxl, generate AI summary via Gemini."""
-    bp_check = await db.execute(
-        select(BusinessPlan).where(BusinessPlan.id == bp_id, BusinessPlan.is_deleted == False)
-    )
-    if not bp_check.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Business Plan no encontrado")
-
-    fname = file.filename or ""
-    if not any(fname.endswith(ext) for ext in (".xlsx", ".xls", ".xlsm")):
-        raise HTTPException(status_code=400, detail="Solo se aceptan archivos Excel (.xlsx, .xls, .xlsm)")
-
-    contents = await file.read()
-    file_size = len(contents)
-
-    parsed_data: dict = {}
-    basic_stats: dict = {}
-    try:
-        import openpyxl
-        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True, data_only=True)
-        sheets_data: dict = {}
-        for sheet_name in wb.sheetnames[:3]:
-            ws = wb[sheet_name]
-            rows = []
-            for i, row in enumerate(ws.iter_rows(values_only=True)):
-                if i >= 50:
-                    break
-                rows.append([str(cell) if cell is not None else "" for cell in row])
-            sheets_data[sheet_name] = rows
-        parsed_data = {"sheets": sheets_data}
-        basic_stats = {
-            "total_sheets": len(wb.sheetnames),
-            "sheet_names": list(wb.sheetnames),
-            "rows_parsed": sum(len(v) for v in sheets_data.values()),
-        }
-        wb.close()
-    except ImportError:
-        parsed_data = {"error": "openpyxl no instalado", "filename": fname}
-    except Exception as e:
-        parsed_data = {"error": str(e), "filename": fname}
-
-    ai_summary = None
-    ai_insights = None
-    try:
-        from app.core.config import get_service_config_value
-        import httpx
-        api_key = await get_service_config_value(db, "gemini", "api_key")
-        model_name = await get_service_config_value(db, "gemini", "model") or "gemini-pro"
-
-        if api_key and parsed_data.get("sheets"):
-            preview_lines = []
-            for sname, rows in list(parsed_data["sheets"].items())[:2]:
-                preview_lines.append(f"Hoja: {sname}")
-                for row in rows[:15]:
-                    line = " | ".join(r for r in row if r)
-                    if line.strip():
-                        preview_lines.append(line)
-            preview_text = "\n".join(preview_lines[:80])
-            prompt = (
-                "Eres un analista financiero experto en planes de negocio para CAS en Vanti.\n"
-                "Analiza este extracto de Excel de plan de negocio y responde en español:\n"
-                "1. Resumen breve del contenido (2-3 oraciones)\n"
-                "2. Principales categorías de datos identificadas\n"
-                "3. Tres hallazgos o puntos de atención importantes\n"
-                "4. Sugerencias para mapear los datos al módulo BP de SmartFlow\n\n"
-                f"Extracto:\n{preview_text}"
-            )
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(
-                    f"https://generativelanguage.googleapis.com/v1/models/{model_name}:generateContent?key={api_key}",
-                    json={
-                        "contents": [{"parts": [{"text": prompt}]}],
-                        "generationConfig": {"temperature": 0.5, "maxOutputTokens": 1024},
-                    },
-                )
-                if resp.status_code == 200:
-                    rdata = resp.json()
-                    ai_summary = (
-                        rdata.get("candidates", [{}])[0]
-                        .get("content", {})
-                        .get("parts", [{}])[0]
-                        .get("text", "")
-                    )
-                    ai_insights = basic_stats
-    except Exception:
-        pass
-
-    if not ai_summary:
-        sheets_info = ", ".join(basic_stats.get("sheet_names", []))
-        ai_summary = (
-            f"Archivo '{fname}' procesado correctamente.\n"
-            f"Hojas encontradas: {sheets_info or 'N/A'}. "
-            f"Filas analizadas: {basic_stats.get('rows_parsed', 0)}.\n"
-            "Para análisis IA detallado, configure Gemini en Configuración > Integraciones."
-        )
-        ai_insights = basic_stats
-
-    analysis = BPExcelAnalysis(
-        bp_id=bp_id,
-        filename=fname,
-        file_size=file_size,
-        parsed_data=parsed_data,
-        ai_summary=ai_summary,
-        ai_insights=ai_insights,
-        uploaded_by_id=user.id,
-    )
-    db.add(analysis)
-    await db.flush()
-    result = await db.execute(
-        select(BPExcelAnalysis)
-        .where(BPExcelAnalysis.id == analysis.id)
-        .options(selectinload(BPExcelAnalysis.uploaded_by))
-    )
-    analysis = result.scalar_one()
-    return _analysis_to_dict(analysis)
+    """Legacy endpoint — delegates to analyze_file for backward compatibility."""
+    return await analyze_file(bp_id, file, db, user)
 
 
 @router.get("/{bp_id}/analyses")
@@ -627,3 +956,86 @@ async def list_analyses(bp_id: int, db: DB, user: CurrentUser):
         .order_by(BPExcelAnalysis.uploaded_at.desc())
     )
     return [_analysis_to_dict(a) for a in result.scalars().all()]
+
+
+# ─── Recommendations CRUD ─────────────────────────────────────────────────────
+
+@router.get("/{bp_id}/recommendations")
+async def list_recommendations(
+    bp_id: int,
+    db: DB,
+    user: CurrentUser,
+    status: Optional[str] = None,
+    category: Optional[str] = None,
+):
+    query = (
+        select(BPRecommendation)
+        .where(BPRecommendation.bp_id == bp_id, BPRecommendation.is_deleted == False)
+        .order_by(BPRecommendation.created_at.desc())
+    )
+    if status:
+        query = query.where(BPRecommendation.status == status)
+    if category:
+        query = query.where(BPRecommendation.category == category)
+    result = await db.execute(query)
+    return [_recommendation_to_dict(r) for r in result.scalars().all()]
+
+
+@router.post("/{bp_id}/recommendations", status_code=201)
+async def create_recommendation(bp_id: int, payload: BPRecommendationCreate, db: DB, user: LeaderOrAdmin):
+    bp_check = await db.execute(
+        select(BusinessPlan).where(BusinessPlan.id == bp_id, BusinessPlan.is_deleted == False)
+    )
+    if not bp_check.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Business Plan no encontrado")
+
+    rec = BPRecommendation(
+        bp_id=bp_id,
+        source=payload.source,
+        category=payload.category,
+        title=payload.title,
+        description=payload.description,
+        priority=payload.priority,
+        impact_level=payload.impact_level,
+        is_ai_generated=(payload.source == "ai"),
+        status="pendiente",
+    )
+    db.add(rec)
+    await db.flush()
+    return _recommendation_to_dict(rec)
+
+
+@router.patch("/{bp_id}/recommendations/{rec_id}")
+async def update_recommendation(
+    bp_id: int, rec_id: int, payload: BPRecommendationUpdate, db: DB, user: LeaderOrAdmin
+):
+    result = await db.execute(
+        select(BPRecommendation).where(
+            BPRecommendation.id == rec_id,
+            BPRecommendation.bp_id == bp_id,
+            BPRecommendation.is_deleted == False,
+        )
+    )
+    rec = result.scalar_one_or_none()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Recomendación no encontrada")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(rec, field, value)
+    await db.flush()
+    return _recommendation_to_dict(rec)
+
+
+@router.delete("/{bp_id}/recommendations/{rec_id}", status_code=204)
+async def delete_recommendation(bp_id: int, rec_id: int, db: DB, user: LeaderOrAdmin):
+    result = await db.execute(
+        select(BPRecommendation).where(
+            BPRecommendation.id == rec_id,
+            BPRecommendation.bp_id == bp_id,
+            BPRecommendation.is_deleted == False,
+        )
+    )
+    rec = result.scalar_one_or_none()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Recomendación no encontrada")
+    rec.is_deleted = True
+    await db.flush()

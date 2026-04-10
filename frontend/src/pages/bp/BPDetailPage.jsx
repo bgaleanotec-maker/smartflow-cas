@@ -4,13 +4,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   TrendingUp, ArrowLeft, Loader2, X, Plus, Upload, FileSpreadsheet,
   Brain, ChevronDown, Edit2, Trash2, Check, BarChart3, Target,
-  AlertCircle, DollarSign, Activity, CheckCircle2, Clock,
+  AlertCircle, DollarSign, Activity, CheckCircle2, Clock, Lightbulb,
+  Sparkles, Image,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import { bpAPI, usersAPI } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import BPActivityCard from './components/BPActivityCard'
+import BPImportWizard from './components/BPImportWizard'
+import BPRecommendationsPanel from './components/BPRecommendationsPanel'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -290,6 +293,13 @@ function ResumenTab({ bp }) {
   const overdue = activities.filter((a) => a.is_overdue || a.status === 'vencida')
   const completed = activities.filter((a) => a.status === 'completada')
 
+  // Latest AI analysis
+  const latestAnalysis = (bp.excel_analyses || []).slice().sort(
+    (a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at)
+  )[0]
+
+  const pendingRecs = (bp.recommendations || []).filter((r) => r.status === 'pendiente' && !r.is_deleted)
+
   return (
     <div className="space-y-5">
       {/* KPI cards */}
@@ -346,6 +356,39 @@ function ResumenTab({ bp }) {
         </div>
       )}
 
+      {/* AI Insights section */}
+      {latestAnalysis?.ai_summary && (
+        <div className="card border border-brand-500/20 bg-brand-950/5">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles size={14} className="text-brand-400" />
+            <h3 className="text-sm font-semibold text-brand-400">AI Insights</h3>
+            <span className="text-xs text-slate-500">— análisis más reciente</span>
+          </div>
+          <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-line">{latestAnalysis.ai_summary}</p>
+          {latestAnalysis.uploaded_at && (
+            <p className="text-xs text-slate-600 mt-2">
+              {new Date(latestAnalysis.uploaded_at).toLocaleDateString('es-CO', {
+                day: '2-digit', month: 'short', year: 'numeric',
+              })}
+              {latestAnalysis.filename && ` · ${latestAnalysis.filename}`}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Pending recommendations reminder */}
+      {pendingRecs.length > 0 && (
+        <div className="card border border-purple-500/20 bg-purple-950/5">
+          <div className="flex items-center gap-2">
+            <Lightbulb size={14} className="text-purple-400" />
+            <p className="text-sm text-slate-300">
+              <span className="font-semibold text-purple-400">{pendingRecs.length} recomendación{pendingRecs.length > 1 ? 'es' : ''} pendiente{pendingRecs.length > 1 ? 's' : ''}</span>
+              {' '}de revisar en la pestaña Recomendaciones IA.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Magnitudes / KPIs */}
       {magnitudeLines.length > 0 && (
         <div className="card border border-slate-700/50">
@@ -364,6 +407,38 @@ function ResumenTab({ bp }) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── AI Badge + Confidence Bar (inline) ──────────────────────────────────────
+
+function AIBadge({ confidence, rationale }) {
+  return (
+    <div className="flex items-center gap-1.5 ml-1">
+      <span
+        className="badge text-xs bg-purple-500/10 text-purple-400 border border-purple-500/30"
+        title={rationale || 'Generado por IA'}
+      >
+        IA
+      </span>
+      {confidence != null && (
+        <div
+          className="flex items-center gap-1"
+          title={`Confianza: ${confidence}%${rationale ? '\n' + rationale : ''}`}
+        >
+          <div className="h-1.5 w-10 bg-slate-700 rounded-full overflow-hidden">
+            <div
+              className={clsx(
+                'h-full rounded-full',
+                confidence >= 80 ? 'bg-green-500' : confidence >= 60 ? 'bg-yellow-500' : 'bg-orange-500',
+              )}
+              style={{ width: `${confidence}%` }}
+            />
+          </div>
+          <span className="text-xs text-slate-600">{confidence}%</span>
         </div>
       )}
     </div>
@@ -413,6 +488,8 @@ function PresupuestoTab({ bp, bpId, canWrite, onRefresh }) {
   const totalCostos = totalCostosFijos + totalCostosVar
   const margen = totalIngresos > 0 ? ((totalIngresos - totalCostos) / totalIngresos) * 100 : 0
 
+  const aiLinesCount = lines.filter((l) => l.is_ai_generated).length
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -422,6 +499,11 @@ function PresupuestoTab({ bp, bpId, canWrite, onRefresh }) {
           <span className={clsx('font-semibold', margen >= 0 ? 'text-brand-400' : 'text-red-400')}>
             Margen: {margen.toFixed(1)}%
           </span>
+          {aiLinesCount > 0 && (
+            <span className="badge text-xs bg-purple-500/10 text-purple-400 border border-purple-500/30 flex items-center gap-1">
+              <Brain size={10} /> {aiLinesCount} líneas IA
+            </span>
+          )}
         </div>
         {canWrite && (
           <button className="btn-primary text-sm flex items-center gap-1.5" onClick={() => setLineModal('new')}>
@@ -455,7 +537,7 @@ function PresupuestoTab({ bp, bpId, canWrite, onRefresh }) {
               </tr>
             ) : (
               lines.map((line, idx) => (
-                <tr key={line.id} className="hover:bg-slate-800/30 transition-colors">
+                <tr key={line.id} className={clsx('hover:bg-slate-800/30 transition-colors', line.is_ai_generated && 'bg-purple-950/5')}>
                   <td className="px-3 py-2 text-slate-600 text-xs">{idx + 1}</td>
                   <td className="px-3 py-2">
                     <span className={clsx('badge text-xs', LINE_CATEGORY_COLORS[line.category] || 'text-slate-400 bg-slate-500/10')}>
@@ -463,7 +545,12 @@ function PresupuestoTab({ bp, bpId, canWrite, onRefresh }) {
                     </span>
                   </td>
                   <td className="px-3 py-2">
-                    <p className="text-slate-200 font-medium text-xs">{line.name}</p>
+                    <div className="flex items-center gap-1">
+                      <p className="text-slate-200 font-medium text-xs">{line.name}</p>
+                      {line.is_ai_generated && (
+                        <AIBadge confidence={line.ai_confidence} rationale={line.ai_rationale} />
+                      )}
+                    </div>
                     {line.subcategory && <p className="text-slate-500 text-xs">{line.subcategory}</p>}
                   </td>
                   <td className="px-3 py-2 text-slate-500 text-xs">{line.unit}</td>
@@ -636,7 +723,7 @@ function AnalisisTab({ bp, bpId }) {
   const [expandedId, setExpandedId] = useState(null)
 
   const uploadMutation = useMutation({
-    mutationFn: (file) => bpAPI.analyzeExcel(bpId, file),
+    mutationFn: (file) => bpAPI.analyzeFile(bpId, file),
     onSuccess: () => {
       qc.invalidateQueries(['bp', bpId])
       toast.success('Archivo analizado correctamente')
@@ -647,8 +734,11 @@ function AnalisisTab({ bp, bpId }) {
 
   const handleFile = (file) => {
     if (!file) return
-    if (!file.name.match(/\.(xlsx|xls|xlsm)$/i)) {
-      toast.error('Solo se aceptan archivos Excel (.xlsx, .xls, .xlsm)')
+    const name = file.name.toLowerCase()
+    const validExcel = /\.(xlsx|xls|xlsm)$/.test(name)
+    const validImage = /\.(png|jpg|jpeg|gif|webp)$/.test(name)
+    if (!validExcel && !validImage) {
+      toast.error('Solo se aceptan Excel (.xlsx, .xls, .xlsm) o imágenes (.png, .jpg, .gif, .webp)')
       return
     }
     setUploading(true)
@@ -694,20 +784,27 @@ function AnalisisTab({ bp, bpId }) {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".xlsx,.xls,.xlsm"
+          accept=".xlsx,.xls,.xlsm,.png,.jpg,.jpeg,.gif,.webp"
           className="hidden"
           onChange={(e) => handleFile(e.target.files[0])}
         />
         {uploading ? (
           <div className="flex flex-col items-center gap-2">
             <Loader2 size={32} className="animate-spin text-brand-400" />
-            <p className="text-sm text-slate-400">Analizando archivo...</p>
+            <p className="text-sm text-slate-400">Analizando archivo con IA...</p>
           </div>
         ) : (
           <>
-            <FileSpreadsheet size={36} className="text-slate-500 mx-auto mb-3" />
-            <p className="text-slate-300 font-medium mb-1">Arrastra tu Excel aquí o haz clic para cargar</p>
-            <p className="text-xs text-slate-500">Soporta .xlsx, .xls, .xlsm — Análisis IA con Gemini</p>
+            <div className="flex items-center justify-center gap-3 mb-3">
+              <FileSpreadsheet size={28} className="text-green-400" />
+              <span className="text-slate-600">|</span>
+              <Image size={28} className="text-blue-400" />
+            </div>
+            <p className="text-slate-300 font-medium mb-1">Arrastra tu Excel o imagen aquí, o haz clic para cargar</p>
+            <p className="text-xs text-slate-500">Excel: .xlsx, .xls, .xlsm · Imágenes: .png, .jpg, .gif, .webp</p>
+            <p className="text-xs text-brand-400 mt-2 flex items-center justify-center gap-1">
+              <Brain size={11} /> Análisis IA con Gemini — extrae líneas, actividades y recomendaciones
+            </p>
           </>
         )}
       </div>
@@ -715,7 +812,7 @@ function AnalisisTab({ bp, bpId }) {
       {/* Stored analyses */}
       {analyses.length === 0 ? (
         <div className="text-center py-6 text-slate-500 text-sm">
-          No hay análisis guardados. Carga un archivo Excel para comenzar.
+          No hay análisis guardados. Carga un archivo para comenzar.
         </div>
       ) : (
         <div className="space-y-3">
@@ -728,8 +825,15 @@ function AnalisisTab({ bp, bpId }) {
                 onClick={() => setExpandedId(expandedId === analysis.id ? null : analysis.id)}
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-green-500/15 flex items-center justify-center flex-shrink-0">
-                    <FileSpreadsheet size={18} className="text-green-400" />
+                  <div className={clsx(
+                    'w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0',
+                    analysis.file_type === 'image' ? 'bg-blue-500/15' : 'bg-green-500/15',
+                  )}>
+                    {analysis.file_type === 'image' ? (
+                      <Image size={18} className="text-blue-400" />
+                    ) : (
+                      <FileSpreadsheet size={18} className="text-green-400" />
+                    )}
                   </div>
                   <div>
                     <p className="text-sm font-medium text-slate-200">{analysis.filename}</p>
@@ -737,6 +841,11 @@ function AnalisisTab({ bp, bpId }) {
                       <span>{formatDate(analysis.uploaded_at)}</span>
                       {analysis.file_size && <span>{formatBytes(analysis.file_size)}</span>}
                       {analysis.uploaded_by_name && <span>por {analysis.uploaded_by_name}</span>}
+                      {analysis.applied_at && (
+                        <span className="text-green-400 flex items-center gap-1">
+                          <Check size={10} /> Aplicado
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -744,6 +853,11 @@ function AnalisisTab({ bp, bpId }) {
                   {analysis.ai_summary && (
                     <span className="badge bg-brand-500/15 text-brand-400 border border-brand-500/30 text-xs flex items-center gap-1">
                       <Brain size={10} /> IA
+                    </span>
+                  )}
+                  {analysis.structured_extraction && !analysis.applied_at && (
+                    <span className="badge bg-yellow-500/15 text-yellow-400 border border-yellow-500/30 text-xs">
+                      Pendiente
                     </span>
                   )}
                   <ChevronDown
@@ -766,9 +880,25 @@ function AnalisisTab({ bp, bpId }) {
                       </div>
                     </div>
                   )}
+                  {analysis.structured_extraction && (
+                    <div>
+                      <p className="text-xs font-semibold text-slate-400 mb-2">Extracción estructurada</p>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="badge bg-slate-700/50 text-slate-300 text-xs">
+                          {(analysis.structured_extraction.financial_lines || []).length} líneas financieras
+                        </span>
+                        <span className="badge bg-slate-700/50 text-slate-300 text-xs">
+                          {(analysis.structured_extraction.activities || []).length} actividades
+                        </span>
+                        <span className="badge bg-slate-700/50 text-slate-300 text-xs">
+                          {(analysis.structured_extraction.recommendations || []).length} recomendaciones
+                        </span>
+                      </div>
+                    </div>
+                  )}
                   {analysis.ai_insights && Object.keys(analysis.ai_insights).length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold text-slate-400 mb-2">Estadísticas del archivo</p>
+                      <p className="text-xs font-semibold text-slate-400 mb-2">Estadísticas</p>
                       <div className="flex flex-wrap gap-2">
                         {analysis.ai_insights.total_sheets != null && (
                           <span className="badge bg-slate-700/50 text-slate-300 text-xs">
@@ -783,6 +913,16 @@ function AnalisisTab({ bp, bpId }) {
                         {(analysis.ai_insights.sheet_names || []).slice(0, 3).map((s) => (
                           <span key={s} className="badge bg-slate-700/50 text-slate-400 text-xs">{s}</span>
                         ))}
+                        {(analysis.ai_insights.risks || []).length > 0 && (
+                          <span className="badge bg-red-500/10 text-red-400 text-xs">
+                            {analysis.ai_insights.risks.length} riesgos
+                          </span>
+                        )}
+                        {(analysis.ai_insights.opportunities || []).length > 0 && (
+                          <span className="badge bg-teal-500/10 text-teal-400 text-xs">
+                            {analysis.ai_insights.opportunities.length} oportunidades
+                          </span>
+                        )}
                       </div>
                     </div>
                   )}
@@ -806,6 +946,7 @@ export default function BPDetailPage() {
   const [activeTab, setActiveTab] = useState('resumen')
   const [editBP, setEditBP] = useState(false)
   const [editForm, setEditForm] = useState({})
+  const [showImportWizard, setShowImportWizard] = useState(false)
 
   const canWrite = ['admin', 'leader'].includes(user?.role)
 
@@ -845,11 +986,13 @@ export default function BPDetailPage() {
   }
 
   const statusCfg = STATUS_CONFIG[bp.status] || STATUS_CONFIG.borrador
+  const recCount = (bp.recommendations || []).length
   const TABS = [
     { id: 'resumen', label: 'Resumen', icon: BarChart3 },
     { id: 'presupuesto', label: 'Presupuesto', icon: DollarSign },
     { id: 'actividades', label: `Actividades (${(bp.activities || []).length})`, icon: Target },
     { id: 'analisis', label: 'Análisis IA', icon: Brain },
+    { id: 'recomendaciones', label: `Recomendaciones${recCount > 0 ? ` (${recCount})` : ''}`, icon: Lightbulb },
   ]
 
   return (
@@ -874,22 +1017,33 @@ export default function BPDetailPage() {
                 {bp.description && ` · ${bp.description}`}
               </p>
             </div>
-            {canWrite && (
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              {canWrite && (
                 <button
-                  className="btn-secondary text-sm flex items-center gap-1.5"
-                  onClick={() => { setEditForm({ name: bp.name || '', description: bp.description || '', status: bp.status, version: bp.version }); setEditBP(true) }}
+                  className="btn-secondary text-sm flex items-center gap-1.5 border-brand-500/30 text-brand-400 hover:text-brand-300"
+                  onClick={() => setShowImportWizard(true)}
                 >
-                  <Edit2 size={14} /> Editar
+                  <Sparkles size={14} />
+                  Importar desde Excel/Imagen
                 </button>
-                <button
-                  className="btn-secondary text-sm text-red-400 hover:text-red-300 flex items-center gap-1.5"
-                  onClick={() => { if (window.confirm('¿Eliminar este BP? Esta acción no se puede deshacer.')) deleteMutation.mutate() }}
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            )}
+              )}
+              {canWrite && (
+                <>
+                  <button
+                    className="btn-secondary text-sm flex items-center gap-1.5"
+                    onClick={() => { setEditForm({ name: bp.name || '', description: bp.description || '', status: bp.status, version: bp.version }); setEditBP(true) }}
+                  >
+                    <Edit2 size={14} /> Editar
+                  </button>
+                  <button
+                    className="btn-secondary text-sm text-red-400 hover:text-red-300 flex items-center gap-1.5"
+                    onClick={() => { if (window.confirm('¿Eliminar este BP? Esta acción no se puede deshacer.')) deleteMutation.mutate() }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -921,6 +1075,9 @@ export default function BPDetailPage() {
         {activeTab === 'presupuesto' && <PresupuestoTab bp={bp} bpId={bpId} canWrite={canWrite} onRefresh={() => qc.invalidateQueries(['bp', bpId])} />}
         {activeTab === 'actividades' && <ActividadesTab bp={bp} bpId={bpId} canWrite={canWrite} />}
         {activeTab === 'analisis' && <AnalisisTab bp={bp} bpId={bpId} />}
+        {activeTab === 'recomendaciones' && (
+          <BPRecommendationsPanel bpId={bpId} recommendations={bp.recommendations || []} />
+        )}
       </div>
 
       {/* Edit BP modal */}
@@ -964,6 +1121,18 @@ export default function BPDetailPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Import Wizard */}
+      {showImportWizard && (
+        <BPImportWizard
+          bpId={bpId}
+          onClose={() => setShowImportWizard(false)}
+          onDone={() => {
+            qc.invalidateQueries(['bp', bpId])
+            setShowImportWizard(false)
+          }}
+        />
       )}
     </div>
   )

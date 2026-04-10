@@ -25,7 +25,7 @@ from app.models.lean_pro import (
     DailyStandup, Retrospective, SprintMetrics, KaizenItem,
 )
 from app.models.business_plan import (
-    BusinessPlan, BPLine, BPActivity, BPExcelAnalysis,
+    BusinessPlan, BPLine, BPActivity, BPExcelAnalysis, BPRecommendation,
     BPStatus, BPLineCategory, BPActivityStatus, BPActivityPriority, BPActivityCategory,
 )
 
@@ -48,6 +48,6 @@ __all__ = [
     "RecurringActivity", "ActivityInstance", "ActivityFrequency", "ActivityStatus",
     "ActivityScope", "DashboardWidget",
     "DailyStandup", "Retrospective", "SprintMetrics", "KaizenItem",
-    "BusinessPlan", "BPLine", "BPActivity", "BPExcelAnalysis",
+    "BusinessPlan", "BPLine", "BPActivity", "BPExcelAnalysis", "BPRecommendation",
     "BPStatus", "BPLineCategory", "BPActivityStatus", "BPActivityPriority", "BPActivityCategory",
 ]
