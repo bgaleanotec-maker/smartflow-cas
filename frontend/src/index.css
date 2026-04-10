@@ -21,6 +21,27 @@
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-slate-500;
   }
+
+  /* Prevent zoom on input focus (iOS) */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+  @media (min-width: 640px) {
+    input, select, textarea {
+      font-size: 0.875rem !important;
+    }
+  }
+
+  /* Safe area for notch phones */
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  .safe-top { padding-top: env(safe-area-inset-top); }
+
+  /* Smooth scrolling */
+  html { scroll-behavior: smooth; -webkit-tap-highlight-color: transparent; }
+
+  /* Better touch targets */
+  button, a { min-height: 44px; }
+  .compact button, .compact a { min-height: unset; }
 }
 
 @layer components {
@@ -50,5 +71,41 @@
   }
   .badge {
     @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  /* Mobile card — full-width on small screens */
+  .card-mobile {
+    @apply bg-slate-900 border border-slate-800 rounded-xl p-4 w-full;
+  }
+
+  /* Stat card with hover effect */
+  .stat-card {
+    @apply card hover:border-slate-700 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-brand-500/5;
+  }
+
+  /* Scrollable horizontal container for mobile tables */
+  .table-scroll {
+    @apply overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0;
+  }
+
+  /* Page header — responsive */
+  .page-header {
+    @apply flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6;
+  }
+  .page-title {
+    @apply text-xl sm:text-2xl font-bold text-white;
+  }
+
+  /* Bottom nav for mobile */
+  .mobile-nav-item {
+    @apply flex flex-col items-center gap-0.5 px-3 py-2 text-slate-500 hover:text-slate-200 transition-colors text-[10px] font-medium;
+  }
+  .mobile-nav-item.active {
+    @apply text-brand-400;
+  }
+
+  /* Floating action button */
+  .fab {
+    @apply fixed bottom-20 right-4 z-40 w-14 h-14 rounded-full bg-brand-600 hover:bg-brand-500 text-white shadow-xl shadow-brand-600/30 flex items-center justify-center transition-all active:scale-95;
   }
 }

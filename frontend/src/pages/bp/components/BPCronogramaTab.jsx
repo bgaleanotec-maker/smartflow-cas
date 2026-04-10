@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   ChevronLeft, ChevronRight, Users,
   AlertTriangle, Loader2, Flag, CheckSquare, MessageSquare,
-  Link2, Calendar, BarChart2,
+  Link2, Calendar, BarChart2, List,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { bpAPI } from '../../../services/api'
@@ -216,6 +216,76 @@ function GanttBar({ activity, viewStart, viewEnd, totalDays, onClickBar, onHover
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+// ─── Activity List Card (mobile list view) ───────────────────────────────────
+
+function ActivityListCard({ activity, onClick }) {
+  const today = new Date().toISOString().split('T')[0]
+  const daysRemaining = activity.due_date
+    ? Math.round((new Date(activity.due_date) - new Date(today)) / 86400000)
+    : null
+  const priorityBorder = {
+    critica: 'border-l-red-500',
+    alta: 'border-l-orange-500',
+    media: 'border-l-indigo-500',
+    baja: 'border-l-slate-500',
+  }[activity.priority] || 'border-l-slate-500'
+
+  const statusCfg = STATUS_CONFIG[activity.status] || STATUS_CONFIG.pendiente
+
+  return (
+    <button
+      onClick={() => onClick(activity)}
+      className={clsx(
+        'w-full text-left bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-4 transition-all border-l-4 active:scale-[0.99]',
+        priorityBorder
+      )}
+    >
+      <div className="flex items-start justify-between gap-2 mb-1.5">
+        <h4 className="font-medium text-sm text-slate-100 flex-1 min-w-0 leading-snug">{activity.title}</h4>
+        <span className={clsx('text-[10px] font-semibold flex-shrink-0 mt-0.5', statusCfg.color)}>
+          {statusCfg.label}
+        </span>
+      </div>
+      <div className="flex items-center gap-3 flex-wrap text-[11px] text-slate-500">
+        {activity.owner_name && (
+          <span className="flex items-center gap-1">
+            <Users size={10} />
+            {activity.owner_name}
+          </span>
+        )}
+        {activity.due_date && (
+          <span className="flex items-center gap-1">
+            <Calendar size={10} />
+            {activity.due_date}
+          </span>
+        )}
+        {daysRemaining !== null && (
+          <span className={clsx(
+            'px-1.5 py-0.5 rounded font-semibold',
+            daysRemaining < 0 ? 'bg-red-500/15 text-red-400' :
+            daysRemaining <= 7 ? 'bg-amber-500/15 text-amber-400' :
+            'bg-slate-800 text-slate-400'
+          )}>
+            {daysRemaining < 0 ? `${Math.abs(daysRemaining)}d vencida` : daysRemaining === 0 ? 'Hoy' : `${daysRemaining}d`}
+          </span>
+        )}
+        {activity.checklist_count > 0 && (
+          <span className="flex items-center gap-1">
+            <CheckSquare size={10} />
+            {activity.checklist_done}/{activity.checklist_count}
+          </span>
+        )}
+        {activity.comments_count > 0 && (
+          <span className="flex items-center gap-1">
+            <MessageSquare size={10} />
+            {activity.comments_count}
+          </span>
+        )}
+      </div>
+    </button>
+  )
+}
+
 export default function BPCronogramaTab({ bpId, canWrite }) {
   const [viewYear, setViewYear] = useState(new Date().getFullYear())
   const [viewMonth, setViewMonth] = useState(new Date().getMonth())
@@ -225,6 +295,11 @@ export default function BPCronogramaTab({ bpId, canWrite }) {
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
   const [selectedActivity, setSelectedActivity] = useState(null)
   const [milestoneModal, setMilestoneModal] = useState(null)
+  // View mode: 'gantt' on desktop, 'list' on mobile by default
+  const [viewMode, setViewMode] = useState(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) return 'list'
+    return 'gantt'
+  })
   const ganttRef = useRef(null)
 
   const { data: timeline, isLoading, error } = useQuery({
@@ -367,86 +442,179 @@ export default function BPCronogramaTab({ bpId, canWrite }) {
 
   const ROW_HEIGHT = 44
 
+  // All activities sorted by due_date for list view
+  const allActivities = timeline?.activities || []
+  const sortedActivities = useMemo(() => {
+    return [...allActivities].sort((a, b) => {
+      if (!a.due_date) return 1
+      if (!b.due_date) return -1
+      return a.due_date.localeCompare(b.due_date)
+    })
+  }, [allActivities])
+
+  // Group by status for list view
+  const listGrouped = useMemo(() => {
+    const groups = { vencida: [], en_progreso: [], pendiente: [], completada: [], cancelada: [] }
+    sortedActivities.forEach(a => {
+      const key = a.status || 'pendiente'
+      if (groups[key]) groups[key].push(a)
+      else groups.pendiente.push(a)
+    })
+    // Filter out empty groups and order: vencida first
+    return [
+      { key: 'vencida', label: 'Vencidas', items: groups.vencida },
+      { key: 'en_progreso', label: 'En Progreso', items: groups.en_progreso },
+      { key: 'pendiente', label: 'Pendientes', items: groups.pendiente },
+      { key: 'completada', label: 'Completadas', items: groups.completada },
+      { key: 'cancelada', label: 'Canceladas', items: groups.cancelada },
+    ].filter(g => g.items.length > 0)
+  }, [sortedActivities])
+
   return (
     <div className="space-y-4">
       {/* Controls bar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        {/* Navigation */}
-        <div className="flex items-center gap-2">
+        {/* View mode toggle */}
+        <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-0.5">
           <button
-            onClick={() => navigate(-1)}
-            className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-100 transition-colors"
+            onClick={() => setViewMode('gantt')}
+            className={clsx(
+              'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-colors',
+              viewMode === 'gantt' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-slate-100'
+            )}
           >
-            <ChevronLeft size={16} />
-          </button>
-          <span className="text-sm font-semibold text-slate-200 min-w-[140px] text-center">
-            {MONTHS_FULL[viewMonth]} {viewYear}
-            {zoom > 1 && ` — ${MONTHS_FULL[(viewMonth + zoom - 1) % 12]} ${viewYear + Math.floor((viewMonth + zoom - 1) / 12)}`}
-          </span>
-          <button
-            onClick={() => navigate(1)}
-            className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-100 transition-colors"
-          >
-            <ChevronRight size={16} />
+            <BarChart2 size={12} />
+            Gantt
           </button>
           <button
-            onClick={() => {
-              const now = new Date()
-              setViewYear(now.getFullYear())
-              setViewMonth(now.getMonth())
-            }}
-            className="btn-ghost text-xs px-2.5 py-1.5"
+            onClick={() => setViewMode('list')}
+            className={clsx(
+              'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-colors',
+              viewMode === 'list' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-slate-100'
+            )}
           >
-            Hoy
+            <List size={12} />
+            Lista
           </button>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Zoom */}
-          <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-0.5">
-            {ZOOM_OPTIONS.map((opt) => (
+        {/* Navigation + zoom/group — only shown in gantt mode */}
+        {viewMode === 'gantt' && (
+          <div className="flex items-center gap-2 flex-wrap flex-1 justify-between">
+            <div className="flex items-center gap-2">
               <button
-                key={opt.value}
-                onClick={() => setZoom(opt.value)}
-                className={clsx(
-                  'px-2.5 py-1 text-xs rounded-md transition-colors',
-                  zoom === opt.value
-                    ? 'bg-brand-600 text-white'
-                    : 'text-slate-400 hover:text-slate-100',
-                )}
+                onClick={() => navigate(-1)}
+                className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-100 transition-colors"
               >
-                {opt.label}
+                <ChevronLeft size={16} />
               </button>
-            ))}
-          </div>
+              <span className="text-sm font-semibold text-slate-200 min-w-[140px] text-center">
+                {MONTHS_FULL[viewMonth]} {viewYear}
+                {zoom > 1 && ` — ${MONTHS_FULL[(viewMonth + zoom - 1) % 12]} ${viewYear + Math.floor((viewMonth + zoom - 1) / 12)}`}
+              </span>
+              <button
+                onClick={() => navigate(1)}
+                className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-100 transition-colors"
+              >
+                <ChevronRight size={16} />
+              </button>
+              <button
+                onClick={() => {
+                  const now = new Date()
+                  setViewYear(now.getFullYear())
+                  setViewMonth(now.getMonth())
+                }}
+                className="btn-ghost text-xs px-2.5 py-1.5"
+              >
+                Hoy
+              </button>
+            </div>
 
-          {/* Group by */}
-          <div className="flex items-center gap-1.5">
-            <Users size={13} className="text-slate-500" />
-            <select
-              className="input py-1 text-xs"
-              value={groupBy}
-              onChange={(e) => setGroupBy(e.target.value)}
-            >
-              {GROUP_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Zoom */}
+              <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-0.5">
+                {ZOOM_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setZoom(opt.value)}
+                    className={clsx(
+                      'px-2.5 py-1 text-xs rounded-md transition-colors',
+                      zoom === opt.value
+                        ? 'bg-brand-600 text-white'
+                        : 'text-slate-400 hover:text-slate-100',
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
 
-          {/* Add milestone button */}
-          {canWrite && (
-            <button
-              onClick={() => setMilestoneModal({})}
-              className="btn-secondary text-xs flex items-center gap-1.5 py-1.5"
-            >
-              <Flag size={12} />
-              Hito
-            </button>
-          )}
-        </div>
+              {/* Group by */}
+              <div className="flex items-center gap-1.5">
+                <Users size={13} className="text-slate-500" />
+                <select
+                  className="input py-1 text-xs"
+                  value={groupBy}
+                  onChange={(e) => setGroupBy(e.target.value)}
+                >
+                  {GROUP_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+
+              {/* Add milestone button */}
+              {canWrite && (
+                <button
+                  onClick={() => setMilestoneModal({})}
+                  className="btn-secondary text-xs flex items-center gap-1.5 py-1.5"
+                >
+                  <Flag size={12} />
+                  Hito
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Gantt container */}
-      <div className="card border border-slate-700/50 overflow-hidden">
+      {/* ── List View (mobile-first) ── */}
+      {viewMode === 'list' && (
+        <div className="space-y-4">
+          {allActivities.length === 0 ? (
+            <div className="text-center py-10 text-slate-500 text-sm">
+              No hay actividades en el cronograma
+            </div>
+          ) : (
+            listGrouped.map(({ key, label, items }) => (
+              <div key={key}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={clsx(
+                    'text-xs font-semibold uppercase tracking-wider',
+                    key === 'vencida' ? 'text-red-400' :
+                    key === 'en_progreso' ? 'text-blue-400' :
+                    key === 'completada' ? 'text-green-400' :
+                    'text-slate-400'
+                  )}>
+                    {label}
+                  </span>
+                  <span className="text-xs text-slate-600">({items.length})</span>
+                </div>
+                <div className="space-y-2">
+                  {items.map(act => (
+                    <ActivityListCard
+                      key={act.id}
+                      activity={act}
+                      onClick={(a) => setSelectedActivity(a)}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* ── Gantt container ── */}
+      {viewMode === 'gantt' && <div className="card border border-slate-700/50 overflow-hidden">
         <div className="flex">
           {/* Left panel */}
           <div className="flex-shrink-0 w-56 border-r border-slate-700/50">
@@ -662,7 +830,7 @@ export default function BPCronogramaTab({ bpId, canWrite }) {
             </div>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Stats bar */}
       <div className="flex items-center gap-4 flex-wrap px-1">

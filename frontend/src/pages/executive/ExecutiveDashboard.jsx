@@ -392,14 +392,14 @@ function ARIAChat() {
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendQuestion()}
             placeholder="Consulta a ARIA Directiva..."
             disabled={ariaMutation.isPending}
-            className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white
+            className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 sm:py-2 text-sm sm:text-xs text-white
                        placeholder-slate-500 focus:outline-none focus:border-amber-600 transition-colors
                        disabled:opacity-50"
           />
           <button
             onClick={() => sendQuestion()}
             disabled={ariaMutation.isPending || !input.trim()}
-            className="w-8 h-8 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700
+            className="w-10 h-10 sm:w-8 sm:h-8 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700
                        rounded-lg flex items-center justify-center transition-colors flex-shrink-0"
           >
             <Send size={13} className="text-white" />
@@ -588,14 +588,14 @@ export default function ExecutiveDashboard() {
       </div>
 
       {/* ── Bottom: ARIA + Alerts ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4" style={{ height: '520px' }}>
+      <div className="flex flex-col lg:grid lg:grid-cols-5 gap-4 lg:h-[520px]">
         {/* ARIA Chat — 3 cols */}
-        <div className="lg:col-span-3 h-full">
+        <div className="lg:col-span-3 h-[420px] lg:h-full">
           <ARIAChat />
         </div>
 
         {/* Alerts panel — 2 cols */}
-        <div className="lg:col-span-2 flex flex-col bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
+        <div className="lg:col-span-2 flex flex-col bg-slate-950 border border-slate-800 rounded-xl overflow-hidden h-[320px] lg:h-full">
           <div className="px-4 py-3 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-2">
               <AlertTriangle size={14} className="text-amber-400" />

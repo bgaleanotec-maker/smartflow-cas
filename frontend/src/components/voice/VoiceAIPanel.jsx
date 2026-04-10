@@ -221,8 +221,15 @@ function RecordingTimer({ startedAt }) {
 }
 
 // ─── Main VoiceAIPanel ────────────────────────────────────────────────────────
-export default function VoiceAIPanel({ currentUser }) {
+export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClose }) {
   const [open, setOpen] = useState(false)
+
+  // Sync with external open state (e.g. from mobile bottom nav ARIA button)
+  const isOpen = open || !!externalOpen
+  const handleClose = () => {
+    setOpen(false)
+    onExternalClose?.()
+  }
   const [mode, setMode] = useState('aria') // 'aria' | 'meeting'
   const [ariaStatus, setAriaStatus] = useState('idle')
   const [chat, setChat] = useState([])
@@ -259,11 +266,11 @@ export default function VoiceAIPanel({ currentUser }) {
 
   // Greet on panel open (ARIA mode)
   useEffect(() => {
-    if (open && mode === 'aria' && chat.length === 0 && currentUser) {
+    if (isOpen && mode === 'aria' && chat.length === 0 && currentUser) {
       sendAriaMessage('saludo_inicial')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [isOpen])
 
   const cleanupAudio = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -553,10 +560,10 @@ export default function VoiceAIPanel({ currentUser }) {
 
   return (
     <>
-      {/* Floating trigger button */}
+      {/* Floating trigger button — hidden on mobile (ARIA is in bottom nav center) */}
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-50 w-[60px] h-[60px] rounded-full bg-gradient-to-br from-brand-600 to-purple-600 shadow-2xl shadow-brand-600/40 flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
+        className="hidden lg:flex fixed bottom-[88px] right-4 lg:bottom-6 lg:right-6 z-50 w-[60px] h-[60px] rounded-full bg-gradient-to-br from-brand-600 to-purple-600 shadow-2xl shadow-brand-600/40 items-center justify-center transition-transform hover:scale-110 active:scale-95"
         aria-label="Abrir ARIA Voice AI"
       >
         {/* Pulsing ring */}
@@ -568,17 +575,17 @@ export default function VoiceAIPanel({ currentUser }) {
       </button>
 
       {/* Panel overlay */}
-      {open && (
+      {isOpen && (
         <div className="fixed inset-0 z-50 flex justify-end">
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => setOpen(false)}
+            onClick={handleClose}
           />
 
-          {/* Panel */}
+          {/* Panel — full screen on mobile, 420px panel on desktop */}
           <div
-            className="relative z-10 flex flex-col w-full max-w-[420px] h-full bg-slate-950/95 backdrop-blur-xl border-l border-slate-700/50 shadow-2xl shadow-brand-500/20"
+            className="relative z-10 flex flex-col w-full sm:max-w-[420px] h-full bg-slate-950/95 backdrop-blur-xl border-l border-slate-700/50 shadow-2xl shadow-brand-500/20"
             style={{ animation: 'slideInRight 300ms ease-out' }}
           >
             {/* Header */}
@@ -608,7 +615,7 @@ export default function VoiceAIPanel({ currentUser }) {
                 </button>
               </div>
               <button
-                onClick={() => setOpen(false)}
+                onClick={handleClose}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors"
               >
                 <X size={18} />

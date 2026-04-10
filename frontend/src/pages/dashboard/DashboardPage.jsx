@@ -14,14 +14,14 @@ import clsx from 'clsx'
 
 function StatCard({ icon: Icon, label, value, color, sub }) {
   return (
-    <div className="card flex items-center gap-4">
-      <div className={clsx('w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0', color)}>
-        <Icon size={22} />
+    <div className="card flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+      <div className={clsx('w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0', color)}>
+        <Icon size={20} />
       </div>
       <div>
-        <p className="text-2xl font-bold text-white">{value ?? '—'}</p>
+        <p className="text-xl sm:text-2xl font-bold text-white">{value ?? '—'}</p>
         <p className="text-xs text-slate-400">{label}</p>
-        {sub && <p className="text-xs text-slate-500 mt-0.5">{sub}</p>}
+        {sub && <p className="text-xs text-slate-500 mt-0.5 hidden sm:block">{sub}</p>}
       </div>
     </div>
   )
@@ -89,7 +89,7 @@ export default function DashboardPage() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-white">
+        <h1 className="text-xl sm:text-2xl font-bold text-white">
           Hola, {user?.full_name?.split(' ')[0]} 👋
         </h1>
         <p className="text-slate-400 text-sm mt-0.5">

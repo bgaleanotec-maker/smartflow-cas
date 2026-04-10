@@ -1080,15 +1080,15 @@ export default function BPDetailPage() {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs — horizontal scroll on mobile */}
       <div className="border-b border-slate-700/50">
-        <div className="flex gap-1 overflow-x-auto">
+        <div className="flex gap-1 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 pb-px scrollbar-none" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           {TABS.map(({ id, label, icon: Icon, special }) => (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
               className={clsx(
-                'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
+                'flex items-center gap-1.5 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0',
                 special
                   ? activeTab === id
                     ? 'border-amber-500 text-amber-400'
@@ -1098,7 +1098,7 @@ export default function BPDetailPage() {
                     : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-600',
               )}
             >
-              <Icon size={14} />
+              <Icon size={13} />
               {label}
             </button>
           ))}

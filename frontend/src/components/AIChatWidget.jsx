@@ -89,7 +89,7 @@ export default function AIChatWidget() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-gradient-to-br from-brand-500 to-purple-600 rounded-full shadow-lg shadow-brand-500/30 flex items-center justify-center text-white hover:scale-110 transition-transform"
+          className="fixed bottom-[88px] left-4 lg:bottom-6 lg:left-6 z-50 w-14 h-14 bg-gradient-to-br from-brand-500 to-purple-600 rounded-full shadow-lg shadow-brand-500/30 flex items-center justify-center text-white hover:scale-110 transition-transform"
           aria-label="Abrir asistente IA"
         >
           <Sparkles size={24} />
@@ -98,7 +98,7 @@ export default function AIChatWidget() {
 
       {/* Chat window */}
       {isOpen && (
-        <div className="fixed bottom-6 right-6 z-50 w-[380px] max-w-[calc(100vw-2rem)] h-[520px] max-h-[calc(100vh-3rem)] bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl shadow-black/50 flex flex-col overflow-hidden animate-fade-in">
+        <div className="fixed bottom-[88px] left-4 right-4 lg:bottom-6 lg:left-auto lg:right-6 z-50 w-auto lg:w-[380px] max-w-[calc(100vw-2rem)] lg:max-w-[380px] h-[480px] lg:h-[520px] max-h-[calc(100vh-6rem)] bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl shadow-black/50 flex flex-col overflow-hidden animate-fade-in">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-brand-600 to-purple-600 flex-shrink-0">
             <div className="flex items-center gap-2">

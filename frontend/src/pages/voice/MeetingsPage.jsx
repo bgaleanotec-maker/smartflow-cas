@@ -76,7 +76,7 @@ function MeetingDetailDrawer({ meeting, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-2xl h-full bg-slate-900 border-l border-slate-700 flex flex-col overflow-hidden">
+      <div className="relative z-10 w-full sm:max-w-2xl h-full bg-slate-900 sm:border-l border-slate-700 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-start justify-between px-6 py-4 border-b border-slate-800">
           <div className="flex-1 min-w-0 pr-4">
@@ -218,7 +218,7 @@ function MeetingCard({ meeting, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="w-full text-left bg-slate-900/60 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-4 transition-all group"
+      className="w-full text-left bg-slate-900/60 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-4 sm:p-4 transition-all group active:scale-[0.99]"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
@@ -309,12 +309,12 @@ export default function MeetingsPage() {
   }, [filterType, filterStatus])
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-5 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
-            <Mic2 size={24} className="text-brand-400" />
+          <h1 className="page-title flex items-center gap-2">
+            <Mic2 size={22} className="text-brand-400" />
             Reuniones &amp; Transcripciones
           </h1>
           <p className="text-sm text-slate-400 mt-1">
@@ -324,18 +324,18 @@ export default function MeetingsPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 text-center">
-          <p className="text-3xl font-bold text-slate-100">{stats.total}</p>
-          <p className="text-xs text-slate-500 mt-1">Total reuniones</p>
+      <div className="grid grid-cols-3 gap-3 sm:gap-4">
+        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 sm:p-4 text-center">
+          <p className="text-2xl sm:text-3xl font-bold text-slate-100">{stats.total}</p>
+          <p className="text-xs text-slate-500 mt-1">Total</p>
         </div>
-        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 text-center">
-          <p className="text-3xl font-bold text-brand-400">{stats.totalHours}h</p>
-          <p className="text-xs text-slate-500 mt-1">Horas grabadas</p>
+        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 sm:p-4 text-center">
+          <p className="text-2xl sm:text-3xl font-bold text-brand-400">{stats.totalHours}h</p>
+          <p className="text-xs text-slate-500 mt-1">Grabadas</p>
         </div>
-        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 text-center">
-          <p className="text-3xl font-bold text-amber-400">{stats.totalActions}</p>
-          <p className="text-xs text-slate-500 mt-1">Acciones totales</p>
+        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 sm:p-4 text-center">
+          <p className="text-2xl sm:text-3xl font-bold text-amber-400">{stats.totalActions}</p>
+          <p className="text-xs text-slate-500 mt-1">Acciones</p>
         </div>
       </div>
 
