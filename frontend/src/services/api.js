@@ -296,6 +296,7 @@ export const voiceAPI = {
   },
   finalizeMeeting: (meetingId) => api.post(`/voice/meetings/${meetingId}/finalize`),
   tts: (data) => api.post('/voice/tts', data, { responseType: 'arraybuffer' }),
+  ttsStream: (data) => api.post('/voice/tts/stream', data, { responseType: 'blob' }),
   ariaChat: (data) => api.post('/voice/aria-chat', data),
   getVoices: () => api.get('/voice/voices'),
   teamMeetings: (params) => api.get('/voice/team-meetings', { params }),

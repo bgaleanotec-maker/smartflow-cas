@@ -637,6 +637,7 @@ async def aria_speak(
             body: dict = {
                 "text": text,
                 "model_id": model,
+                "language_code": language_code or "es",   # always pass — improves pronunciation
                 "voice_settings": {
                     "stability": ARIA_VOICE_SETTINGS["stability"],
                     "similarity_boost": ARIA_VOICE_SETTINGS["similarity_boost"],
@@ -645,8 +646,6 @@ async def aria_speak(
                     "speed": speed,
                 },
             }
-            if language_code:
-                body["language_code"] = language_code
 
             resp = await client.post(
                 f"{ELEVENLABS_BASE_URL}/v1/text-to-speech/{voice_id}"

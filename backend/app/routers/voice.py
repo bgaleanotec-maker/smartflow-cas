@@ -567,6 +567,45 @@ async def text_to_speech_endpoint(body: TTSBody, db: DB, user: CurrentUser):
     return Response(content=audio_bytes, media_type="audio/mpeg")
 
 
+@router.post("/tts/stream")
+async def tts_stream_endpoint(body: TTSBody, db: DB, user: CurrentUser):
+    """
+    Stream TTS audio as it is generated — browser starts playing immediately.
+    ~75 ms time-to-first-byte with eleven_flash_v2_5.
+    Use X-Accel-Buffering: no header on Nginx to ensure real-time delivery.
+    """
+    from fastapi.responses import StreamingResponse as FastAPIStreamingResponse
+    if not body.text or not body.text.strip():
+        raise HTTPException(status_code=400, detail="El texto no puede estar vacío")
+
+    api_key = await get_service_config_value(db, "elevenlabs", "api_key")
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="ElevenLabs no configurado. Agrega ELEVENLABS_API_KEY en Configuración > Integraciones.",
+        )
+
+    voice_id = body.voice_id or await get_service_config_value(db, "elevenlabs", "voice_id") or "SplyIQAjgy4DKGAnOrHi"
+
+    from app.services.elevenlabs_service import text_to_speech_stream
+    return FastAPIStreamingResponse(
+        text_to_speech_stream(
+            text=body.text[:1000],
+            api_key=api_key,
+            voice_id=voice_id,
+            model_id="eleven_flash_v2_5",
+            output_format="mp3_44100_128",
+            optimize_streaming_latency=3,
+        ),
+        media_type="audio/mpeg",
+        headers={
+            "X-Accel-Buffering": "no",      # disable Nginx buffering
+            "Cache-Control": "no-cache",
+            "Transfer-Encoding": "chunked",
+        },
+    )
+
+
 # ─── ARIA Voice Chat ──────────────────────────────────────────────────────────
 
 
