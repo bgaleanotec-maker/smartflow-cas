@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, status, Request
 from sqlalchemy import select, update
+from sqlalchemy.orm import selectinload
 from app.core.deps import DB, CurrentUser
 from app.core.security import (
     verify_password, create_access_token, create_refresh_token, decode_token
@@ -71,8 +72,16 @@ async def refresh_token(payload: TokenRefresh, db: DB):
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(current_user: CurrentUser):
-    return current_user
+async def get_me(current_user: CurrentUser, db: DB):
+    result = await db.execute(
+        select(User)
+        .options(
+            selectinload(User.main_business),
+            selectinload(User.secondary_business),
+        )
+        .where(User.id == current_user.id)
+    )
+    return result.scalar_one()
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)

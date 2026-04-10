@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from app.core.deps import DB, AdminUser, LeaderOrAdmin, CurrentUser
 from app.core.security import get_password_hash, generate_temp_password
 from app.models.user import User, UserRole
-from app.schemas.user import UserCreate, UserUpdate, UserResponse, UserListResponse
+from app.schemas.user import UserCreate, UserUpdate, UserResponse, UserListResponse, UserCreateResponse
 
 router = APIRouter(prefix="/users", tags=["Usuarios"])
 
@@ -42,7 +42,7 @@ async def list_users(
     return result.scalars().all()
 
 
-@router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=UserCreateResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(payload: UserCreate, db: DB, admin: LeaderOrAdmin):
     # Check email unique
     existing = await db.execute(select(User).where(User.email == payload.email.lower()))
@@ -82,10 +82,31 @@ async def create_user(payload: UserCreate, db: DB, admin: LeaderOrAdmin):
     )
     new_user = result.scalar_one()
 
-    # TODO: Send welcome email with temp_password
-    # await send_welcome_email(new_user.email, new_user.full_name, temp_password)
+    # Send welcome email (non-blocking — fails silently if not configured)
+    from app.core.config import settings as app_settings
+    from app.services.email import send_welcome_email
+    import asyncio
+    asyncio.create_task(send_welcome_email(
+        new_user.email, new_user.full_name, temp_password, app_settings.FRONTEND_URL
+    ))
 
-    return new_user
+    # Always return temp_password so admin can share it manually if email isn't configured
+    # Build dict from ORM object + inject temp_password, then validate
+    user_dict = {
+        "id": new_user.id,
+        "full_name": new_user.full_name,
+        "email": new_user.email,
+        "phone": new_user.phone,
+        "role": new_user.role,
+        "team": new_user.team,
+        "main_business": new_user.main_business,
+        "secondary_business": new_user.secondary_business,
+        "contract_type": new_user.contract_type,
+        "is_active": new_user.is_active,
+        "must_change_password": new_user.must_change_password,
+        "temp_password": temp_password,
+    }
+    return UserCreateResponse.model_validate(user_dict)
 
 
 @router.get("/{user_id}", response_model=UserResponse)
@@ -141,7 +162,14 @@ async def reset_user_password(user_id: int, db: DB, admin: LeaderOrAdmin):
     user.must_change_password = True
     await db.flush()
 
-    # TODO: Send reset email
+    # Send reset email (non-blocking)
+    from app.core.config import settings as app_settings
+    from app.services.email import send_password_reset_email
+    import asyncio
+    asyncio.create_task(send_password_reset_email(
+        user.email, user.full_name, temp_password, app_settings.FRONTEND_URL
+    ))
+
     return {"message": "Contraseña reseteada", "temp_password": temp_password}
 
 

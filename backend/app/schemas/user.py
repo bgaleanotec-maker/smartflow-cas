@@ -51,6 +51,24 @@ class BusinessInfo(BaseModel):
         from_attributes = True
 
 
+class UserCreateResponse(BaseModel):
+    """Response for POST /users — includes temp_password so admin can share it."""
+    id: int
+    full_name: str
+    email: str
+    phone: Optional[str] = None
+    role: UserRole
+    team: Optional[TeamType] = None
+    main_business: Optional[BusinessInfo] = None
+    secondary_business: Optional[BusinessInfo] = None
+    contract_type: Optional[ContractType] = None
+    is_active: bool
+    must_change_password: bool
+    temp_password: str = ""
+
+    model_config = {"from_attributes": True}
+
+
 class UserResponse(BaseModel):
     id: int
     full_name: str

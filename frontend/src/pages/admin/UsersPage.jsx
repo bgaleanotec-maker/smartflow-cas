@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, UserCheck, UserX, KeyRound, Edit2 } from 'lucide-react'
+import { Plus, Search, UserCheck, UserX, KeyRound, Edit2, Copy, CheckCircle } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import { usersAPI, adminAPI } from '../../services/api'
@@ -19,7 +19,45 @@ const TEAM_BADGES = {
   CAS: 'bg-green-900/50 text-green-400',
 }
 
-function CreateUserModal({ onClose }) {
+function TempPasswordModal({ name, email, password, onClose }) {
+  const [copied, setCopied] = useState(false)
+  const copy = () => {
+    navigator.clipboard.writeText(password)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-green-600/20 rounded-full flex items-center justify-center">
+            <CheckCircle size={20} className="text-green-400" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-white">Usuario creado</h2>
+            <p className="text-xs text-slate-400">{name} · {email}</p>
+          </div>
+        </div>
+        <p className="text-sm text-slate-300">
+          Guarda o comparte esta contraseña temporal con el usuario.
+          {' '}<span className="text-amber-400 font-medium">No volverá a mostrarse.</span>
+        </p>
+        <div className="bg-slate-800 rounded-xl p-4 flex items-center justify-between gap-3">
+          <code className="text-lg font-mono text-white tracking-widest">{password}</code>
+          <button onClick={copy} className="btn-ghost p-2 text-slate-400 hover:text-white flex-shrink-0" title="Copiar">
+            {copied ? <CheckCircle size={16} className="text-green-400" /> : <Copy size={16} />}
+          </button>
+        </div>
+        <p className="text-xs text-slate-500">
+          Si configuraste Resend, el email ya fue enviado a {email}.
+        </p>
+        <button onClick={onClose} className="btn-primary w-full">Entendido</button>
+      </div>
+    </div>
+  )
+}
+
+function CreateUserModal({ onClose, onCreated }) {
   const qc = useQueryClient()
   const { data: businesses } = useQuery({
     queryKey: ['businesses'],
@@ -34,9 +72,9 @@ function CreateUserModal({ onClose }) {
 
   const mutation = useMutation({
     mutationFn: (data) => usersAPI.create(data),
-    onSuccess: () => {
+    onSuccess: (res) => {
       qc.invalidateQueries(['users'])
-      toast.success('Usuario creado. Se enviará email con credenciales.')
+      onCreated(res.data)
       onClose()
     },
     onError: (err) => toast.error(err.response?.data?.detail || 'Error al crear usuario'),
@@ -144,6 +182,7 @@ export default function UsersPage() {
   const [roleFilter, setRoleFilter] = useState('')
   const [teamFilter, setTeamFilter] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [createdUser, setCreatedUser] = useState(null)
   const qc = useQueryClient()
 
   const { data: users, isLoading } = useQuery({
@@ -285,7 +324,20 @@ export default function UsersPage() {
         </div>
       </div>
 
-      {showCreate && <CreateUserModal onClose={() => setShowCreate(false)} />}
+      {showCreate && (
+        <CreateUserModal
+          onClose={() => setShowCreate(false)}
+          onCreated={(user) => setCreatedUser(user)}
+        />
+      )}
+      {createdUser && (
+        <TempPasswordModal
+          name={createdUser.full_name}
+          email={createdUser.email}
+          password={createdUser.temp_password}
+          onClose={() => setCreatedUser(null)}
+        />
+      )}
     </div>
   )
 }
