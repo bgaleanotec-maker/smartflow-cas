@@ -361,6 +361,28 @@ async def test_integration(service_name: str, db: DB, admin: AdminUser):
             elif service_name == "lite":
                 return {"success": True, "message": "API key guardada (sin endpoint de prueba disponible)"}
 
+            elif service_name == "elevenlabs":
+                resp = await client.get(
+                    "https://api.elevenlabs.io/v1/user",
+                    headers={"xi-api-key": api_key},
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    tier = data.get("subscription", {}).get("tier", "unknown")
+                    chars_used = data.get("subscription", {}).get("character_count", 0)
+                    chars_limit = data.get("subscription", {}).get("character_limit", 0)
+                    return {
+                        "success": True,
+                        "message": f"ElevenLabs conectado · Plan: {tier} · Caracteres: {chars_used:,}/{chars_limit:,}"
+                    }
+                return {"success": False, "message": f"Error ElevenLabs: {resp.status_code} — verifica la API key"}
+
+            elif service_name == "whisper":
+                # Whisper runs locally, just confirm the model setting was saved
+                from app.core.config import get_service_config_value
+                model = await get_service_config_value(db, "whisper", "model") or "base"
+                return {"success": True, "message": f"Modelo Whisper configurado: {model} (se cargará en el próximo uso)"}
+
             return {"success": False, "message": "Test no implementado para este servicio"}
 
     except httpx.TimeoutException:

@@ -110,4 +110,52 @@ SERVICE_REGISTRY = {
             },
         ],
     },
+    "elevenlabs": {
+        "display_name": "ElevenLabs (Voz IA)",
+        "description": "Síntesis de voz ultra-realista para ARIA. Cambia la API key o la voz en cualquier momento.",
+        "icon": "Volume2",
+        "fields": [
+            {
+                "key_name": "api_key",
+                "label": "API Key",
+                "field_type": "password",
+                "required": True,
+                "placeholder": "sk_xxxxxxxxxxxxxxxxxxxxxxxx",
+            },
+            {
+                "key_name": "voice_id",
+                "label": "Voice ID",
+                "field_type": "text",
+                "required": False,
+                "placeholder": "EXAVITQu4vr4xnSDxMaL",
+                "default": "EXAVITQu4vr4xnSDxMaL",
+                "help": "ID de voz ElevenLabs. Puedes obtener IDs en elevenlabs.io/voice-lab",
+            },
+            {
+                "key_name": "model",
+                "label": "Modelo TTS",
+                "field_type": "text",
+                "required": False,
+                "placeholder": "eleven_multilingual_v2",
+                "default": "eleven_multilingual_v2",
+                "help": "eleven_multilingual_v2 = mejor para español. eleven_turbo_v2 = más rápido.",
+            },
+        ],
+    },
+    "whisper": {
+        "display_name": "Whisper (Transcripción)",
+        "description": "Modelo de transcripción de voz. base=rápido/liviano, medium=mejor precisión, large-v3=máxima calidad.",
+        "icon": "Mic",
+        "fields": [
+            {
+                "key_name": "model",
+                "label": "Tamaño de modelo",
+                "field_type": "text",
+                "required": False,
+                "placeholder": "base",
+                "default": "base",
+                "help": "Opciones: tiny, base, medium, large-v3. Más grande = más preciso pero más RAM.",
+            },
+        ],
+    },
 }

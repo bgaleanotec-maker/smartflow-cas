@@ -481,9 +481,10 @@ async def text_to_speech_endpoint(body: TTSBody, db: DB, user: CurrentUser):
         )
 
     voice_id = body.voice_id or await get_service_config_value(db, "elevenlabs", "voice_id") or "EXAVITQu4vr4xnSDxMaL"
+    tts_model = await get_service_config_value(db, "elevenlabs", "model") or "eleven_multilingual_v2"
 
     from app.services.elevenlabs_service import text_to_speech
-    audio_bytes = await text_to_speech(text=text, api_key=api_key, voice_id=voice_id)
+    audio_bytes = await text_to_speech(text=text, api_key=api_key, voice_id=voice_id, model_id=tts_model)
 
     if audio_bytes is None:
         raise HTTPException(status_code=502, detail="Error al generar audio con ElevenLabs")
@@ -585,16 +586,18 @@ async def aria_voice_chat(body: AriaChatBody, db: DB, user: CurrentUser):
             await db.flush()
             await db.commit()
 
-    # TTS with ElevenLabs
+    # TTS with ElevenLabs — key and model fully configurable from admin panel
     audio_b64 = None
     elevenlabs_key = await get_service_config_value(db, "elevenlabs", "api_key")
     if elevenlabs_key:
         voice_id = await get_service_config_value(db, "elevenlabs", "voice_id") or "9BWtsMINqrJLrRacOk9x"
+        tts_model = await get_service_config_value(db, "elevenlabs", "model") or "eleven_multilingual_v2"
         from app.services.elevenlabs_service import text_to_speech
         audio_bytes = await text_to_speech(
             text=response_text[:500],
             api_key=elevenlabs_key,
             voice_id=voice_id,
+            model_id=tts_model,
         )
         if audio_bytes:
             audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")

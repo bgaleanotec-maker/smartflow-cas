@@ -1,11 +1,62 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   Mic, MicOff, X, Users, Radio, Square, Copy, Check,
-  Play, Loader2, ChevronDown, Volume2, VolumeX,
+  Play, Loader2, ChevronDown, Volume2, VolumeX, Monitor, Headphones,
 } from 'lucide-react'
 import { voiceAPI } from '../../services/api'
 import SoundVisualizer from './SoundVisualizer'
 import clsx from 'clsx'
+
+// ─── Audio source options ─────────────────────────────────────────────────────
+// SYSTEM AUDIO CAPTURE: Works when user shares screen/tab with audio enabled.
+// This captures Teams calls, meetings, etc. even with earphones connected.
+// getUserMedia alone cannot capture what's playing through earphones.
+// getDisplayMedia with audio:true can capture system audio (Chrome/Edge only).
+async function getAudioStream(source) {
+  if (source === 'system') {
+    // Capture system audio (e.g., Teams call playing through earphones)
+    // User will see a screen-share prompt — they should select the Teams window or "Entire screen"
+    // and ENABLE the "Share audio" checkbox
+    try {
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { width: 1, height: 1, frameRate: 1 }, // minimal video — we just want audio
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          sampleRate: 44100,
+        },
+      })
+      // Also get mic so we capture the user's own voice
+      let micStream = null
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      } catch { /* mic optional for system capture */ }
+
+      if (micStream) {
+        // Mix display audio + microphone together
+        const ctx = new AudioContext()
+        const dest = ctx.createMediaStreamDestination()
+        const displaySource = ctx.createMediaStreamSource(displayStream)
+        const micSource = ctx.createMediaStreamSource(micStream)
+        displaySource.connect(dest)
+        micSource.connect(dest)
+        // Stop original tracks when combined stream ends
+        dest.stream._originalStreams = [displayStream, micStream]
+        dest.stream._audioContext = ctx
+        return { stream: dest.stream, audioContext: ctx }
+      }
+      return { stream: displayStream, audioContext: null }
+    } catch (err) {
+      if (err.name === 'NotAllowedError') {
+        throw new Error('Permiso denegado. Debes compartir la pantalla y activar "Compartir audio".')
+      }
+      throw err
+    }
+  }
+  // Default: microphone only
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+  return { stream, audioContext: null }
+}
 
 // ─── Status labels ────────────────────────────────────────────────────────────
 const STATUS = {
@@ -186,6 +237,8 @@ export default function VoiceAIPanel({ currentUser }) {
   const [analyserNode, setAnalyserNode] = useState(null)
   const [isARIASpeaking, setIsARIASpeaking] = useState(false)
   const [hasNotif] = useState(false)
+  // Audio source: 'mic' = solo micrófono | 'system' = sistema + mic (para Teams/auriculares)
+  const [audioSource, setAudioSource] = useState('mic')
 
   const mediaRecorderRef = useRef(null)
   const streamRef = useRef(null)
@@ -390,10 +443,10 @@ export default function VoiceAIPanel({ currentUser }) {
 
   const startMeetingRecording = async (meetingId) => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const { stream, audioContext: mixedCtx } = await getAudioStream(audioSource)
       streamRef.current = stream
 
-      const ctx = new AudioContext()
+      const ctx = mixedCtx || new AudioContext()
       audioContextRef.current = ctx
       const source = ctx.createMediaStreamSource(stream)
       const analyser = ctx.createAnalyser()
@@ -402,7 +455,9 @@ export default function VoiceAIPanel({ currentUser }) {
       analyserRef.current = analyser
       setAnalyserNode(analyser)
 
-      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+      // Prefer webm, fallback to mp4 (Safari)
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
+      const mr = new MediaRecorder(stream, { mimeType })
       mediaRecorderRef.current = mr
       chunksRef.current = []
 
@@ -438,8 +493,8 @@ export default function VoiceAIPanel({ currentUser }) {
           mr.requestData()
         }
       }, 8000)
-    } catch {
-      alert('No se pudo acceder al micrófono.')
+    } catch (err) {
+      alert(err.message || 'No se pudo acceder al audio. Verifica los permisos del navegador.')
     }
   }
 
@@ -453,6 +508,10 @@ export default function VoiceAIPanel({ currentUser }) {
       mediaRecorderRef.current.stop()
     }
     if (streamRef.current) {
+      // Stop any mixed original streams too
+      if (streamRef.current._originalStreams) {
+        streamRef.current._originalStreams.forEach(s => s.getTracks().forEach(t => t.stop()))
+      }
       streamRef.current.getTracks().forEach((t) => t.stop())
       streamRef.current = null
     }
@@ -623,6 +682,47 @@ export default function VoiceAIPanel({ currentUser }) {
                       className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500"
                       onKeyDown={(e) => e.key === 'Enter' && startMeeting()}
                     />
+
+                    {/* Audio source selector */}
+                    <div className="w-full space-y-2">
+                      <p className="text-xs text-slate-500 font-medium">Fuente de audio</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setAudioSource('mic')}
+                          className={clsx(
+                            'flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-all',
+                            audioSource === 'mic'
+                              ? 'bg-brand-900/50 border-brand-500 text-brand-300'
+                              : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600',
+                          )}
+                        >
+                          <Mic size={20} />
+                          <span>Solo micrófono</span>
+                          <span className="text-[10px] font-normal opacity-70">Voz del usuario</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAudioSource('system')}
+                          className={clsx(
+                            'flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-all',
+                            audioSource === 'system'
+                              ? 'bg-purple-900/50 border-purple-500 text-purple-300'
+                              : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600',
+                          )}
+                        >
+                          <Headphones size={20} />
+                          <span>Sistema + Mic</span>
+                          <span className="text-[10px] font-normal opacity-70">Teams/Meet + voz</span>
+                        </button>
+                      </div>
+                      {audioSource === 'system' && (
+                        <p className="text-[11px] text-purple-400/80 bg-purple-900/20 border border-purple-800/30 rounded-lg px-3 py-2 leading-relaxed">
+                          💡 Se abrirá una ventana para compartir pantalla. Selecciona la ventana de Teams/Meet y <strong>activa "Compartir audio"</strong>. Esto captura todo el audio incluso con auriculares.
+                        </p>
+                      )}
+                    </div>
+
                     <button
                       onClick={startMeeting}
                       disabled={!meetingTitle.trim()}
@@ -705,7 +805,17 @@ export default function VoiceAIPanel({ currentUser }) {
                     {/* Session code */}
                     <div className="mx-4 mt-3 bg-slate-900/80 border border-slate-700/50 rounded-xl p-3 flex items-center justify-between">
                       <div>
-                        <p className="text-[10px] text-slate-500 uppercase tracking-wider">Código de sesión</p>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Código de sesión</p>
+                          <span className={clsx(
+                            'flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium',
+                            audioSource === 'system'
+                              ? 'bg-purple-900/40 text-purple-400'
+                              : 'bg-slate-800 text-slate-500'
+                          )}>
+                            {audioSource === 'system' ? <><Headphones size={9} /> Sistema+Mic</> : <><Mic size={9} /> Micrófono</>}
+                          </span>
+                        </div>
                         <p className="text-xl font-black tracking-[0.2em] text-brand-400 font-mono">
                           {meeting.session_code}
                         </p>

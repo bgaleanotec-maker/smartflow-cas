@@ -5,7 +5,7 @@ from typing import Optional
 class Settings(BaseSettings):
     # App
     APP_NAME: str = "SmartFlow"
-    VERSION: str = "1.1.0"  # BP module + temp password + email service 2026-04-09
+    VERSION: str = "1.3.0"  # Voice AI + Executive Dashboard + ARIA 2026-04-09
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
     FRONTEND_URL: str = "http://localhost:5173"
@@ -68,6 +68,7 @@ _ENV_FALLBACK_MAP = {
     ("ultra", "instance_id"): "ULTRA_INSTANCE_ID",
     ("elevenlabs", "api_key"): "ELEVENLABS_API_KEY",
     ("elevenlabs", "voice_id"): "ELEVENLABS_VOICE_ID",
+    ("elevenlabs", "model"): None,  # defaults to eleven_multilingual_v2 in service
     ("whisper", "model"): "WHISPER_MODEL",
 }
 
