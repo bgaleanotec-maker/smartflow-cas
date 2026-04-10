@@ -285,6 +285,7 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   const analyserRef = useRef(null)
   const chunksRef = useRef([])
   const chunkIntervalRef = useRef(null)
+  const autoStopTimerRef = useRef(null)   // auto-stop recording in conversation mode
   const transcriptEndRef = useRef(null)
   const chatEndRef = useRef(null)
   // Keep a ref to startAriaRecording so playAudio / sendAriaMessage can call it
@@ -346,6 +347,7 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   }, [isOpen])
 
   const cleanupAudio = useCallback(() => {
+    if (autoStopTimerRef.current) { clearTimeout(autoStopTimerRef.current); autoStopTimerRef.current = null }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop()
     }
@@ -446,50 +448,57 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   }
 
   // Browser TTS fallback — free, no ElevenLabs key needed
+  // Uses sentence-chunking to avoid Chrome's known onend bug with long strings
   const speakWithBrowser = useCallback((text) => {
-    if (!window.speechSynthesis) {
-      // No TTS at all — just auto-continue conversation
+    const done = () => {
       setAriaStatus('idle')
       setIsARIASpeaking(false)
       if (conversationActiveRef.current) {
         setTimeout(() => { if (conversationActiveRef.current) startAriaRecordingRef.current?.() }, 500)
       }
-      return
     }
+
+    if (!window.speechSynthesis) { done(); return }
+
     window.speechSynthesis.cancel()
-    const utt = new SpeechSynthesisUtterance(text)
-    utt.lang = 'es-CO'
-    utt.rate = 1.05
-    utt.pitch = 1.05
-    // Pick best Spanish voice available
-    const loadVoices = () => {
+
+    // Split into sentences so Chrome's onend fires reliably
+    const sentences = text.match(/[^.!?¡¿]+[.!?]*/g)?.map(s => s.trim()).filter(Boolean) || [text]
+    let idx = 0
+
+    const pickVoice = () => {
       const voices = window.speechSynthesis.getVoices()
-      const preferred = voices.find(v => v.lang === 'es-CO')
+      return voices.find(v => v.lang === 'es-CO')
         || voices.find(v => v.lang === 'es-US')
         || voices.find(v => v.lang.startsWith('es'))
-      if (preferred) utt.voice = preferred
+        || null
     }
-    loadVoices()
-    if (window.speechSynthesis.onvoiceschanged !== undefined) {
-      window.speechSynthesis.onvoiceschanged = loadVoices
+
+    const speakNext = () => {
+      if (idx >= sentences.length) { done(); return }
+      const utt = new SpeechSynthesisUtterance(sentences[idx])
+      utt.lang = 'es-CO'
+      utt.rate = 1.0
+      utt.pitch = 1.05
+      const voice = pickVoice()
+      if (voice) utt.voice = voice
+      utt.onend = () => { idx++; speakNext() }
+      utt.onerror = () => { idx++; speakNext() }  // skip bad chunk, keep going
+      window.speechSynthesis.speak(utt)
     }
+
+    // Trigger voice list load (async in Chrome) then start
+    if (window.speechSynthesis.getVoices().length === 0) {
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.onvoiceschanged = null
+        speakNext()
+      }
+    } else {
+      speakNext()
+    }
+
     setAriaStatus('speaking')
     setIsARIASpeaking(true)
-    utt.onend = () => {
-      setAriaStatus('idle')
-      setIsARIASpeaking(false)
-      if (conversationActiveRef.current) {
-        setTimeout(() => { if (conversationActiveRef.current) startAriaRecordingRef.current?.() }, 450)
-      }
-    }
-    utt.onerror = () => {
-      setAriaStatus('idle')
-      setIsARIASpeaking(false)
-      if (conversationActiveRef.current) {
-        setTimeout(() => { if (conversationActiveRef.current) startAriaRecordingRef.current?.() }, 450)
-      }
-    }
-    window.speechSynthesis.speak(utt)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Start ARIA mic recording → transcribe → send to ARIA
@@ -518,35 +527,39 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       }
 
       mr.onstop = async () => {
+        // Clear any pending auto-stop timer
+        if (autoStopTimerRef.current) { clearTimeout(autoStopTimerRef.current); autoStopTimerRef.current = null }
         cleanupAudio()
+
+        // Helper: restart conversation after failed/empty transcription
+        const restartIfConversation = (delay = 600) => {
+          if (conversationActiveRef.current) {
+            setTimeout(() => { if (conversationActiveRef.current) startAriaRecordingRef.current?.() }, delay)
+          }
+        }
+
         if (chunksRef.current.length === 0) {
           setAriaStatus('idle')
+          restartIfConversation()
           return
         }
         setAriaStatus('processing')
 
-        // Transcribe locally (via chunk endpoint — we use a temp meeting or direct transcribe)
-        // For ARIA chat we transcribe inline then send text to aria-chat
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
         chunksRef.current = []
 
         try {
-          // Use a temporary meeting or just send audio to transcribe-chunk with a dummy approach
-          // Instead, we create a temporary aria_chat meeting, transcribe, then delete
           let tempMeetingId = null
           try {
             const mRes = await voiceAPI.createMeeting({ title: 'ARIA Chat', meeting_type: 'aria_chat' })
             tempMeetingId = mRes.data.id
-          } catch {
-            // If meeting creation fails, just use empty text
-          }
+          } catch { /* meeting creation failed — transcribe without saving */ }
 
           let userText = ''
           if (tempMeetingId) {
             try {
               const tRes = await voiceAPI.transcribeChunk(tempMeetingId, blob)
               userText = tRes.data.text || ''
-              // Clean up temp meeting silently
               voiceAPI.deleteMeeting(tempMeetingId).catch(() => {})
             } catch {
               voiceAPI.deleteMeeting(tempMeetingId).catch(() => {})
@@ -560,7 +573,7 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
             || (userText.startsWith('[') && userText.endsWith(']'))
           if (isWhisperError) {
             setAriaStatus('idle')
-            if (userText.trim()) toast.error('No se pudo entender el audio. Intenta de nuevo.')
+            restartIfConversation()   // keep conversation going even if no speech detected
             return
           }
 
@@ -568,11 +581,22 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
         } catch {
           setAriaStatus('error')
           setTimeout(() => setAriaStatus('idle'), 2000)
+          restartIfConversation(2500)
         }
       }
 
       mr.start()
       setAriaStatus('listening')
+
+      // In conversation mode: auto-stop after 6s so user doesn't have to tap
+      if (conversationActiveRef.current) {
+        autoStopTimerRef.current = setTimeout(() => {
+          autoStopTimerRef.current = null
+          if (mediaRecorderRef.current?.state === 'recording') {
+            mediaRecorderRef.current.stop()
+          }
+        }, 6000)
+      }
     } catch {
       setAriaStatus('error')
       setTimeout(() => setAriaStatus('idle'), 2000)
@@ -580,6 +604,7 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   }
 
   const stopAriaRecording = () => {
+    if (autoStopTimerRef.current) { clearTimeout(autoStopTimerRef.current); autoStopTimerRef.current = null }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop()
     }
@@ -592,9 +617,12 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   const endConversation = () => {
     conversationActiveRef.current = false
     setIsConversationActive(false)
+    if (autoStopTimerRef.current) { clearTimeout(autoStopTimerRef.current); autoStopTimerRef.current = null }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop()
     }
+    // Stop browser TTS if speaking
+    if (window.speechSynthesis) window.speechSynthesis.cancel()
     cleanupAudio()
     setAriaStatus('idle')
     setIsARIASpeaking(false)
@@ -857,9 +885,11 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
                   {isConversationActive && ariaStatus === 'idle'
                     ? 'Iniciando escucha...'
                     : isConversationActive && ariaStatus === 'listening'
-                    ? 'Te escucho — toca para enviar'
+                    ? '🎙️ Te escucho — habla ahora (o toca para enviar)'
                     : isConversationActive && ariaStatus === 'speaking'
-                    ? 'ARIA está hablando...'
+                    ? '🔊 ARIA está hablando...'
+                    : isConversationActive && ariaStatus === 'processing'
+                    ? '⏳ Procesando...'
                     : STATUS[ariaStatus] || STATUS.idle}
                 </p>
 
