@@ -272,6 +272,14 @@ export const bpAPI = {
   deleteMilestone: (bpId, msId) => api.delete(`/bp/${bpId}/milestones/${msId}`),
 }
 
+// ─── Executive Dashboard ──────────────────────────────────────────────────────
+export const executiveAPI = {
+  summary: () => api.get('/executive/summary'),
+  aria: (data) => api.post('/executive/aria', data),
+  alerts: () => api.get('/executive/alerts'),
+  businesses: () => api.get('/executive/businesses'),
+}
+
 // ─── ARIA Financial Intelligence ─────────────────────────────────────────────
 export const ariaAPI = {
   getAssumptions: (businessId, year) => api.get('/bp-ai/assumptions', { params: { business_id: businessId, year } }),

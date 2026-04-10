@@ -66,8 +66,20 @@ async def get_herramientas_or_above(
     return current_user
 
 
+async def get_directivo_or_admin(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    if current_user.role not in (UserRole.ADMIN, UserRole.DIRECTIVO):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acceso restringido a directivos y administradores",
+        )
+    return current_user
+
+
 CurrentUser = Annotated[User, Depends(get_current_user)]
 AdminUser = Annotated[User, Depends(get_admin_user)]
 LeaderOrAdmin = Annotated[User, Depends(get_leader_or_admin)]
 HerramientasOrAbove = Annotated[User, Depends(get_herramientas_or_above)]
+DirectivoOrAdmin = Annotated[User, Depends(get_directivo_or_admin)]
 DB = Annotated[AsyncSession, Depends(get_db)]

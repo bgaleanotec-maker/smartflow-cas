@@ -22,14 +22,17 @@ import CentroInfoPage from './pages/centro-info/CentroInfoPage'
 import LeanProPage from './pages/lean-pro/LeanProPage'
 import BPPage from './pages/bp/BPPage'
 import BPDetailPage from './pages/bp/BPDetailPage'
+import ExecutiveDashboard from './pages/executive/ExecutiveDashboard'
 
-function ProtectedRoute({ children, requireAdmin = false, requireLeader = false }) {
+function ProtectedRoute({ children, requireAdmin = false, requireLeader = false, requireDirectivo = false }) {
   const { isAuthenticated, user } = useAuthStore()
 
   if (!isAuthenticated) return <Navigate to="/login" replace />
   if (user?.must_change_password) return <Navigate to="/change-password" replace />
   if (requireAdmin && user?.role !== 'admin') return <Navigate to="/dashboard" replace />
   if (requireLeader && !['admin', 'leader', 'herramientas'].includes(user?.role))
+    return <Navigate to="/dashboard" replace />
+  if (requireDirectivo && !['admin', 'directivo'].includes(user?.role))
     return <Navigate to="/dashboard" replace />
 
   return children
@@ -79,6 +82,14 @@ export default function App() {
           <Route path="lean-pro" element={<LeanProPage />} />
           <Route path="bp" element={<BPPage />} />
           <Route path="bp/:bpId" element={<BPDetailPage />} />
+          <Route
+            path="executive"
+            element={
+              <ProtectedRoute requireDirectivo>
+                <ExecutiveDashboard />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="admin"
             element={

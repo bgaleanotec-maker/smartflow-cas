@@ -14,6 +14,7 @@ class UserRole(str, enum.Enum):
     MEMBER = "member"
     NEGOCIO = "negocio"
     HERRAMIENTAS = "herramientas"
+    DIRECTIVO = "directivo"
 
 
 class TeamType(str, enum.Enum):

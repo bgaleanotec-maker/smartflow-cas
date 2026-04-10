@@ -12,6 +12,7 @@ const ROLE_BADGES = {
   member: 'bg-slate-800 text-slate-400',
   negocio: 'bg-emerald-900/50 text-emerald-400 border border-emerald-800',
   herramientas: 'bg-amber-900/50 text-amber-400 border border-amber-800',
+  directivo: 'bg-yellow-900/50 text-yellow-300 border border-yellow-700',
 }
 
 const TEAM_BADGES = {
@@ -122,6 +123,7 @@ function CreateUserModal({ onClose, onCreated }) {
                 <option value="admin">Admin</option>
                 <option value="negocio">Negocio</option>
                 <option value="herramientas">Herramientas</option>
+                <option value="directivo">Directivo</option>
               </select>
             </div>
             <div>

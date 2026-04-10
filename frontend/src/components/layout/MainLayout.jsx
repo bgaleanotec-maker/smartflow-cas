@@ -4,7 +4,7 @@ import {
   LayoutDashboard, FolderKanban, AlertTriangle, Timer,
   Users, Settings, LogOut, ChevronLeft, ChevronRight,
   Bell, Search, Menu, X, FileText, BarChart3, Newspaper, Landmark,
-  Plane, LayoutGrid, Zap, TrendingUp,
+  Plane, LayoutGrid, Zap, TrendingUp, Crown,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { usePomodoroStore } from '../../stores/pomodoroStore'
@@ -13,6 +13,7 @@ import AIChatWidget from '../AIChatWidget'
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/executive', icon: Crown, label: 'Vista Directiva', badge: 'VP', roles: ['admin', 'directivo'] },
   { to: '/torre-control', icon: Plane, label: 'Torre de Control' },
   { to: '/lean-pro', icon: Zap, label: 'Lean Pro' },
   { to: '/centro-info', icon: LayoutGrid, label: 'Centro Info' },
@@ -68,7 +69,7 @@ export default function MainLayout() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1">
-        {navItems.filter(item => !item.roles || item.roles.includes(user?.role)).map(({ to, icon: Icon, label, cas }) => (
+        {navItems.filter(item => !item.roles || item.roles.includes(user?.role)).map(({ to, icon: Icon, label, cas, badge }) => (
           <NavLink
             key={to}
             to={to}
@@ -77,8 +78,8 @@ export default function MainLayout() {
               clsx(
                 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
                 isActive
-                  ? 'bg-brand-600 text-white'
-                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800'
+                  ? badge ? 'bg-amber-700/30 text-amber-200 border border-amber-700/40' : 'bg-brand-600 text-white'
+                  : badge ? 'text-amber-400/80 hover:text-amber-200 hover:bg-amber-900/20' : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800'
               )
             }
           >
@@ -89,6 +90,11 @@ export default function MainLayout() {
                 {cas && (
                   <span className="text-[9px] font-bold px-1 py-0 rounded bg-brand-500/20 text-brand-400 border border-brand-500/30 flex-shrink-0">
                     CAS
+                  </span>
+                )}
+                {badge && (
+                  <span className="text-[9px] font-bold px-1 py-0 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 flex-shrink-0">
+                    {badge}
                   </span>
                 )}
               </span>
