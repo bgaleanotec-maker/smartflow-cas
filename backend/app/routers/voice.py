@@ -35,19 +35,24 @@ logger = logging.getLogger(__name__)
 
 # ─── ARIA system prompt ───────────────────────────────────────────────────────
 
-ARIA_VOICE_PROMPT = """Eres ARIA — asistente de voz inteligente de SmartFlow, la plataforma de gestión del equipo CAS de Vanti.
+ARIA_VOICE_PROMPT = """Eres ARIA — asistente de voz inteligente de SmartFlow para el equipo CAS de Vanti.
 
-REGLAS CRÍTICAS:
-1. Siempre usa el contexto de SmartFlow que recibes para responder preguntas sobre negocios, tareas, reuniones, BPs.
-2. Si el usuario pregunta por actividades pendientes, proyectos, negocios → RESPONDE con los datos del contexto.
-3. Sé concisa: máximo 3-4 oraciones en voz, menciona máximo 3 items de una lista.
-4. Habla siempre en español colombiano natural, cálido, directo.
-5. Llama al usuario por su nombre.
-6. Si no tienes datos suficientes, dilo y sugiere qué puede hacer en SmartFlow.
-7. Para reuniones: dile que las puede ver en el módulo "Reuniones" de SmartFlow.
-8. Saluda con entusiasmo solo la primera vez. Después ve directo al grano.
-9. Usa "Claro", "Con gusto", "Perfecto" cuando sea natural.
-10. NUNCA inventes datos — usa solo el contexto provisto."""
+PERSONALIDAD: cálida, directa, profesional. Habla como colega colombiana de confianza. Nunca robótica.
+
+REGLAS DE RESPUESTA:
+1. USA SIEMPRE el bloque "=== SmartFlow ===" del contexto para responder. Esos son datos reales del sistema.
+2. Responde máximo en 3-4 oraciones cortas pensando en que la respuesta se va a escuchar, no a leer.
+3. Menciona máximo 3 ítems de cualquier lista. Si hay más, di "entre otras".
+4. Llama al usuario por su primer nombre.
+5. NUNCA digas "Soy ARIA" ni te presentes de nuevo después del saludo inicial.
+6. Si no encuentras datos en el contexto, dilo honestamente: "No tengo esa información en este momento."
+7. Para reuniones diles que las vean en el módulo Reuniones. Para tareas, en BP o Actividades.
+
+COMPORTAMIENTO POR ROL (el rol está en el contexto):
+- admin / leader / directivo: responde con visión de equipo completo. Menciona nombres, equipos, métricas globales.
+- member / negocio / herramientas: responde solo sobre lo del usuario. No menciones datos de otros miembros.
+
+NUNCA inventes datos. NUNCA repitas la introducción. NUNCA uses listas con viñetas en respuestas de voz."""
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -858,114 +863,95 @@ async def tts_stream_endpoint(body: TTSBody, db: DB, user: CurrentUser):
 @router.post("/aria-chat")
 async def aria_voice_chat(body: AriaChatBody, db: DB, user: CurrentUser):
     """
-    Complete voice interaction cycle:
-    1. Send user text to Gemini with ARIA prompt
-    2. Optionally save to meeting transcript
-    3. Convert ARIA response to speech via ElevenLabs
-    4. Return {response_text, audio_base64, meeting_id}
+    ARIA voice chat cycle:
+    1. Load SmartFlow context snapshot (cached 3 min per role)
+    2. Build Gemini prompt: system rules + role + context + history + user message
+    3. Get Gemini response
+    4. Convert to ElevenLabs speech (fallback: browser TTS on client)
+    5. Return {response_text, audio_base64}
     """
-    # Check for initial greeting
     is_greeting = body.text.strip() == "saludo_inicial"
+    first_name = body.user_name.split()[0] if body.user_name else "equipo"
+    role_value = user.role.value if hasattr(user.role, "value") else str(user.role)
+    is_leader = user.role in (UserRole.ADMIN, UserRole.LEADER, UserRole.DIRECTIVO)
 
-    # Always load context — even for greetings so ARIA can mention real data
+    # Context snapshot (served from cache after first load — no DB hit every message)
     smartflow_ctx = await _get_smartflow_context(db, user)
 
-    # Build conversation history string from passed history
-    history_str = ""
-    if body.history:
-        hist_lines = []
-        for h in body.history[-6:]:  # max 6 turns for cost efficiency
-            role_label = "ARIA" if h.get("role") == "assistant" else body.user_name
-            content = str(h.get("content", ""))[:200]  # cap each message
-            hist_lines.append(f"{role_label}: {content}")
-        if hist_lines:
-            history_str = "\n\nHistorial reciente de la conversación:\n" + "\n".join(hist_lines)
+    # Conversation history (last 6 turns, capped per message to control token cost)
+    history_lines = []
+    for h in (body.history or [])[-6:]:
+        role_label = "ARIA" if h.get("role") == "assistant" else first_name
+        history_lines.append(f"{role_label}: {str(h.get('content', ''))[:250]}")
+    history_block = ("\n\nHISTORIAL:\n" + "\n".join(history_lines)) if history_lines else ""
 
+    # Instruction to Gemini per turn type
     if is_greeting:
-        user_message = (
-            f"Saluda a {body.user_name} de forma cálida y natural. "
-            f"Revisa el contexto del sistema y menciona brevemente 1-2 cosas relevantes que tiene pendientes hoy "
-            f"(actividades vencidas, incidentes abiertos, etc.). Si no hay pendientes urgentes, dilo. "
-            f"Máximo 2-3 oraciones. No repitas el saludo si ya lo dijiste antes."
+        instruction = (
+            f"Saluda a {first_name} de forma breve y cálida (1 oración). "
+            f"Luego menciona 1-2 datos urgentes o relevantes del contexto: "
+            f"actividades vencidas, incidentes abiertos, demandas en evaluación, proyectos por vencer. "
+            f"Si todo está al día, dilo con entusiasmo. Máximo 3 oraciones totales."
         )
     else:
-        user_message = body.text
+        instruction = body.text
 
+    # ── Gemini call ───────────────────────────────────────────────────────────
     gemini_api_key = await get_service_config_value(db, "gemini", "api_key")
-
     response_text = ""
+
     if gemini_api_key:
-        # Prefer flash models for speed/cost efficiency
         model = await get_service_config_value(db, "gemini", "model") or "gemini-1.5-flash"
-        # If model is the old default gemini-pro, upgrade to flash
         if model in ("gemini-pro", "gemini-1.0-pro"):
             model = "gemini-1.5-flash"
 
-        ctx_block = f"\n\n{smartflow_ctx}" if smartflow_ctx else ""
         full_prompt = (
             f"{ARIA_VOICE_PROMPT}\n\n"
-            f"Usuario actual: {body.user_name}\n"
-            f"Rol en sistema: {user.role.value if hasattr(user.role, 'value') else user.role}"
-            f"{ctx_block}"
-            f"{history_str}\n\n"
-            f"Mensaje actual del usuario: {user_message}"
+            f"USUARIO: {body.user_name} · ROL: {role_value} · "
+            f"VISIBILIDAD: {'equipo completo' if is_leader else 'solo sus datos'}\n\n"
+            f"{smartflow_ctx}"
+            f"{history_block}\n\n"
+            f"TURNO ACTUAL — {first_name} dice: {instruction}"
         )
-        response_text = await _call_gemini(gemini_api_key, model, full_prompt, temperature=0.75) or ""
+        response_text = await _call_gemini(gemini_api_key, model, full_prompt, temperature=0.7) or ""
 
     if not response_text:
-        # Generic fallback — never the intro phrase to avoid looping
-        response_text = f"Perdona {body.user_name}, hubo un problema al procesar tu consulta. ¿Puedes repetirlo?"
+        # Fallback: never repeat the intro, never say "Soy ARIA"
+        response_text = f"Perdona {first_name}, tuve un problema al conectarme. ¿Puedes repetirlo?"
 
-    # Save to meeting if provided
+    # ── Persist to meeting transcript (optional) ──────────────────────────────
     if body.meeting_id and not is_greeting:
-        meeting = (
-            await db.execute(
-                select(VoiceMeeting).where(
-                    VoiceMeeting.id == body.meeting_id,
-                    VoiceMeeting.is_deleted == False,
-                )
+        meeting = (await db.execute(
+            select(VoiceMeeting).where(
+                VoiceMeeting.id == body.meeting_id,
+                VoiceMeeting.is_deleted == False,
             )
-        ).scalar_one_or_none()
+        )).scalar_one_or_none()
 
         if meeting:
-            # Save user chunk
-            count_result = await db.execute(
+            seq_result = await db.execute(
                 select(func.count(TranscriptChunk.id)).where(TranscriptChunk.meeting_id == body.meeting_id)
             )
-            seq_num = (count_result.scalar() or 0) + 1
-
-            user_chunk = TranscriptChunk(
-                meeting_id=body.meeting_id,
-                sequence_num=seq_num,
-                speaker_id=user.id,
-                speaker_name=body.user_name,
-                text=body.text,
-                confidence=0.9,
-                language="es",
-            )
-            db.add(user_chunk)
-            await db.flush()
-
-            # Save ARIA response chunk
-            aria_chunk = TranscriptChunk(
-                meeting_id=body.meeting_id,
-                sequence_num=seq_num + 1,
-                speaker_id=None,
-                speaker_name="ARIA",
-                text=response_text,
-                confidence=1.0,
-                language="es",
-            )
-            db.add(aria_chunk)
+            seq_num = (seq_result.scalar() or 0) + 1
+            db.add(TranscriptChunk(
+                meeting_id=body.meeting_id, sequence_num=seq_num,
+                speaker_id=user.id, speaker_name=body.user_name,
+                text=body.text, confidence=0.9, language="es",
+            ))
+            db.add(TranscriptChunk(
+                meeting_id=body.meeting_id, sequence_num=seq_num + 1,
+                speaker_id=None, speaker_name="ARIA",
+                text=response_text, confidence=1.0, language="es",
+            ))
             await db.flush()
             await db.commit()
 
-    # TTS with ElevenLabs — uses aria_speak (auto best-model selection: flash for short, multilingual for long)
-    # Voice configurable from admin panel; default Clau (Bogotá professional Colombian female)
+    # ── ElevenLabs TTS ────────────────────────────────────────────────────────
+    # Falls back to browser TTS on the client when no key is configured.
     audio_b64 = None
     elevenlabs_key = await get_service_config_value(db, "elevenlabs", "api_key")
     if elevenlabs_key:
-        voice_id = await get_service_config_value(db, "elevenlabs", "voice_id") or "SplyIQAjgy4DKGAnOrHi"
+        voice_id = await get_service_config_value(db, "elevenlabs", "voice_id") or "UgBBYS2sOqTuMpoF3BR0"
         from app.services.elevenlabs_service import aria_speak
         audio_bytes = await aria_speak(
             text=response_text[:600],

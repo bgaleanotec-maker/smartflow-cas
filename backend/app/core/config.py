@@ -35,7 +35,7 @@ class Settings(BaseSettings):
 
     # ElevenLabs (TTS)
     ELEVENLABS_API_KEY: Optional[str] = None
-    ELEVENLABS_VOICE_ID: str = "EXAVITQu4vr4xnSDxMaL"  # Default: Sarah (clear, professional)
+    ELEVENLABS_VOICE_ID: str = "UgBBYS2sOqTuMpoF3BR0"  # Voz configurada equipo CAS
 
     # Whisper transcription
     WHISPER_MODEL: str = "base"  # base / medium / large-v3 (depends on server RAM)
