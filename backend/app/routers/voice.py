@@ -16,6 +16,7 @@ import logging
 import random
 import re
 import string
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -100,33 +101,78 @@ def _meeting_to_dict(m: VoiceMeeting) -> dict:
     }
 
 
+# ─── Context cache ────────────────────────────────────────────────────────────
+# Leaders/admins share a single full-data snapshot (updated every 3 min).
+# Regular members get a user-specific snapshot.
+# This means at most one DB query set per 3 minutes per cache key — cheap and fast.
+_context_cache: dict = {}
+_CONTEXT_CACHE_TTL = 180  # seconds
+
+
+def _context_cache_key(user) -> str:
+    is_leader = user.role in (UserRole.ADMIN, UserRole.LEADER, UserRole.DIRECTIVO)
+    return "leaders" if is_leader else f"user_{user.id}"
+
+
 async def _get_smartflow_context(db, user) -> str:
+    key = _context_cache_key(user)
+    now = time.time()
+    if key in _context_cache:
+        ctx, ts = _context_cache[key]
+        if now - ts < _CONTEXT_CACHE_TTL:
+            return ctx
+    ctx = await _build_smartflow_context(db, user)
+    _context_cache[key] = (ctx, now)
+    return ctx
+
+
+async def _build_smartflow_context(db, user) -> str:
     """
-    Build a rich SmartFlow context for ARIA: businesses, BPs, activities, recent meetings.
-    ARIA uses this to answer any question about the state of the business.
+    Full system snapshot for ARIA: businesses, BPs, BP activities, projects,
+    incidents, demands, recurring activity instances, team members, recent meetings.
+    Respects role permissions: leaders see everything, members see their own data.
     """
     try:
-        from app.models.business_plan import BPActivity, BPActivityStatus, BusinessPlan, BPStatus
+        from app.models.business_plan import BPActivity, BPActivityStatus, BusinessPlan
         from app.models.business import Business
+        from app.models.project import Project, ProjectStatus
+        from app.models.incident import Incident, IncidentStatus
+        from app.models.demand import DemandRequest, DemandStatus
+        from app.models.activities import ActivityInstance, ActivityStatus, RecurringActivity
+        from app.models.user import User
         from datetime import date as date_type
 
+        today = date_type.today()
         sections = []
         is_leader = user.role in (UserRole.ADMIN, UserRole.LEADER, UserRole.DIRECTIVO)
 
-        # ── 1. Negocios activos ───────────────────────────────────────────────
+        # ── 1. Equipo (líderes ven todos los miembros) ────────────────────────
+        if is_leader:
+            users_rows = (await db.execute(
+                select(User.full_name, User.role, User.team)
+                .where(User.is_active == True)
+                .order_by(User.full_name)
+                .limit(30)
+            )).all()
+            if users_rows:
+                team_str = ", ".join(f"{u.full_name} ({u.role.value})" for u in users_rows)
+                sections.append(f"EQUIPO ({len(users_rows)} miembros activos): {team_str}")
+
+        # ── 2. Negocios activos ───────────────────────────────────────────────
         bizs = (await db.execute(
             select(Business).where(Business.is_active == True).order_by(Business.name)
         )).scalars().all()
         if bizs:
-            sections.append(f"NEGOCIOS ACTIVOS ({len(bizs)}): {', '.join(b.name for b in bizs)}")
+            biz_names = ", ".join(b.name for b in bizs)
+            sections.append(f"NEGOCIOS ACTIVOS ({len(bizs)}): {biz_names}")
 
-        # ── 2. Planes de negocio ──────────────────────────────────────────────
+        # ── 3. Planes de negocio ──────────────────────────────────────────────
         bp_q = (
             select(BusinessPlan, Business.name.label("biz_name"))
             .join(Business, BusinessPlan.business_id == Business.id)
             .where(BusinessPlan.is_deleted == False)
             .order_by(BusinessPlan.year.desc(), Business.name)
-            .limit(15)
+            .limit(20)
         )
         bp_rows = (await db.execute(bp_q)).all()
         if bp_rows:
@@ -135,7 +181,7 @@ async def _get_smartflow_context(db, user) -> str:
                 bp_lines.append(f"  • [{biz_name}] {bp.name or f'BP {bp.year}'} — {bp.status.value} ({bp.year})")
             sections.append("\n".join(bp_lines))
 
-        # ── 3. Actividades pendientes / en progreso ───────────────────────────
+        # ── 4. Actividades BP pendientes / en progreso ────────────────────────
         acts_q = (
             select(BPActivity, BusinessPlan.name.label("bp_name"), Business.name.label("biz_name"))
             .join(BusinessPlan, BPActivity.bp_id == BusinessPlan.id)
@@ -147,34 +193,105 @@ async def _get_smartflow_context(db, user) -> str:
         )
         if not is_leader:
             acts_q = acts_q.where(BPActivity.owner_id == user.id)
-        acts_q = acts_q.order_by(BPActivity.due_date.asc().nullslast()).limit(12)
+        acts_q = acts_q.order_by(BPActivity.due_date.asc().nullslast()).limit(20)
         act_rows = (await db.execute(acts_q)).all()
 
         if act_rows:
-            today = date_type.today()
-            act_lines = [f"ACTIVIDADES PENDIENTES/EN PROGRESO ({len(act_rows)}):"]
+            act_lines = [f"ACTIVIDADES BP PENDIENTES/EN PROGRESO ({len(act_rows)}):"]
             for act, bp_name, biz_name in act_rows:
                 due_str = ""
                 if act.due_date:
                     days = (act.due_date - today).days
                     due_str = f" · vence {act.due_date}"
                     if days < 0:
-                        due_str += f" (VENCIDA hace {abs(days)}d)"
+                        due_str += f" (VENCIDA hace {abs(days)}d ⚠️)"
                     elif days == 0:
-                        due_str += " (HOY)"
-                    elif days <= 3:
-                        due_str += f" (en {days}d ⚠️)"
-                grupo = f" [{act.grupo}]" if act.grupo else ""
-                pct = f" {act.progress}%" if act.progress else ""
+                        due_str += " (HOY ⚠️)"
+                    elif days <= 5:
+                        due_str += f" (en {days}d)"
+                grupo = f" [{act.grupo}]" if getattr(act, "grupo", None) else ""
+                pct = f" {act.progress}%" if getattr(act, "progress", None) else ""
+                owner = f" · dueño: {act.owner.full_name}" if getattr(act, "owner", None) else ""
                 act_lines.append(
-                    f"  • {act.title} — {act.status.value}{grupo} · {act.priority.value} prioridad"
-                    f" · {biz_name}{pct}{due_str}"
+                    f"  • {act.title}{grupo} — {act.status.value} · {act.priority.value} · {biz_name}{pct}{due_str}{owner}"
                 )
             sections.append("\n".join(act_lines))
         else:
-            sections.append("ACTIVIDADES: No hay actividades pendientes asignadas.")
+            sections.append("ACTIVIDADES BP: Sin actividades pendientes.")
 
-        # ── 4. Reuniones recientes ────────────────────────────────────────────
+        # ── 5. Proyectos activos / planificación ──────────────────────────────
+        proj_q = (
+            select(Project)
+            .where(Project.status.in_([ProjectStatus.ACTIVE, ProjectStatus.PLANNING]))
+            .order_by(Project.due_date.asc().nullslast())
+            .limit(15)
+        )
+        if not is_leader:
+            proj_q = proj_q.where(Project.is_private == False)
+        proj_rows = (await db.execute(proj_q)).scalars().all()
+        if proj_rows:
+            proj_lines = [f"PROYECTOS ({len(proj_rows)}):"]
+            for p in proj_rows:
+                due = f" · vence {p.due_date}" if p.due_date else ""
+                prog = f" {p.progress}%" if p.progress else ""
+                proj_lines.append(f"  • {p.name} — {p.status.value}{prog}{due}")
+            sections.append("\n".join(proj_lines))
+
+        # ── 6. Incidentes abiertos ────────────────────────────────────────────
+        inc_q = (
+            select(Incident)
+            .where(Incident.status.in_([IncidentStatus.OPEN, IncidentStatus.INVESTIGATING]))
+            .order_by(Incident.created_at.desc())
+            .limit(10)
+        )
+        inc_rows = (await db.execute(inc_q)).scalars().all()
+        if inc_rows:
+            inc_lines = [f"INCIDENTES ABIERTOS ({len(inc_rows)}):"]
+            for inc in inc_rows:
+                inc_lines.append(f"  • [{inc.incident_number}] {inc.title} — {inc.status.value} ({inc.severity.value})")
+            sections.append("\n".join(inc_lines))
+
+        # ── 7. Demandas activas ───────────────────────────────────────────────
+        dem_q = (
+            select(DemandRequest)
+            .where(DemandRequest.status.in_([
+                DemandStatus.ENVIADA, DemandStatus.EN_EVALUACION,
+                DemandStatus.APROBADA, DemandStatus.EN_EJECUCION,
+            ]))
+            .order_by(DemandRequest.created_at.desc())
+            .limit(10)
+        )
+        if not is_leader:
+            dem_q = dem_q.where(DemandRequest.requested_by_id == user.id)
+        dem_rows = (await db.execute(dem_q)).scalars().all()
+        if dem_rows:
+            dem_lines = [f"DEMANDAS ACTIVAS ({len(dem_rows)}):"]
+            for d in dem_rows:
+                dem_lines.append(f"  • [{d.demand_number}] {d.title} — {d.status.value}")
+            sections.append("\n".join(dem_lines))
+
+        # ── 8. Instancias de actividades recurrentes (pendientes / vencidas) ──
+        ai_q = (
+            select(ActivityInstance, RecurringActivity.title.label("act_title"))
+            .join(RecurringActivity, ActivityInstance.activity_id == RecurringActivity.id)
+            .where(
+                ActivityInstance.status.in_([ActivityStatus.SIN_INICIAR, ActivityStatus.EN_PROCESO, ActivityStatus.VENCIDA]),
+                ActivityInstance.due_date <= date_type.fromordinal(today.toordinal() + 7),  # próximos 7 días + vencidas
+            )
+        )
+        if not is_leader:
+            ai_q = ai_q.where(ActivityInstance.assigned_to_id == user.id)
+        ai_q = ai_q.order_by(ActivityInstance.due_date.asc()).limit(15)
+        ai_rows = (await db.execute(ai_q)).all()
+        if ai_rows:
+            ai_lines = [f"ACTIVIDADES RECURRENTES PRÓXIMAS/VENCIDAS ({len(ai_rows)}):"]
+            for inst, act_title in ai_rows:
+                days = (inst.due_date - today).days
+                urgency = " (VENCIDA ⚠️)" if days < 0 else " (HOY)" if days == 0 else f" (en {days}d)"
+                ai_lines.append(f"  • {inst.title or act_title} — {inst.status.value} · vence {inst.due_date}{urgency}")
+            sections.append("\n".join(ai_lines))
+
+        # ── 9. Reuniones recientes ────────────────────────────────────────────
         mtg_q = (
             select(VoiceMeeting)
             .where(
@@ -188,25 +305,27 @@ async def _get_smartflow_context(db, user) -> str:
         if not is_leader:
             mtg_q = mtg_q.where(VoiceMeeting.created_by_id == user.id)
         recent_meetings = (await db.execute(mtg_q)).scalars().all()
-
         if recent_meetings:
             mtg_lines = ["REUNIONES RECIENTES:"]
             for m in recent_meetings:
                 date_str = m.started_at.strftime("%Y-%m-%d") if m.started_at else "N/A"
                 dur = f" {m.duration_seconds // 60}min" if m.duration_seconds else ""
-                summary = f"\n    Resumen: {m.ai_summary[:120]}..." if m.ai_summary else ""
-                actions = f" | {len(m.ai_action_items)} acciones" if m.ai_action_items else ""
-                mtg_lines.append(f"  • {m.title} ({date_str}{dur}){actions}{summary}")
+                summary = f"\n    Resumen: {m.ai_summary[:150]}..." if m.ai_summary else ""
+                n_actions = f" | {len(m.ai_action_items)} acciones" if m.ai_action_items else ""
+                mtg_lines.append(f"  • {m.title} ({date_str}{dur}){n_actions}{summary}")
             sections.append("\n".join(mtg_lines))
 
         if not sections:
             return ""
 
-        header = f"=== SmartFlow — datos en tiempo real para {user.full_name} ({user.role.value}) ==="
+        header = (
+            f"=== SmartFlow — contexto completo del sistema para {user.full_name} "
+            f"(rol: {user.role.value}) · {today} ==="
+        )
         return header + "\n\n" + "\n\n".join(sections)
 
     except Exception as exc:
-        logger.warning(f"_get_smartflow_context error: {exc}")
+        logger.warning(f"_build_smartflow_context error: {exc}", exc_info=True)
         return ""
 
 
@@ -748,10 +867,8 @@ async def aria_voice_chat(body: AriaChatBody, db: DB, user: CurrentUser):
     # Check for initial greeting
     is_greeting = body.text.strip() == "saludo_inicial"
 
-    # Get SmartFlow context (pending activities, etc.) — only for real messages
-    smartflow_ctx = ""
-    if not is_greeting:
-        smartflow_ctx = await _get_smartflow_context(db, user)
+    # Always load context — even for greetings so ARIA can mention real data
+    smartflow_ctx = await _get_smartflow_context(db, user)
 
     # Build conversation history string from passed history
     history_str = ""
@@ -765,7 +882,12 @@ async def aria_voice_chat(body: AriaChatBody, db: DB, user: CurrentUser):
             history_str = "\n\nHistorial reciente de la conversación:\n" + "\n".join(hist_lines)
 
     if is_greeting:
-        user_message = f"Saluda a {body.user_name} de forma cálida y entusiasta. Menciona brevemente que estás aquí para ayudar con SmartFlow. Máximo 2 oraciones."
+        user_message = (
+            f"Saluda a {body.user_name} de forma cálida y natural. "
+            f"Revisa el contexto del sistema y menciona brevemente 1-2 cosas relevantes que tiene pendientes hoy "
+            f"(actividades vencidas, incidentes abiertos, etc.). Si no hay pendientes urgentes, dilo. "
+            f"Máximo 2-3 oraciones. No repitas el saludo si ya lo dijiste antes."
+        )
     else:
         user_message = body.text
 
@@ -791,7 +913,8 @@ async def aria_voice_chat(body: AriaChatBody, db: DB, user: CurrentUser):
         response_text = await _call_gemini(gemini_api_key, model, full_prompt, temperature=0.75) or ""
 
     if not response_text:
-        response_text = f"¡Hola {body.user_name}! Soy ARIA, tu asistente de SmartFlow. ¿En qué puedo ayudarte hoy?"
+        # Generic fallback — never the intro phrase to avoid looping
+        response_text = f"Perdona {body.user_name}, hubo un problema al procesar tu consulta. ¿Puedes repetirlo?"
 
     # Save to meeting if provided
     if body.meeting_id and not is_greeting:
@@ -858,6 +981,23 @@ async def aria_voice_chat(body: AriaChatBody, db: DB, user: CurrentUser):
         "audio_base64": audio_b64,
         "meeting_id": body.meeting_id,
     }
+
+
+# ─── ARIA context cache invalidation ─────────────────────────────────────────
+
+
+@router.post("/aria-context/refresh")
+async def refresh_aria_context(db: DB, user: CurrentUser):
+    """
+    Force a fresh SmartFlow context snapshot for ARIA.
+    Call this after bulk data changes (e.g., after a sprint planning session).
+    """
+    key = _context_cache_key(user)
+    if key in _context_cache:
+        del _context_cache[key]
+    # Pre-warm the new context so next ARIA message is instant
+    await _get_smartflow_context(db, user)
+    return {"ok": True, "cache_key": key}
 
 
 # ─── Voices list ─────────────────────────────────────────────────────────────

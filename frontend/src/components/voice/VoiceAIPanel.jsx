@@ -539,11 +539,17 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
 
   const resumeWebSpeech = useCallback(() => {
     if (!webSpeechActiveRef.current || !conversationActiveRef.current) return
+    // Double-check status before resuming — called after ARIA finishes speaking
     setTimeout(() => {
-      if (srRef.current && conversationActiveRef.current && ariaStatusRef.current === 'idle') {
+      if (
+        srRef.current &&
+        conversationActiveRef.current &&
+        ariaStatusRef.current === 'idle' &&
+        !isARIASpeakingRef.current
+      ) {
         try { srRef.current.start() } catch {}
       }
-    }, 350)
+    }, 400)
   }, []) // eslint-disable-line
 
   const startWebSpeech = useCallback(() => {
@@ -565,13 +571,13 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       if (results.some(r => !r.isFinal) && ariaStatusRef.current === 'idle') {
         setStatus('listening')
       }
-      // Send final transcripts to ARIA
+      // Send final transcripts to ARIA — only when idle (not processing or speaking)
       const finalText = results
         .filter(r => r.isFinal)
         .map(r => r[0].transcript.trim())
         .filter(Boolean)
         .join(' ')
-      if (finalText && conversationActiveRef.current && ariaStatusRef.current !== 'processing') {
+      if (finalText && conversationActiveRef.current && ariaStatusRef.current === 'idle') {
         sendAriaMessage(finalText)
       }
     }
@@ -581,11 +587,14 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
     }
 
     sr.onend = () => {
-      // Auto-restart while conversation is active and ARIA isn't busy
+      // Only auto-restart when truly idle — never during processing or speaking
+      // (pauseWebSpeech calls sr.stop() which also fires onend — guard against that)
       if (conversationActiveRef.current && ariaStatusRef.current === 'idle') {
         setTimeout(() => {
-          if (conversationActiveRef.current) { try { sr.start() } catch {} }
-        }, 200)
+          if (conversationActiveRef.current && ariaStatusRef.current === 'idle') {
+            try { sr.start() } catch {}
+          }
+        }, 300)
       }
     }
 
@@ -594,10 +603,13 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
         webSpeechActiveRef.current = false
         return  // will fall through to Whisper path
       }
+      // 'no-speech' is normal — just restart quietly
       if (ariaStatusRef.current === 'listening') setStatus('idle')
-      if (conversationActiveRef.current) {
+      if (conversationActiveRef.current && ariaStatusRef.current === 'idle') {
         setTimeout(() => {
-          if (conversationActiveRef.current) { try { sr.start() } catch {} }
+          if (conversationActiveRef.current && ariaStatusRef.current === 'idle') {
+            try { sr.start() } catch {}
+          }
         }, 600)
       }
     }
