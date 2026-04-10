@@ -23,6 +23,7 @@ import LeanProPage from './pages/lean-pro/LeanProPage'
 import BPPage from './pages/bp/BPPage'
 import BPDetailPage from './pages/bp/BPDetailPage'
 import ExecutiveDashboard from './pages/executive/ExecutiveDashboard'
+import MeetingsPage from './pages/voice/MeetingsPage'
 
 function ProtectedRoute({ children, requireAdmin = false, requireLeader = false, requireDirectivo = false }) {
   const { isAuthenticated, user } = useAuthStore()
@@ -82,6 +83,7 @@ export default function App() {
           <Route path="lean-pro" element={<LeanProPage />} />
           <Route path="bp" element={<BPPage />} />
           <Route path="bp/:bpId" element={<BPDetailPage />} />
+          <Route path="meetings" element={<MeetingsPage />} />
           <Route
             path="executive"
             element={

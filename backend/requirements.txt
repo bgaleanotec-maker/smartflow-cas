@@ -19,3 +19,4 @@ pillow==11.0.0
 psycopg2-binary==2.9.10
 greenlet==3.1.1
 openpyxl==3.1.5
+faster-whisper==1.1.0

@@ -33,6 +33,13 @@ class Settings(BaseSettings):
     ULTRA_API_KEY: Optional[str] = None
     ULTRA_INSTANCE_ID: Optional[str] = None
 
+    # ElevenLabs (TTS)
+    ELEVENLABS_API_KEY: Optional[str] = None
+    ELEVENLABS_VOICE_ID: str = "EXAVITQu4vr4xnSDxMaL"  # Default: Sarah (clear, professional)
+
+    # Whisper transcription
+    WHISPER_MODEL: str = "base"  # base / medium / large-v3 (depends on server RAM)
+
     # CORS — all known frontend origins
     ALLOWED_ORIGINS: list[str] = [
         "http://localhost:5173",
@@ -59,6 +66,9 @@ _ENV_FALLBACK_MAP = {
     ("resend", "from_name"): "FROM_NAME",
     ("ultra", "api_key"): "ULTRA_API_KEY",
     ("ultra", "instance_id"): "ULTRA_INSTANCE_ID",
+    ("elevenlabs", "api_key"): "ELEVENLABS_API_KEY",
+    ("elevenlabs", "voice_id"): "ELEVENLABS_VOICE_ID",
+    ("whisper", "model"): "WHISPER_MODEL",
 }
 
 

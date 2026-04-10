@@ -4,12 +4,13 @@ import {
   LayoutDashboard, FolderKanban, AlertTriangle, Timer,
   Users, Settings, LogOut, ChevronLeft, ChevronRight,
   Bell, Search, Menu, X, FileText, BarChart3, Newspaper, Landmark,
-  Plane, LayoutGrid, Zap, TrendingUp, Crown,
+  Plane, LayoutGrid, Zap, TrendingUp, Crown, Mic2,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { usePomodoroStore } from '../../stores/pomodoroStore'
 import clsx from 'clsx'
 import AIChatWidget from '../AIChatWidget'
+import VoiceAIPanel from '../voice/VoiceAIPanel'
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -25,6 +26,7 @@ const navItems = [
   { to: '/projects', icon: FolderKanban, label: 'Proyectos' },
   { to: '/incidents', icon: AlertTriangle, label: 'Incidentes' },
   { to: '/pomodoro', icon: Timer, label: 'Pomodoro' },
+  { to: '/meetings', icon: Mic2, label: 'Reuniones' },
 ]
 
 const adminItems = [
@@ -227,6 +229,9 @@ export default function MainLayout() {
 
       {/* AI Chat Widget */}
       <AIChatWidget />
+
+      {/* Voice AI Panel — persistent floating button on every page */}
+      <VoiceAIPanel currentUser={user} />
     </div>
   )
 }

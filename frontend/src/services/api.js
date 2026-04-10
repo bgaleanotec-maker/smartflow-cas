@@ -280,6 +280,27 @@ export const executiveAPI = {
   businesses: () => api.get('/executive/businesses'),
 }
 
+// ─── Voice AI ────────────────────────────────────────────────────────────────
+export const voiceAPI = {
+  createMeeting: (data) => api.post('/voice/meetings', data),
+  listMeetings: (params) => api.get('/voice/meetings', { params }),
+  getMeeting: (id) => api.get(`/voice/meetings/${id}`),
+  deleteMeeting: (id) => api.delete(`/voice/meetings/${id}`),
+  joinMeeting: (data) => api.post('/voice/meetings/join', data),
+  transcribeChunk: (meetingId, audioBlob) => {
+    const formData = new FormData()
+    formData.append('file', audioBlob, 'chunk.webm')
+    return api.post(`/voice/meetings/${meetingId}/transcribe-chunk`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  finalizeMeeting: (meetingId) => api.post(`/voice/meetings/${meetingId}/finalize`),
+  tts: (data) => api.post('/voice/tts', data, { responseType: 'arraybuffer' }),
+  ariaChat: (data) => api.post('/voice/aria-chat', data),
+  getVoices: () => api.get('/voice/voices'),
+  teamMeetings: (params) => api.get('/voice/team-meetings', { params }),
+}
+
 // ─── ARIA Financial Intelligence ─────────────────────────────────────────────
 export const ariaAPI = {
   getAssumptions: (businessId, year) => api.get('/bp-ai/assumptions', { params: { business_id: businessId, year } }),

@@ -30,6 +30,7 @@ from app.models.business_plan import (
     BPChecklist, BPComment, BPMilestone,
 )
 from app.models.bp_financial_ai import BPAssumptions, BPScenario, BPAuditLog
+from app.models.voice_meeting import VoiceMeeting, TranscriptChunk, MeetingType, MeetingStatus
 
 __all__ = [
     "User", "UserRole", "TeamType", "ContractType",
@@ -54,4 +55,5 @@ __all__ = [
     "BPStatus", "BPLineCategory", "BPActivityStatus", "BPActivityPriority", "BPActivityCategory",
     "BPChecklist", "BPComment", "BPMilestone",
     "BPAssumptions", "BPScenario", "BPAuditLog",
+    "VoiceMeeting", "TranscriptChunk", "MeetingType", "MeetingStatus",
 ]
