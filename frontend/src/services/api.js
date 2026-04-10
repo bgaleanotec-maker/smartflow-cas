@@ -250,3 +250,18 @@ export const bpAPI = {
   updateRecommendation: (bpId, recId, data) => api.patch(`/bp/${bpId}/recommendations/${recId}`, data),
   deleteRecommendation: (bpId, recId) => api.delete(`/bp/${bpId}/recommendations/${recId}`),
 }
+
+// ─── ARIA Financial Intelligence ─────────────────────────────────────────────
+export const ariaAPI = {
+  getAssumptions: (businessId, year) => api.get('/bp-ai/assumptions', { params: { business_id: businessId, year } }),
+  saveAssumptions: (data) => api.put('/bp-ai/assumptions', data),
+  generateAssumptions: (data) => api.post('/bp-ai/assumptions/generate', data),
+
+  audit: (bpId) => api.post(`/bp/${bpId}/aria/audit`),
+  generateScenarios: (bpId, data) => api.post(`/bp/${bpId}/aria/scenarios`, data),
+  getScenarios: (bpId) => api.get(`/bp/${bpId}/aria/scenarios`),
+  updateScenario: (bpId, scenarioId, data) => api.patch(`/bp/${bpId}/aria/scenarios/${scenarioId}`, data),
+  sensitivity: (bpId, data) => api.post(`/bp/${bpId}/aria/sensitivity`, data),
+  chat: (bpId, data) => api.post(`/bp/${bpId}/aria/chat`, data),
+  history: (bpId) => api.get(`/bp/${bpId}/aria/history`),
+}

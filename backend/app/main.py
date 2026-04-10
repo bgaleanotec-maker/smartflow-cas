@@ -9,7 +9,7 @@ from app.core.database import engine, Base
 # Import all models to ensure they're registered before create_all
 import app.models  # noqa: F401
 
-from app.routers import auth, users, projects, tasks, incidents, admin, pomodoro, demands, demand_admin, hechos, premisas, ai_assistant, activities, dashboard_builder, lean_pro, ai_chat, business_plan
+from app.routers import auth, users, projects, tasks, incidents, admin, pomodoro, demands, demand_admin, hechos, premisas, ai_assistant, activities, dashboard_builder, lean_pro, ai_chat, business_plan, bp_financial_ai
 
 
 @asynccontextmanager
@@ -193,9 +193,10 @@ app.include_router(dashboard_builder.router, prefix=API_PREFIX)
 app.include_router(lean_pro.router, prefix=API_PREFIX)
 app.include_router(ai_chat.router, prefix=API_PREFIX)
 app.include_router(business_plan.router, prefix=API_PREFIX)
+app.include_router(bp_financial_ai.router, prefix=API_PREFIX)
 
 
-# force redeploy 2026-04-08
+# force redeploy 2026-04-09
 @app.get("/health")
 async def health():
     return {"status": "ok", "app": settings.APP_NAME, "version": settings.VERSION}

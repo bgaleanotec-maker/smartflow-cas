@@ -79,6 +79,8 @@ class BusinessPlan(Base):
     activities: Mapped[list["BPActivity"]] = relationship("BPActivity", back_populates="bp", cascade="all, delete-orphan", lazy="select")
     excel_analyses: Mapped[list["BPExcelAnalysis"]] = relationship("BPExcelAnalysis", back_populates="bp", cascade="all, delete-orphan", lazy="select")
     recommendations: Mapped[list["BPRecommendation"]] = relationship("BPRecommendation", back_populates="bp", cascade="all, delete-orphan", lazy="select")
+    scenarios: Mapped[list["BPScenario"]] = relationship("BPScenario", back_populates="bp", cascade="all, delete-orphan", lazy="select")
+    audit_logs: Mapped[list["BPAuditLog"]] = relationship("BPAuditLog", back_populates="bp", cascade="all, delete-orphan", lazy="select")
 
 
 class BPLine(Base):

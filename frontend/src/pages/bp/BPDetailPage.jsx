@@ -14,6 +14,7 @@ import { useAuthStore } from '../../stores/authStore'
 import BPActivityCard from './components/BPActivityCard'
 import BPImportWizard from './components/BPImportWizard'
 import BPRecommendationsPanel from './components/BPRecommendationsPanel'
+import ARIAPanel from './components/ARIAPanel'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -993,6 +994,7 @@ export default function BPDetailPage() {
     { id: 'actividades', label: `Actividades (${(bp.activities || []).length})`, icon: Target },
     { id: 'analisis', label: 'Análisis IA', icon: Brain },
     { id: 'recomendaciones', label: `Recomendaciones${recCount > 0 ? ` (${recCount})` : ''}`, icon: Lightbulb },
+    { id: 'aria', label: 'ARIA', icon: Sparkles, special: true },
   ]
 
   return (
@@ -1051,15 +1053,19 @@ export default function BPDetailPage() {
       {/* Tabs */}
       <div className="border-b border-slate-700/50">
         <div className="flex gap-1 overflow-x-auto">
-          {TABS.map(({ id, label, icon: Icon }) => (
+          {TABS.map(({ id, label, icon: Icon, special }) => (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
               className={clsx(
                 'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
-                activeTab === id
-                  ? 'border-brand-500 text-brand-400'
-                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-600',
+                special
+                  ? activeTab === id
+                    ? 'border-amber-500 text-amber-400'
+                    : 'border-transparent text-amber-500/70 hover:text-amber-400 hover:border-amber-600/50'
+                  : activeTab === id
+                    ? 'border-brand-500 text-brand-400'
+                    : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-600',
               )}
             >
               <Icon size={14} />
@@ -1078,6 +1084,7 @@ export default function BPDetailPage() {
         {activeTab === 'recomendaciones' && (
           <BPRecommendationsPanel bpId={bpId} recommendations={bp.recommendations || []} />
         )}
+        {activeTab === 'aria' && <ARIAPanel bpId={bpId} bp={bp} />}
       </div>
 
       {/* Edit BP modal */}

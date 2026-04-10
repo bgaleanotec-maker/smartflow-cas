@@ -28,6 +28,7 @@ from app.models.business_plan import (
     BusinessPlan, BPLine, BPActivity, BPExcelAnalysis, BPRecommendation,
     BPStatus, BPLineCategory, BPActivityStatus, BPActivityPriority, BPActivityCategory,
 )
+from app.models.bp_financial_ai import BPAssumptions, BPScenario, BPAuditLog
 
 __all__ = [
     "User", "UserRole", "TeamType", "ContractType",
@@ -50,4 +51,5 @@ __all__ = [
     "DailyStandup", "Retrospective", "SprintMetrics", "KaizenItem",
     "BusinessPlan", "BPLine", "BPActivity", "BPExcelAnalysis", "BPRecommendation",
     "BPStatus", "BPLineCategory", "BPActivityStatus", "BPActivityPriority", "BPActivityCategory",
+    "BPAssumptions", "BPScenario", "BPAuditLog",
 ]
