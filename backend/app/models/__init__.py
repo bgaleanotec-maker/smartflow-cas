@@ -27,6 +27,7 @@ from app.models.lean_pro import (
 from app.models.business_plan import (
     BusinessPlan, BPLine, BPActivity, BPExcelAnalysis, BPRecommendation,
     BPStatus, BPLineCategory, BPActivityStatus, BPActivityPriority, BPActivityCategory,
+    BPChecklist, BPComment, BPMilestone,
 )
 from app.models.bp_financial_ai import BPAssumptions, BPScenario, BPAuditLog
 
@@ -51,5 +52,6 @@ __all__ = [
     "DailyStandup", "Retrospective", "SprintMetrics", "KaizenItem",
     "BusinessPlan", "BPLine", "BPActivity", "BPExcelAnalysis", "BPRecommendation",
     "BPStatus", "BPLineCategory", "BPActivityStatus", "BPActivityPriority", "BPActivityCategory",
+    "BPChecklist", "BPComment", "BPMilestone",
     "BPAssumptions", "BPScenario", "BPAuditLog",
 ]

@@ -5,7 +5,7 @@ import {
   TrendingUp, ArrowLeft, Loader2, X, Plus, Upload, FileSpreadsheet,
   Brain, ChevronDown, Edit2, Trash2, Check, BarChart3, Target,
   AlertCircle, DollarSign, Activity, CheckCircle2, Clock, Lightbulb,
-  Sparkles, Image,
+  Sparkles, Image, CalendarRange, Bell,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -15,6 +15,8 @@ import BPActivityCard from './components/BPActivityCard'
 import BPImportWizard from './components/BPImportWizard'
 import BPRecommendationsPanel from './components/BPRecommendationsPanel'
 import ARIAPanel from './components/ARIAPanel'
+import BPCronogramaTab from './components/BPCronogramaTab'
+import BPActivityDetailDrawer from './components/BPActivityDetailDrawer'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -600,7 +602,7 @@ function PresupuestoTab({ bp, bpId, canWrite, onRefresh }) {
   )
 }
 
-function ActividadesTab({ bp, bpId, canWrite }) {
+function ActividadesTab({ bp, bpId, canWrite, onOpenDrawer }) {
   const qc = useQueryClient()
   const [actModal, setActModal] = useState(null) // null | 'new' | activity
   const [statusFilter, setStatusFilter] = useState('')
@@ -698,6 +700,7 @@ function ActividadesTab({ bp, bpId, canWrite }) {
               activity={act}
               onStatusChange={handleStatusChange}
               onEdit={(a) => setActModal(a)}
+              onOpenDrawer={onOpenDrawer}
             />
           ))}
         </div>
@@ -950,6 +953,7 @@ export default function BPDetailPage() {
   const [showImportWizard, setShowImportWizard] = useState(false)
 
   const canWrite = ['admin', 'leader'].includes(user?.role)
+  const [drawerActivity, setDrawerActivity] = useState(null)
 
   const { data: bp, isLoading, error } = useQuery({
     queryKey: ['bp', bpId],
@@ -967,6 +971,18 @@ export default function BPDetailPage() {
     mutationFn: () => bpAPI.delete(bpId),
     onSuccess: () => { navigate('/bp'); toast.success('BP eliminado') },
     onError: (err) => toast.error(err.response?.data?.detail || 'Error'),
+  })
+
+  const reminderMutation = useMutation({
+    mutationFn: () => bpAPI.checkReminders(bpId),
+    onSuccess: (res) => {
+      const d = res.data
+      toast.success(
+        `Recordatorios: ${d.reminders_sent} enviados, ${d.overdue_notified} vencimientos notificados`,
+        { duration: 5000 },
+      )
+    },
+    onError: (err) => toast.error(err.response?.data?.detail || 'Error al revisar recordatorios'),
   })
 
   if (isLoading) {
@@ -992,6 +1008,7 @@ export default function BPDetailPage() {
     { id: 'resumen', label: 'Resumen', icon: BarChart3 },
     { id: 'presupuesto', label: 'Presupuesto', icon: DollarSign },
     { id: 'actividades', label: `Actividades (${(bp.activities || []).length})`, icon: Target },
+    { id: 'cronograma', label: 'Cronograma', icon: CalendarRange },
     { id: 'analisis', label: 'Análisis IA', icon: Brain },
     { id: 'recomendaciones', label: `Recomendaciones${recCount > 0 ? ` (${recCount})` : ''}`, icon: Lightbulb },
     { id: 'aria', label: 'ARIA', icon: Sparkles, special: true },
@@ -1019,7 +1036,20 @@ export default function BPDetailPage() {
                 {bp.description && ` · ${bp.description}`}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {canWrite && (
+                <button
+                  className="btn-secondary text-sm flex items-center gap-1.5"
+                  onClick={() => reminderMutation.mutate()}
+                  disabled={reminderMutation.isPending}
+                  title="Revisar y enviar recordatorios de actividades próximas a vencer"
+                >
+                  {reminderMutation.isPending
+                    ? <Loader2 size={14} className="animate-spin" />
+                    : <Bell size={14} />}
+                  Recordatorios
+                </button>
+              )}
               {canWrite && (
                 <button
                   className="btn-secondary text-sm flex items-center gap-1.5 border-brand-500/30 text-brand-400 hover:text-brand-300"
@@ -1079,13 +1109,33 @@ export default function BPDetailPage() {
       <div>
         {activeTab === 'resumen' && <ResumenTab bp={bp} />}
         {activeTab === 'presupuesto' && <PresupuestoTab bp={bp} bpId={bpId} canWrite={canWrite} onRefresh={() => qc.invalidateQueries(['bp', bpId])} />}
-        {activeTab === 'actividades' && <ActividadesTab bp={bp} bpId={bpId} canWrite={canWrite} />}
+        {activeTab === 'actividades' && (
+          <ActividadesTab
+            bp={bp}
+            bpId={bpId}
+            canWrite={canWrite}
+            onOpenDrawer={(act) => setDrawerActivity(act)}
+          />
+        )}
+        {activeTab === 'cronograma' && (
+          <BPCronogramaTab bpId={bpId} canWrite={canWrite} />
+        )}
         {activeTab === 'analisis' && <AnalisisTab bp={bp} bpId={bpId} />}
         {activeTab === 'recomendaciones' && (
           <BPRecommendationsPanel bpId={bpId} recommendations={bp.recommendations || []} />
         )}
         {activeTab === 'aria' && <ARIAPanel bpId={bpId} bp={bp} />}
       </div>
+
+      {/* Activity detail drawer (global, accessible from any tab) */}
+      {drawerActivity && (
+        <BPActivityDetailDrawer
+          bpId={bpId}
+          activity={drawerActivity}
+          onClose={() => setDrawerActivity(null)}
+          onUpdated={() => { qc.invalidateQueries(['bp', bpId]); setDrawerActivity(null) }}
+        />
+      )}
 
       {/* Edit BP modal */}
       {editBP && (

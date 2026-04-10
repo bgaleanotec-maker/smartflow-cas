@@ -249,6 +249,27 @@ export const bpAPI = {
   createRecommendation: (bpId, data) => api.post(`/bp/${bpId}/recommendations`, data),
   updateRecommendation: (bpId, recId, data) => api.patch(`/bp/${bpId}/recommendations/${recId}`, data),
   deleteRecommendation: (bpId, recId) => api.delete(`/bp/${bpId}/recommendations/${recId}`),
+
+  // Timeline
+  getTimeline: (bpId) => api.get(`/bp/${bpId}/timeline`),
+  checkReminders: (bpId) => api.post(`/bp/${bpId}/check-reminders`),
+
+  // Checklist
+  getChecklist: (bpId, actId) => api.get(`/bp/${bpId}/activities/${actId}/checklist`),
+  addChecklistItem: (bpId, actId, data) => api.post(`/bp/${bpId}/activities/${actId}/checklist`, data),
+  updateChecklistItem: (bpId, actId, itemId, data) => api.patch(`/bp/${bpId}/activities/${actId}/checklist/${itemId}`, data),
+  deleteChecklistItem: (bpId, actId, itemId) => api.delete(`/bp/${bpId}/activities/${actId}/checklist/${itemId}`),
+
+  // Comments
+  getComments: (bpId, actId) => api.get(`/bp/${bpId}/activities/${actId}/comments`),
+  addComment: (bpId, actId, data) => api.post(`/bp/${bpId}/activities/${actId}/comments`, data),
+  deleteComment: (bpId, actId, commentId) => api.delete(`/bp/${bpId}/activities/${actId}/comments/${commentId}`),
+
+  // Milestones
+  getMilestones: (bpId) => api.get(`/bp/${bpId}/milestones`),
+  createMilestone: (bpId, data) => api.post(`/bp/${bpId}/milestones`, data),
+  updateMilestone: (bpId, msId, data) => api.patch(`/bp/${bpId}/milestones/${msId}`, data),
+  deleteMilestone: (bpId, msId) => api.delete(`/bp/${bpId}/milestones/${msId}`),
 }
 
 // ─── ARIA Financial Intelligence ─────────────────────────────────────────────

@@ -114,6 +114,13 @@ class BPActivityCreate(BaseModel):
     notes: Optional[str] = None
     evidence: Optional[str] = None
     order_index: int = 0
+    start_date: Optional[date] = None
+    estimated_hours: Optional[float] = None
+    actual_hours: Optional[float] = None
+    depends_on_id: Optional[int] = None
+    is_milestone: bool = False
+    reminder_days_before: int = 3
+    tags: Optional[dict] = None
 
 
 class BPActivityUpdate(BaseModel):
@@ -129,6 +136,13 @@ class BPActivityUpdate(BaseModel):
     notes: Optional[str] = None
     evidence: Optional[str] = None
     order_index: Optional[int] = None
+    start_date: Optional[date] = None
+    estimated_hours: Optional[float] = None
+    actual_hours: Optional[float] = None
+    depends_on_id: Optional[int] = None
+    is_milestone: Optional[bool] = None
+    reminder_days_before: Optional[int] = None
+    tags: Optional[dict] = None
 
 
 class BPActivityResponse(BaseModel):
@@ -213,3 +227,77 @@ class BPDashboardStats(BaseModel):
     total_overdue: int
     by_status: dict
     businesses: list[BPBusinessSummary]
+
+
+# ─── BPChecklist ──────────────────────────────────────────────────────────────
+
+class BPChecklistItemCreate(BaseModel):
+    title: str
+    order_index: int = 0
+
+
+class BPChecklistItemUpdate(BaseModel):
+    title: Optional[str] = None
+    is_completed: Optional[bool] = None
+    order_index: Optional[int] = None
+
+
+class BPChecklistItemResponse(BaseModel):
+    id: int
+    activity_id: int
+    title: str
+    is_completed: bool
+    completed_at: Optional[datetime] = None
+    completed_by_id: Optional[int] = None
+    order_index: int
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+# ─── BPComment ────────────────────────────────────────────────────────────────
+
+class BPCommentCreate(BaseModel):
+    content: str
+
+
+class BPCommentResponse(BaseModel):
+    id: int
+    activity_id: int
+    author_id: int
+    author_name: str = ""
+    content: str
+    created_at: datetime
+    updated_at: datetime
+    model_config = {"from_attributes": True}
+
+
+# ─── BPMilestone ──────────────────────────────────────────────────────────────
+
+class BPMilestoneCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    target_date: date
+    color: str = "#6366f1"
+    order_index: int = 0
+
+
+class BPMilestoneUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    target_date: Optional[date] = None
+    status: Optional[str] = None
+    color: Optional[str] = None
+    order_index: Optional[int] = None
+
+
+class BPMilestoneResponse(BaseModel):
+    id: int
+    bp_id: int
+    title: str
+    description: Optional[str] = None
+    target_date: date
+    status: str
+    color: str
+    order_index: int
+    created_at: datetime
+    model_config = {"from_attributes": True}

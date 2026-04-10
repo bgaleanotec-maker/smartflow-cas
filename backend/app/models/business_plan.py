@@ -81,6 +81,7 @@ class BusinessPlan(Base):
     recommendations: Mapped[list["BPRecommendation"]] = relationship("BPRecommendation", back_populates="bp", cascade="all, delete-orphan", lazy="select")
     scenarios: Mapped[list["BPScenario"]] = relationship("BPScenario", back_populates="bp", cascade="all, delete-orphan", lazy="select")
     audit_logs: Mapped[list["BPAuditLog"]] = relationship("BPAuditLog", back_populates="bp", cascade="all, delete-orphan", lazy="select")
+    milestones: Mapped[list["BPMilestone"]] = relationship("BPMilestone", back_populates="bp", cascade="all, delete-orphan", lazy="select")
 
 
 class BPLine(Base):
@@ -142,11 +143,81 @@ class BPActivity(Base):
     order_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # Schedule & Tasks enhancements
+    start_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    estimated_hours: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    actual_hours: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    depends_on_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("bp_activities.id"), nullable=True)
+    is_milestone: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    reminder_days_before: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
+    reminder_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    tags: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # list of tag strings
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     bp: Mapped["BusinessPlan"] = relationship("BusinessPlan", back_populates="activities", lazy="select")
     owner: Mapped[Optional["User"]] = relationship("User", foreign_keys=[owner_id], lazy="select")
+    depends_on: Mapped[Optional["BPActivity"]] = relationship(
+        "BPActivity",
+        foreign_keys="[BPActivity.depends_on_id]",
+        primaryjoin="BPActivity.depends_on_id == BPActivity.id",
+        uselist=False,
+        lazy="select",
+    )
+    checklist: Mapped[list["BPChecklist"]] = relationship("BPChecklist", back_populates="activity", cascade="all, delete-orphan", lazy="select", order_by="BPChecklist.order_index")
+    comments: Mapped[list["BPComment"]] = relationship("BPComment", back_populates="activity", cascade="all, delete-orphan", lazy="select", order_by="BPComment.created_at")
+
+
+class BPChecklist(Base):
+    """Checklist item inside a BPActivity."""
+    __tablename__ = "bp_checklist_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    activity_id: Mapped[int] = mapped_column(Integer, ForeignKey("bp_activities.id"), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    is_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_by_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    order_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    activity: Mapped["BPActivity"] = relationship("BPActivity", back_populates="checklist", lazy="select")
+    completed_by: Mapped[Optional["User"]] = relationship("User", foreign_keys=[completed_by_id], lazy="select")
+
+
+class BPComment(Base):
+    """Comment thread on a BPActivity."""
+    __tablename__ = "bp_comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    activity_id: Mapped[int] = mapped_column(Integer, ForeignKey("bp_activities.id"), nullable=False, index=True)
+    author_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    activity: Mapped["BPActivity"] = relationship("BPActivity", back_populates="comments", lazy="select")
+    author: Mapped["User"] = relationship("User", foreign_keys=[author_id], lazy="select")
+
+
+class BPMilestone(Base):
+    """Key milestone date in a BusinessPlan timeline."""
+    __tablename__ = "bp_milestones"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    bp_id: Mapped[int] = mapped_column(Integer, ForeignKey("business_plans.id"), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    target_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="pendiente", nullable=False)  # pendiente/alcanzado/perdido
+    color: Mapped[str] = mapped_column(String(20), default="#6366f1", nullable=False)
+    order_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    bp: Mapped["BusinessPlan"] = relationship("BusinessPlan", back_populates="milestones", lazy="select")
 
 
 class BPExcelAnalysis(Base):

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import {
   Calendar, User, ChevronDown, ChevronUp, CheckCircle, XCircle,
-  Clock, PlayCircle, AlertCircle, Edit2,
+  Clock, PlayCircle, AlertCircle, Edit2, MessageSquare, Link2,
+  CheckSquare,
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -38,7 +39,7 @@ const CATEGORY_COLORS = {
   tecnologia: 'bg-sky-500/15 text-sky-400',
 }
 
-export default function BPActivityCard({ activity, onStatusChange, onEdit }) {
+export default function BPActivityCard({ activity, onStatusChange, onEdit, onOpenDrawer }) {
   const [expanded, setExpanded] = useState(false)
 
   const priority = PRIORITY_CONFIG[activity.priority] || PRIORITY_CONFIG.media
@@ -79,6 +80,15 @@ export default function BPActivityCard({ activity, onStatusChange, onEdit }) {
               {activity.title}
             </p>
             <div className="flex items-center gap-1 flex-shrink-0">
+              {onOpenDrawer && (
+                <button
+                  onClick={() => onOpenDrawer?.(activity)}
+                  className="p-1 rounded text-slate-500 hover:text-brand-400 hover:bg-slate-700 transition-colors"
+                  title="Ver detalle completo"
+                >
+                  <CheckSquare size={13} />
+                </button>
+              )}
               <button
                 onClick={() => onEdit?.(activity)}
                 className="p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-slate-700 transition-colors"
@@ -133,6 +143,70 @@ export default function BPActivityCard({ activity, onStatusChange, onEdit }) {
                 />
               </div>
               <span className="text-xs text-slate-500 flex-shrink-0">{activity.progress}%</span>
+            </div>
+          )}
+
+          {/* Enhanced indicators row */}
+          {(activity.checklist_total > 0 || activity.comment_count > 0 || activity.depends_on_id || activity.is_milestone || activity.estimated_hours || (activity.tags?.list?.length > 0)) && (
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              {/* Milestone badge */}
+              {activity.is_milestone && (
+                <span className="flex items-center gap-0.5 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-1.5 py-0.5">
+                  ◆ Hito
+                </span>
+              )}
+              {/* Dependency */}
+              {activity.depends_on_id && (
+                <span className="flex items-center gap-0.5 text-xs text-slate-500" title="Depende de otra actividad">
+                  <Link2 size={10} />
+                </span>
+              )}
+              {/* Checklist progress */}
+              {activity.checklist_total > 0 && (
+                <span className={clsx(
+                  'flex items-center gap-1 text-xs rounded-full px-1.5 py-0.5',
+                  activity.checklist_done === activity.checklist_total
+                    ? 'text-green-400 bg-green-500/10 border border-green-500/20'
+                    : 'text-slate-400 bg-slate-700/30 border border-slate-700/50',
+                )}>
+                  <CheckSquare size={10} />
+                  {activity.checklist_done}/{activity.checklist_total}
+                </span>
+              )}
+              {/* Comments */}
+              {activity.comment_count > 0 && (
+                <span className="flex items-center gap-1 text-xs text-slate-500">
+                  <MessageSquare size={10} />
+                  {activity.comment_count}
+                </span>
+              )}
+              {/* Hours */}
+              {(activity.actual_hours != null || activity.estimated_hours != null) && (
+                <span className="flex items-center gap-1 text-xs text-slate-500">
+                  <Clock size={10} />
+                  {activity.actual_hours != null ? `${activity.actual_hours}h` : '—'}
+                  {activity.estimated_hours != null ? ` / ${activity.estimated_hours}h est.` : ''}
+                </span>
+              )}
+              {/* Tags */}
+              {(activity.tags?.list || []).slice(0, 3).map((tag) => (
+                <span key={tag} className="text-xs px-1.5 py-0.5 bg-brand-500/10 text-brand-400 border border-brand-500/20 rounded-full">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Checklist thin progress bar (below everything) */}
+          {activity.checklist_total > 0 && (
+            <div className="mt-1.5 h-1 bg-slate-700/50 rounded-full overflow-hidden">
+              <div
+                className={clsx(
+                  'h-full rounded-full transition-all',
+                  activity.checklist_done === activity.checklist_total ? 'bg-green-500' : 'bg-brand-500/60',
+                )}
+                style={{ width: `${Math.round((activity.checklist_done / activity.checklist_total) * 100)}%` }}
+              />
             </div>
           )}
         </div>
