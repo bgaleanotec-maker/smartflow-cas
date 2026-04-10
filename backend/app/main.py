@@ -18,9 +18,86 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    # Run column migrations for tables that existed before new columns were added
+    await _run_column_migrations()
+
     # Seed default data
     await seed_defaults()
     yield
+
+
+async def _run_column_migrations():
+    """Add new columns to existing tables without Alembic.
+    Uses IF NOT EXISTS so it is safe to run on every startup."""
+    from sqlalchemy import text
+    from app.core.database import AsyncSessionLocal, is_sqlite
+
+    migrations = []
+
+    if is_sqlite:
+        # SQLite: no IF NOT EXISTS for ADD COLUMN — check pragma first
+        migrations = [
+            # voice_meetings new context columns (added 2026-04-10)
+            ("voice_meetings", "business_id", "INTEGER REFERENCES businesses(id)"),
+            ("voice_meetings", "bp_id", "INTEGER REFERENCES business_plans(id)"),
+            ("voice_meetings", "bp_activity_id", "INTEGER REFERENCES bp_activities(id)"),
+            ("voice_meetings", "auto_linked_actions", "JSON"),
+            # bp_activities new scheduling columns (added 2026-03-xx)
+            ("bp_activities", "start_date", "DATE"),
+            ("bp_activities", "estimated_hours", "FLOAT"),
+            ("bp_activities", "actual_hours", "FLOAT"),
+            ("bp_activities", "depends_on_id", "INTEGER"),
+            ("bp_activities", "is_milestone", "BOOLEAN DEFAULT 0"),
+            ("bp_activities", "reminder_days_before", "INTEGER DEFAULT 3"),
+            ("bp_activities", "reminder_sent_at", "DATETIME"),
+            ("bp_activities", "tags", "JSON"),
+        ]
+        async with AsyncSessionLocal() as db:
+            for table, column, col_def in migrations:
+                try:
+                    result = await db.execute(text(f"PRAGMA table_info({table})"))
+                    cols = [row[1] for row in result.fetchall()]
+                    if column not in cols:
+                        await db.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}"))
+                        await db.commit()
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Migration warning ({table}.{column}): {e}")
+    else:
+        # PostgreSQL: supports ADD COLUMN IF NOT EXISTS
+        pg_migrations = [
+            # voice_meetings context FK columns
+            "ALTER TABLE voice_meetings ADD COLUMN IF NOT EXISTS business_id INTEGER REFERENCES businesses(id)",
+            "ALTER TABLE voice_meetings ADD COLUMN IF NOT EXISTS bp_id INTEGER REFERENCES business_plans(id)",
+            "ALTER TABLE voice_meetings ADD COLUMN IF NOT EXISTS bp_activity_id INTEGER REFERENCES bp_activities(id)",
+            "ALTER TABLE voice_meetings ADD COLUMN IF NOT EXISTS auto_linked_actions JSON",
+            # bp_activities scheduling columns
+            "ALTER TABLE bp_activities ADD COLUMN IF NOT EXISTS start_date DATE",
+            "ALTER TABLE bp_activities ADD COLUMN IF NOT EXISTS estimated_hours FLOAT",
+            "ALTER TABLE bp_activities ADD COLUMN IF NOT EXISTS actual_hours FLOAT",
+            "ALTER TABLE bp_activities ADD COLUMN IF NOT EXISTS depends_on_id INTEGER",
+            "ALTER TABLE bp_activities ADD COLUMN IF NOT EXISTS is_milestone BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE bp_activities ADD COLUMN IF NOT EXISTS reminder_days_before INTEGER DEFAULT 3",
+            "ALTER TABLE bp_activities ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMP WITH TIME ZONE",
+            "ALTER TABLE bp_activities ADD COLUMN IF NOT EXISTS tags JSON",
+            # bp_lines AI columns
+            "ALTER TABLE bp_lines ADD COLUMN IF NOT EXISTS is_ai_generated BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE bp_lines ADD COLUMN IF NOT EXISTS ai_confidence FLOAT",
+            "ALTER TABLE bp_lines ADD COLUMN IF NOT EXISTS ai_rationale TEXT",
+            "ALTER TABLE bp_lines ADD COLUMN IF NOT EXISTS line_metadata JSON",
+            # bp_excel_analyses structured extraction column
+            "ALTER TABLE bp_excel_analyses ADD COLUMN IF NOT EXISTS file_type VARCHAR(20)",
+            "ALTER TABLE bp_excel_analyses ADD COLUMN IF NOT EXISTS structured_extraction JSON",
+            "ALTER TABLE bp_excel_analyses ADD COLUMN IF NOT EXISTS applied_at TIMESTAMP WITH TIME ZONE",
+        ]
+        async with AsyncSessionLocal() as db:
+            for stmt in pg_migrations:
+                try:
+                    await db.execute(text(stmt))
+                    await db.commit()
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Migration warning: {e}")
 
 
 async def seed_defaults():

@@ -556,11 +556,10 @@ async def text_to_speech_endpoint(body: TTSBody, db: DB, user: CurrentUser):
             detail="ElevenLabs no configurado. Agrega ELEVENLABS_API_KEY en Configuración > Integraciones.",
         )
 
-    voice_id = body.voice_id or await get_service_config_value(db, "elevenlabs", "voice_id") or "EXAVITQu4vr4xnSDxMaL"
-    tts_model = await get_service_config_value(db, "elevenlabs", "model") or "eleven_multilingual_v2"
+    voice_id = body.voice_id or await get_service_config_value(db, "elevenlabs", "voice_id") or "SplyIQAjgy4DKGAnOrHi"  # Clau (Colombian professional)
 
-    from app.services.elevenlabs_service import text_to_speech
-    audio_bytes = await text_to_speech(text=text, api_key=api_key, voice_id=voice_id, model_id=tts_model)
+    from app.services.elevenlabs_service import aria_speak
+    audio_bytes = await aria_speak(text=text, api_key=api_key, voice_id=voice_id)
 
     if audio_bytes is None:
         raise HTTPException(status_code=502, detail="Error al generar audio con ElevenLabs")
@@ -662,18 +661,18 @@ async def aria_voice_chat(body: AriaChatBody, db: DB, user: CurrentUser):
             await db.flush()
             await db.commit()
 
-    # TTS with ElevenLabs — key and model fully configurable from admin panel
+    # TTS with ElevenLabs — uses aria_speak (auto best-model selection: flash for short, multilingual for long)
+    # Voice configurable from admin panel; default Clau (Bogotá professional Colombian female)
     audio_b64 = None
     elevenlabs_key = await get_service_config_value(db, "elevenlabs", "api_key")
     if elevenlabs_key:
-        voice_id = await get_service_config_value(db, "elevenlabs", "voice_id") or "9BWtsMINqrJLrRacOk9x"
-        tts_model = await get_service_config_value(db, "elevenlabs", "model") or "eleven_multilingual_v2"
-        from app.services.elevenlabs_service import text_to_speech
-        audio_bytes = await text_to_speech(
-            text=response_text[:500],
+        voice_id = await get_service_config_value(db, "elevenlabs", "voice_id") or "SplyIQAjgy4DKGAnOrHi"
+        from app.services.elevenlabs_service import aria_speak
+        audio_bytes = await aria_speak(
+            text=response_text[:600],
             api_key=elevenlabs_key,
             voice_id=voice_id,
-            model_id=tts_model,
+            language_code="es",
         )
         if audio_bytes:
             audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
