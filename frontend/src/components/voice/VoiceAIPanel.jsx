@@ -285,9 +285,6 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   const [textInput, setTextInput] = useState('')
   const [slowWarning, setSlowWarning] = useState(false)
 
-  // Wrapper: keeps ariaStatusRef in sync with ariaStatus state
-  const setStatus = (s) => { ariaStatusRef.current = s; setAriaStatus(s) }
-
   const mediaRecorderRef = useRef(null)
   const streamRef = useRef(null)
   const audioContextRef = useRef(null)
@@ -297,6 +294,7 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   const transcriptEndRef = useRef(null)
   const chatEndRef = useRef(null)
   const conversationActiveRef = useRef(false)
+  const chatRef = useRef([])  // mirrors chat state — avoids stale closures inside VAD interval
 
   // VAD system
   const ariaStatusRef = useRef('idle')      // mirrors ariaStatus for VAD loop (no stale closures)
@@ -312,6 +310,13 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   const silenceStartRef = useRef(null)      // timestamp when silence started after speech
   const recordingStartRef = useRef(null)    // timestamp when current recording started
   const ariaAudioRef = useRef(null)         // current ARIA HTML Audio element (for interruption)
+
+  // Wrapper: keeps ariaStatusRef in sync with ariaStatus state (defined after all refs)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const setStatus = useCallback((s) => { ariaStatusRef.current = s; setAriaStatus(s) }, [])
+
+  // Keep chatRef in sync so VAD interval closures always read latest chat
+  useEffect(() => { chatRef.current = chat }, [chat])
 
   // Auto-scroll
   useEffect(() => {
@@ -396,14 +401,14 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
     // Show "server waking up" warning after 5s (Render free tier cold start)
     const slowTimer = setTimeout(() => setSlowWarning(true), 5000)
 
-    // Safety timeout — if still processing after 25s, reset to idle
+    // Safety timeout — only reset if STILL processing (don't interrupt speaking)
     const safetyTimer = setTimeout(() => {
       setSlowWarning(false)
-      setStatus('idle')
+      if (ariaStatusRef.current === 'processing') setStatus('idle')
     }, 25000)
 
-    // Build recent chat history to pass to backend (last 6 messages for context)
-    const history = chat.slice(-6).map(m => ({ role: m.role === 'aria' ? 'assistant' : 'user', content: m.text }))
+    // Use chatRef to always have the latest history (avoids stale closures in VAD interval)
+    const history = chatRef.current.slice(-6).map(m => ({ role: m.role === 'aria' ? 'assistant' : 'user', content: m.text }))
 
     try {
       const res = await voiceAPI.ariaChat(
@@ -681,18 +686,16 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
 
   const handleAriaMicClick = () => {
     if (isConversationActive) {
-      // If currently recording → manually stop and send now (early send)
+      // In conversation: tap mic to send current segment early (don't wait for silence)
       if (speechActiveRef.current) {
         stopVADRecording()
       }
     } else {
-      // Start conversation mode
+      // Start conversation mode — VAD opens mic and listens continuously
+      // Greeting already sent by the useEffect on panel open (no double greeting)
       conversationActiveRef.current = true
       setIsConversationActive(true)
-      startVAD().then(() => {
-        // Auto-send greeting after mic is ready
-        sendAriaMessage('saludo_inicial')
-      })
+      startVAD()
     }
   }
 

@@ -814,6 +814,7 @@ async def team_meetings(
     user: LeaderOrAdmin,
     meeting_type: Optional[str] = None,
     status: Optional[str] = None,
+    business_id: Optional[int] = None,
 ):
     """Leaders/admins: see all team meetings with stats."""
     query = (
@@ -837,11 +838,14 @@ async def team_meetings(
         except ValueError:
             pass
 
+    if business_id:
+        query = query.where(VoiceMeeting.business_id == business_id)
+
     meetings = (await db.execute(query)).scalars().all()
 
     results = []
     for m in meetings:
-        await db.refresh(m, ["created_by", "chunks"])
+        await db.refresh(m, ["created_by", "chunks", "business"])
         d = _meeting_to_dict(m)
         # Add stats
         d["participant_count"] = len((m.participant_ids or {}).get("user_ids", []))
