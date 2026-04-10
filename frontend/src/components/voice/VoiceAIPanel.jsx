@@ -284,6 +284,7 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   const [isConversationActive, setIsConversationActive] = useState(false)
   const [textInput, setTextInput] = useState('')
   const [slowWarning, setSlowWarning] = useState(false)
+  const [transcribingChunk, setTranscribingChunk] = useState(false)  // meeting: processing chunk
 
   const mediaRecorderRef = useRef(null)
   const streamRef = useRef(null)
@@ -303,13 +304,16 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   const vadContextRef = useRef(null)        // AudioContext for VAD
   const vadAnalyserRef = useRef(null)       // AnalyserNode
   const vadIntervalRef = useRef(null)       // setInterval handle
-  const vadRecorderRef = useRef(null)       // MediaRecorder for current speech segment
+  const vadRecorderRef = useRef(null)       // MediaRecorder for current speech segment (Whisper fallback)
   const vadChunksRef = useRef([])           // audio chunks for current segment
   const speechActiveRef = useRef(false)     // currently recording a speech segment
   const speechOnsetRef = useRef(null)       // timestamp when speech onset first detected (debounce)
   const silenceStartRef = useRef(null)      // timestamp when silence started after speech
   const recordingStartRef = useRef(null)    // timestamp when current recording started
   const ariaAudioRef = useRef(null)         // current ARIA HTML Audio element (for interruption)
+  // Web Speech API — primary transcription (browser-native, free, instant)
+  const srRef = useRef(null)                // SpeechRecognition instance
+  const webSpeechActiveRef = useRef(false)  // whether Web Speech API is in use
 
   // Wrapper: keeps ariaStatusRef in sync with ariaStatus state (defined after all refs)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -442,6 +446,7 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
     setStatus('speaking')
     isARIASpeakingRef.current = true
     setIsARIASpeaking(true)
+    pauseWebSpeech()   // don't transcribe ARIA's own voice
     const audio = new Audio(`data:audio/mpeg;base64,${b64}`)
     ariaAudioRef.current = audio
     audio.play().catch(() => {})
@@ -450,13 +455,14 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       isARIASpeakingRef.current = false
       setIsARIASpeaking(false)
       setStatus('idle')
-      // VAD loop will auto-detect next speech — no manual restart needed
+      resumeWebSpeech()  // start listening again after ARIA finishes
     }
     audio.onerror = () => {
       ariaAudioRef.current = null
       isARIASpeakingRef.current = false
       setIsARIASpeaking(false)
       setStatus('idle')
+      resumeWebSpeech()
     }
   }
 
@@ -467,11 +473,12 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       isARIASpeakingRef.current = false
       setIsARIASpeaking(false)
       setStatus('idle')
-      // VAD auto-detects next speech
+      resumeWebSpeech()  // restart listening after ARIA speaks
     }
 
     if (!window.speechSynthesis) { done(); return }
 
+    pauseWebSpeech()   // don't transcribe ARIA's own voice
     window.speechSynthesis.cancel()
 
     // Split into sentences so Chrome's onend fires reliably
@@ -513,6 +520,90 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
     isARIASpeakingRef.current = true
     setIsARIASpeaking(true)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Web Speech API helpers ────────────────────────────────────────────────
+  // Primary transcription path: browser-native, no Whisper, no cold start, free.
+  // Whisper path kept as fallback for browsers without SpeechRecognition (Firefox).
+
+  const stopWebSpeech = useCallback(() => {
+    if (srRef.current) {
+      try { srRef.current.abort() } catch {}
+      srRef.current = null
+    }
+    webSpeechActiveRef.current = false
+  }, [])
+
+  const pauseWebSpeech = useCallback(() => {
+    if (srRef.current) { try { srRef.current.stop() } catch {} }
+  }, [])
+
+  const resumeWebSpeech = useCallback(() => {
+    if (!webSpeechActiveRef.current || !conversationActiveRef.current) return
+    setTimeout(() => {
+      if (srRef.current && conversationActiveRef.current && ariaStatusRef.current === 'idle') {
+        try { srRef.current.start() } catch {}
+      }
+    }, 350)
+  }, []) // eslint-disable-line
+
+  const startWebSpeech = useCallback(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SR) return false   // not available — use Whisper fallback
+
+    stopWebSpeech()
+    const sr = new SR()
+    sr.lang = 'es-CO'
+    sr.continuous = true
+    sr.interimResults = true
+    sr.maxAlternatives = 1
+    srRef.current = sr
+    webSpeechActiveRef.current = true
+
+    sr.onresult = (event) => {
+      const results = Array.from(event.results).slice(event.resultIndex)
+      // Show interim results as "listening"
+      if (results.some(r => !r.isFinal) && ariaStatusRef.current === 'idle') {
+        setStatus('listening')
+      }
+      // Send final transcripts to ARIA
+      const finalText = results
+        .filter(r => r.isFinal)
+        .map(r => r[0].transcript.trim())
+        .filter(Boolean)
+        .join(' ')
+      if (finalText && conversationActiveRef.current && ariaStatusRef.current !== 'processing') {
+        sendAriaMessage(finalText)
+      }
+    }
+
+    sr.onspeechend = () => {
+      if (ariaStatusRef.current === 'listening') setStatus('idle')
+    }
+
+    sr.onend = () => {
+      // Auto-restart while conversation is active and ARIA isn't busy
+      if (conversationActiveRef.current && ariaStatusRef.current === 'idle') {
+        setTimeout(() => {
+          if (conversationActiveRef.current) { try { sr.start() } catch {} }
+        }, 200)
+      }
+    }
+
+    sr.onerror = (e) => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        webSpeechActiveRef.current = false
+        return  // will fall through to Whisper path
+      }
+      if (ariaStatusRef.current === 'listening') setStatus('idle')
+      if (conversationActiveRef.current) {
+        setTimeout(() => {
+          if (conversationActiveRef.current) { try { sr.start() } catch {} }
+        }, 600)
+      }
+    }
+
+    try { sr.start(); return true } catch { webSpeechActiveRef.current = false; return false }
+  }, []) // eslint-disable-line
 
   // ── VAD: Interrupt ARIA if currently speaking ─────────────────────────────
   const interruptARIA = () => {
@@ -592,6 +683,10 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   // ── VAD: Start continuous listening loop ──────────────────────────────────
   const startVAD = async () => {
     if (vadStreamRef.current) return  // already running
+
+    // Try Web Speech API first (Chrome/Edge) — no Whisper needed
+    const webSpeechOK = startWebSpeech()
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
       vadStreamRef.current = stream
@@ -621,39 +716,39 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
         if (isSpeaking) {
           silenceStartRef.current = null
 
-          // Interrupt ARIA if it's currently speaking
+          // Always handle ARIA interruption regardless of transcription path
           if (isARIASpeakingRef.current) {
             interruptARIA()
             setStatus('idle')
             speechOnsetRef.current = null
+            if (webSpeechActiveRef.current) resumeWebSpeech()
             return
           }
 
-          if (speechActiveRef.current) return  // already recording
+          // If Web Speech handles transcription, VAD only does visualizer + interruption
+          if (webSpeechActiveRef.current) return
 
-          // Speech onset debounce: must be loud for VAD_ONSET_MS before we start recording
+          // ── Whisper fallback path (Firefox / no Web Speech API) ──
+          if (speechActiveRef.current) return
           if (!speechOnsetRef.current) {
             speechOnsetRef.current = now
           } else if (now - speechOnsetRef.current >= VAD_ONSET_MS) {
             speechOnsetRef.current = null
-            if (ariaStatusRef.current === 'idle') {
-              startVADRecording()
-            }
+            if (ariaStatusRef.current === 'idle') startVADRecording()
           }
         } else {
-          // Silence
           speechOnsetRef.current = null
 
-          if (!speechActiveRef.current) return  // nothing to end
-
-          if (!silenceStartRef.current) {
-            silenceStartRef.current = now
-          } else if (now - silenceStartRef.current >= VAD_SILENCE_MS) {
-            // User stopped speaking — send the recording
-            stopVADRecording()
+          // Whisper fallback silence detection
+          if (!webSpeechActiveRef.current && speechActiveRef.current) {
+            if (!silenceStartRef.current) {
+              silenceStartRef.current = now
+            } else if (now - silenceStartRef.current >= VAD_SILENCE_MS) {
+              stopVADRecording()
+            }
           }
         }
-      }, 50)  // 50ms polling = 20Hz
+      }, 50)
     } catch (err) {
       console.error('VAD failed to start:', err)
     }
@@ -661,6 +756,7 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
 
   // ── VAD: Stop everything ──────────────────────────────────────────────────
   const stopVAD = () => {
+    stopWebSpeech()
     if (vadIntervalRef.current) { clearInterval(vadIntervalRef.current); vadIntervalRef.current = null }
     if (vadRecorderRef.current?.state !== 'inactive') {
       try { vadRecorderRef.current?.stop() } catch {}
@@ -744,6 +840,7 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       mr.ondataavailable = async (e) => {
         if (e.data.size > 0) {
           const blob = new Blob([e.data], { type: 'audio/webm' })
+          setTranscribingChunk(true)
           try {
             const res = await voiceAPI.transcribeChunk(meetingId, blob)
             const { text, sequence_num } = res.data
@@ -758,7 +855,9 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
               ])
             }
           } catch {
-            // Silently ignore chunk transcription errors
+            // Silently ignore — Whisper may be loading on cold start
+          } finally {
+            setTranscribingChunk(false)
           }
         }
       }
@@ -767,12 +866,12 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       setIsRecordingMeeting(true)
       setRecordingStart(Date.now())
 
-      // Request data every 10 seconds — longer chunks give Whisper more context per segment
+      // Request data every 7 seconds — good balance of context vs latency for Whisper
       chunkIntervalRef.current = setInterval(() => {
         if (mr.state === 'recording') {
           mr.requestData()
         }
-      }, 10000)
+      }, 7000)
     } catch (err) {
       alert(err.message || 'No se pudo acceder al audio. Verifica los permisos del navegador.')
     }
@@ -1302,9 +1401,19 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
                     {/* Live transcript */}
                     <div className="flex-1 overflow-y-auto px-4 py-2 space-y-2 border-t border-slate-800">
                       <p className="text-[10px] text-slate-500 uppercase tracking-wider py-1">Transcripción en vivo</p>
+                      {transcribingChunk && (
+                        <div className="flex items-center gap-2 text-xs text-amber-400/80 mb-1">
+                          <Loader2 size={11} className="animate-spin flex-shrink-0" />
+                          Transcribiendo fragmento...
+                        </div>
+                      )}
                       {transcript.length === 0 && (
                         <p className="text-xs text-slate-600 text-center mt-4">
-                          {isRecordingMeeting ? 'Grabando... las transcripciones aparecerán aquí cada 8 segundos.' : 'Sin transcripciones aún.'}
+                          {isRecordingMeeting
+                            ? transcribingChunk
+                              ? '⏳ Procesando audio con Whisper (puede tardar en el arranque)...'
+                              : '🎙️ Grabando... texto aparece cada ~7s cuando hay voz.'
+                            : 'Sin transcripciones aún.'}
                         </p>
                       )}
                       {transcript.map((item, i) => (

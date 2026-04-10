@@ -36,16 +36,17 @@ logger = logging.getLogger(__name__)
 
 ARIA_VOICE_PROMPT = """Eres ARIA — asistente de voz inteligente de SmartFlow, la plataforma de gestión del equipo CAS de Vanti.
 
-Instrucciones de conversación:
-- Habla de forma natural, cálida y profesional en español colombiano.
-- Siempre llama al usuario por su nombre cuando lo conoces.
-- Sé concisa: máximo 3-4 oraciones por respuesta (es una conversación de voz).
-- Si el usuario hace una pregunta sobre sus actividades, negocios, o tareas, usa el contexto que te dan.
-- Saluda con entusiasmo la primera vez. Después del saludo inicial ve directo al punto.
-- Cuando no tengas información específica, dilo honestamente y ofrece ayuda alternativa.
-- Usa frases naturales como "Claro", "Con gusto", "Perfecto" al inicio cuando sea apropiado.
-- Si el usuario pregunta por reuniones, dile que puede verlas en el módulo Reuniones de SmartFlow.
-- Responde siempre en español colombiano natural, sin tecnicismos innecesarios."""
+REGLAS CRÍTICAS:
+1. Siempre usa el contexto de SmartFlow que recibes para responder preguntas sobre negocios, tareas, reuniones, BPs.
+2. Si el usuario pregunta por actividades pendientes, proyectos, negocios → RESPONDE con los datos del contexto.
+3. Sé concisa: máximo 3-4 oraciones en voz, menciona máximo 3 items de una lista.
+4. Habla siempre en español colombiano natural, cálido, directo.
+5. Llama al usuario por su nombre.
+6. Si no tienes datos suficientes, dilo y sugiere qué puede hacer en SmartFlow.
+7. Para reuniones: dile que las puede ver en el módulo "Reuniones" de SmartFlow.
+8. Saluda con entusiasmo solo la primera vez. Después ve directo al grano.
+9. Usa "Claro", "Con gusto", "Perfecto" cuando sea natural.
+10. NUNCA inventes datos — usa solo el contexto provisto."""
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -100,39 +101,110 @@ def _meeting_to_dict(m: VoiceMeeting) -> dict:
 
 
 async def _get_smartflow_context(db, user) -> str:
-    """Query SmartFlow data to give ARIA relevant context about the user's work."""
+    """
+    Build a rich SmartFlow context for ARIA: businesses, BPs, activities, recent meetings.
+    ARIA uses this to answer any question about the state of the business.
+    """
     try:
-        from app.models.business_plan import BPActivity, BPActivityStatus, BusinessPlan
-        from app.models.user import User as UserModel
+        from app.models.business_plan import BPActivity, BPActivityStatus, BusinessPlan, BPStatus
+        from app.models.business import Business
+        from datetime import date as date_type
 
-        # Pending/in-progress activities (max 8 for cost efficiency)
+        sections = []
+        is_leader = user.role in (UserRole.ADMIN, UserRole.LEADER, UserRole.DIRECTIVO)
+
+        # ── 1. Negocios activos ───────────────────────────────────────────────
+        bizs = (await db.execute(
+            select(Business).where(Business.is_active == True).order_by(Business.name)
+        )).scalars().all()
+        if bizs:
+            sections.append(f"NEGOCIOS ACTIVOS ({len(bizs)}): {', '.join(b.name for b in bizs)}")
+
+        # ── 2. Planes de negocio ──────────────────────────────────────────────
+        bp_q = (
+            select(BusinessPlan, Business.name.label("biz_name"))
+            .join(Business, BusinessPlan.business_id == Business.id)
+            .where(BusinessPlan.is_deleted == False)
+            .order_by(BusinessPlan.year.desc(), Business.name)
+            .limit(15)
+        )
+        bp_rows = (await db.execute(bp_q)).all()
+        if bp_rows:
+            bp_lines = ["PLANES DE NEGOCIO:"]
+            for bp, biz_name in bp_rows:
+                bp_lines.append(f"  • [{biz_name}] {bp.name or f'BP {bp.year}'} — {bp.status.value} ({bp.year})")
+            sections.append("\n".join(bp_lines))
+
+        # ── 3. Actividades pendientes / en progreso ───────────────────────────
         acts_q = (
-            select(BPActivity, BusinessPlan.name.label("bp_name"))
+            select(BPActivity, BusinessPlan.name.label("bp_name"), Business.name.label("biz_name"))
             .join(BusinessPlan, BPActivity.bp_id == BusinessPlan.id)
+            .join(Business, BusinessPlan.business_id == Business.id)
             .where(
                 BPActivity.is_deleted == False,
                 BPActivity.status.in_([BPActivityStatus.PENDIENTE, BPActivityStatus.EN_PROGRESO]),
             )
         )
-        # Leaders/admins see all; others only their assigned activities
-        if user.role not in (UserRole.ADMIN, UserRole.LEADER, UserRole.DIRECTIVO):
+        if not is_leader:
             acts_q = acts_q.where(BPActivity.owner_id == user.id)
+        acts_q = acts_q.order_by(BPActivity.due_date.asc().nullslast()).limit(12)
+        act_rows = (await db.execute(acts_q)).all()
 
-        acts_q = acts_q.order_by(BPActivity.due_date.asc().nullslast()).limit(8)
-        rows = (await db.execute(acts_q)).all()
+        if act_rows:
+            today = date_type.today()
+            act_lines = [f"ACTIVIDADES PENDIENTES/EN PROGRESO ({len(act_rows)}):"]
+            for act, bp_name, biz_name in act_rows:
+                due_str = ""
+                if act.due_date:
+                    days = (act.due_date - today).days
+                    due_str = f" · vence {act.due_date}"
+                    if days < 0:
+                        due_str += f" (VENCIDA hace {abs(days)}d)"
+                    elif days == 0:
+                        due_str += " (HOY)"
+                    elif days <= 3:
+                        due_str += f" (en {days}d ⚠️)"
+                grupo = f" [{act.grupo}]" if act.grupo else ""
+                pct = f" {act.progress}%" if act.progress else ""
+                act_lines.append(
+                    f"  • {act.title} — {act.status.value}{grupo} · {act.priority.value} prioridad"
+                    f" · {biz_name}{pct}{due_str}"
+                )
+            sections.append("\n".join(act_lines))
+        else:
+            sections.append("ACTIVIDADES: No hay actividades pendientes asignadas.")
 
-        if not rows:
-            return "El usuario no tiene actividades pendientes registradas en SmartFlow."
-
-        lines = [f"Actividades pendientes en SmartFlow para {user.full_name}:"]
-        for act, bp_name in rows:
-            due = f" — vence {act.due_date}" if act.due_date else ""
-            grupo = f" [{act.grupo}]" if act.grupo else ""
-            lines.append(
-                f"• {act.title} | Estado: {act.status.value} | Prioridad: {act.priority.value}"
-                f"{grupo} | Plan: {bp_name or 'N/A'}{due}"
+        # ── 4. Reuniones recientes ────────────────────────────────────────────
+        mtg_q = (
+            select(VoiceMeeting)
+            .where(
+                VoiceMeeting.is_deleted == False,
+                VoiceMeeting.status == MeetingStatus.COMPLETED,
+                VoiceMeeting.meeting_type == MeetingType.MEETING,
             )
-        return "\n".join(lines)
+            .order_by(VoiceMeeting.started_at.desc())
+            .limit(5)
+        )
+        if not is_leader:
+            mtg_q = mtg_q.where(VoiceMeeting.created_by_id == user.id)
+        recent_meetings = (await db.execute(mtg_q)).scalars().all()
+
+        if recent_meetings:
+            mtg_lines = ["REUNIONES RECIENTES:"]
+            for m in recent_meetings:
+                date_str = m.started_at.strftime("%Y-%m-%d") if m.started_at else "N/A"
+                dur = f" {m.duration_seconds // 60}min" if m.duration_seconds else ""
+                summary = f"\n    Resumen: {m.ai_summary[:120]}..." if m.ai_summary else ""
+                actions = f" | {len(m.ai_action_items)} acciones" if m.ai_action_items else ""
+                mtg_lines.append(f"  • {m.title} ({date_str}{dur}){actions}{summary}")
+            sections.append("\n".join(mtg_lines))
+
+        if not sections:
+            return ""
+
+        header = f"=== SmartFlow — datos en tiempo real para {user.full_name} ({user.role.value}) ==="
+        return header + "\n\n" + "\n\n".join(sections)
+
     except Exception as exc:
         logger.warning(f"_get_smartflow_context error: {exc}")
         return ""
