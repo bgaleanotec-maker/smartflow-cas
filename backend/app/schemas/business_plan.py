@@ -121,6 +121,7 @@ class BPActivityCreate(BaseModel):
     is_milestone: bool = False
     reminder_days_before: int = 3
     tags: Optional[dict] = None
+    grupo: Optional[str] = None
 
 
 class BPActivityUpdate(BaseModel):
@@ -143,6 +144,7 @@ class BPActivityUpdate(BaseModel):
     is_milestone: Optional[bool] = None
     reminder_days_before: Optional[int] = None
     tags: Optional[dict] = None
+    grupo: Optional[str] = None
 
 
 class BPActivityResponse(BaseModel):

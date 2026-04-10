@@ -130,21 +130,24 @@ function ARIALogo({ speaking = false }) {
 }
 
 // ─── Big mic button ───────────────────────────────────────────────────────────
-function MicButton({ state, onClick }) {
+function MicButton({ state, onClick, conversationListening = false }) {
   const base = 'relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 cursor-pointer select-none'
   const styles = {
     idle: `${base} bg-slate-700 hover:bg-slate-600 shadow-lg`,
     listening: `${base} bg-red-500 shadow-xl shadow-red-500/40 scale-105`,
-    processing: `${base} bg-brand-600 shadow-lg shadow-brand-500/40`,
-    speaking: `${base} bg-purple-600 shadow-lg shadow-purple-500/40`,
+    processing: `${base} bg-brand-600 shadow-lg shadow-brand-500/40 opacity-70 cursor-not-allowed`,
+    speaking: `${base} bg-purple-600 shadow-lg shadow-purple-500/40 opacity-70 cursor-not-allowed`,
     error: `${base} bg-red-700 hover:bg-red-600`,
   }
 
+  const isDisabled = state === 'processing' || state === 'speaking'
+
   return (
     <button
-      onClick={onClick}
+      onClick={isDisabled ? undefined : onClick}
       className={styles[state] || styles.idle}
       aria-label="Micrófono"
+      disabled={isDisabled}
     >
       {/* Pulse ring when recording */}
       {state === 'listening' && (
@@ -158,7 +161,10 @@ function MicButton({ state, onClick }) {
       ) : state === 'speaking' ? (
         <Volume2 size={32} className="text-white" />
       ) : state === 'listening' ? (
-        <MicOff size={32} className="text-white" />
+        // In conversation mode → show send icon; otherwise mic-off
+        conversationListening
+          ? <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          : <MicOff size={32} className="text-white" />
       ) : (
         <Mic size={32} className="text-white" />
       )}
@@ -254,6 +260,9 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   const [selectedBpId, setSelectedBpId] = useState('')
   const [selectedActivityId, setSelectedActivityId] = useState('')
 
+  const [isConversationActive, setIsConversationActive] = useState(false)
+  const [textInput, setTextInput] = useState('')
+
   const mediaRecorderRef = useRef(null)
   const streamRef = useRef(null)
   const audioContextRef = useRef(null)
@@ -262,6 +271,10 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   const chunkIntervalRef = useRef(null)
   const transcriptEndRef = useRef(null)
   const chatEndRef = useRef(null)
+  // Keep a ref to startAriaRecording so playAudio / sendAriaMessage can call it
+  // without stale closures (the ref is updated via useEffect on every render)
+  const conversationActiveRef = useRef(false)
+  const startAriaRecordingRef = useRef(null)
 
   // Auto-scroll
   useEffect(() => {
@@ -341,12 +354,18 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   const sendAriaMessage = async (text) => {
     if (ariaStatus === 'processing') return
     setAriaStatus('processing')
+
+    // Safety timeout — if still processing after 20s, reset to idle
+    const safetyTimer = setTimeout(() => {
+      setAriaStatus((s) => s === 'processing' ? 'idle' : s)
+    }, 20000)
+
     try {
-      const res = await voiceAPI.ariaChat({
-        text,
-        user_name: currentUser?.full_name || 'Usuario',
-        meeting_id: null,
-      })
+      const res = await voiceAPI.ariaChat(
+        { text, user_name: currentUser?.full_name || 'Usuario', meeting_id: null },
+        { timeout: 18000 },   // axios timeout: 18s (before safety timer fires)
+      )
+      clearTimeout(safetyTimer)
       const data = res.data
       if (text !== 'saludo_inicial') {
         setChat((prev) => [...prev, { role: 'user', text }])
@@ -357,10 +376,23 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
         playAudio(data.audio_base64)
       } else {
         setAriaStatus('idle')
+        // No audio (ElevenLabs not configured) → still continue conversation
+        if (conversationActiveRef.current) {
+          setTimeout(() => {
+            if (conversationActiveRef.current) startAriaRecordingRef.current?.()
+          }, 800)
+        }
       }
     } catch {
-      setAriaStatus('error')
-      setTimeout(() => setAriaStatus('idle'), 2000)
+      clearTimeout(safetyTimer)
+      setAriaStatus(conversationActiveRef.current ? 'idle' : 'error')
+      if (!conversationActiveRef.current) setTimeout(() => setAriaStatus('idle'), 2000)
+      // On error in conversation, give a moment before re-listening
+      if (conversationActiveRef.current) {
+        setTimeout(() => {
+          if (conversationActiveRef.current) startAriaRecordingRef.current?.()
+        }, 1200)
+      }
     }
   }
 
@@ -372,10 +404,21 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
     audio.onended = () => {
       setAriaStatus('idle')
       setIsARIASpeaking(false)
+      // Conversation mode: auto-restart listening after ARIA finishes speaking
+      if (conversationActiveRef.current) {
+        setTimeout(() => {
+          if (conversationActiveRef.current) startAriaRecordingRef.current?.()
+        }, 450)
+      }
     }
     audio.onerror = () => {
       setAriaStatus('idle')
       setIsARIASpeaking(false)
+      if (conversationActiveRef.current) {
+        setTimeout(() => {
+          if (conversationActiveRef.current) startAriaRecordingRef.current?.()
+        }, 450)
+      }
     }
   }
 
@@ -440,8 +483,14 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
             }
           }
 
-          if (!userText.trim()) {
+          // Filter blank or Whisper error messages — never send them to ARIA
+          const isWhisperError = !userText.trim()
+            || userText.startsWith('[No se pudo')
+            || userText.startsWith('[Could not')
+            || (userText.startsWith('[') && userText.endsWith(']'))
+          if (isWhisperError) {
             setAriaStatus('idle')
+            if (userText.trim()) toast.error('No se pudo entender el audio. Intenta de nuevo.')
             return
           }
 
@@ -466,11 +515,38 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
     }
   }
 
+  // Keep ref current on every render (avoids stale closures in playAudio / sendAriaMessage)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { startAriaRecordingRef.current = startAriaRecording })
+
+  const endConversation = () => {
+    conversationActiveRef.current = false
+    setIsConversationActive(false)
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop()
+    }
+    cleanupAudio()
+    setAriaStatus('idle')
+    setIsARIASpeaking(false)
+  }
+
   const handleAriaMicClick = () => {
-    if (ariaStatus === 'listening') {
-      stopAriaRecording()
-    } else if (ariaStatus === 'idle') {
-      startAriaRecording()
+    if (isConversationActive) {
+      // Pressing mic while in conversation: if listening → send current audio and continue
+      // conversation will auto-restart after ARIA responds
+      if (ariaStatus === 'listening') {
+        stopAriaRecording()
+      }
+      // If processing or speaking: ignore (don't interrupt)
+    } else {
+      // Start conversation mode
+      if (ariaStatus === 'listening') {
+        stopAriaRecording()
+      } else if (ariaStatus === 'idle' || ariaStatus === 'error') {
+        conversationActiveRef.current = true
+        setIsConversationActive(true)
+        startAriaRecording()
+      }
     }
   }
 
@@ -688,14 +764,46 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
                   />
                 </div>
 
+                {/* Conversation active indicator */}
+                {isConversationActive && (
+                  <div className="flex items-center justify-center gap-2 mx-4 mb-1 px-3 py-1.5 rounded-full bg-emerald-900/30 border border-emerald-700/40">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+                    <span className="text-xs text-emerald-400 font-medium">Conversación activa</span>
+                  </div>
+                )}
+
                 {/* Status */}
                 <p className="text-center text-xs text-slate-400 mt-1 mb-3 px-4">
-                  {STATUS[ariaStatus] || STATUS.idle}
+                  {isConversationActive && ariaStatus === 'idle'
+                    ? 'Iniciando escucha...'
+                    : isConversationActive && ariaStatus === 'listening'
+                    ? 'Te escucho — toca para enviar'
+                    : isConversationActive && ariaStatus === 'speaking'
+                    ? 'ARIA está hablando...'
+                    : STATUS[ariaStatus] || STATUS.idle}
                 </p>
 
                 {/* Big mic */}
-                <div className="flex justify-center mb-4">
-                  <MicButton state={ariaStatus} onClick={handleAriaMicClick} />
+                <div className="flex flex-col items-center gap-3 mb-4">
+                  {!isConversationActive ? (
+                    <div className="flex flex-col items-center gap-1">
+                      <MicButton state={ariaStatus} onClick={handleAriaMicClick} conversationListening={false} />
+                      {ariaStatus === 'idle' && (
+                        <p className="text-[10px] text-slate-600 mt-1">Toca para conversar</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-4">
+                      <MicButton state={ariaStatus} onClick={handleAriaMicClick} conversationListening={ariaStatus === 'listening'} />
+                      <button
+                        onClick={endConversation}
+                        className="flex flex-col items-center gap-1 px-4 py-2 rounded-xl bg-red-900/40 border border-red-700/50 text-red-400 hover:bg-red-900/60 transition-colors text-xs font-medium"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        Terminar
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Chat history */}
@@ -710,6 +818,40 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
                     />
                   ))}
                   <div ref={chatEndRef} />
+                </div>
+
+                {/* Text input — always available as fallback when mic/Whisper doesn't work */}
+                <div className="flex-shrink-0 border-t border-slate-800 px-3 py-2">
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="text"
+                      value={textInput}
+                      onChange={(e) => setTextInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && textInput.trim() && ariaStatus !== 'processing') {
+                          const msg = textInput.trim()
+                          setTextInput('')
+                          sendAriaMessage(msg)
+                        }
+                      }}
+                      placeholder="Escribe tu mensaje..."
+                      disabled={ariaStatus === 'processing' || ariaStatus === 'speaking'}
+                      className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-brand-500 disabled:opacity-40"
+                    />
+                    <button
+                      onClick={() => {
+                        if (textInput.trim() && ariaStatus !== 'processing') {
+                          const msg = textInput.trim()
+                          setTextInput('')
+                          sendAriaMessage(msg)
+                        }
+                      }}
+                      disabled={!textInput.trim() || ariaStatus === 'processing' || ariaStatus === 'speaking'}
+                      className="p-2 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

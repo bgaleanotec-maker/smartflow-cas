@@ -20,27 +20,34 @@ const TEAM_BADGES = {
   CAS: 'bg-green-900/50 text-green-400',
 }
 
-function TempPasswordModal({ name, email, password, onClose }) {
+function TempPasswordModal({ name, email, password, onClose, mode = 'created' }) {
   const [copied, setCopied] = useState(false)
   const copy = () => {
     navigator.clipboard.writeText(password)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
+  const isReset = mode === 'reset'
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
       <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 space-y-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-green-600/20 rounded-full flex items-center justify-center">
-            <CheckCircle size={20} className="text-green-400" />
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isReset ? 'bg-amber-600/20' : 'bg-green-600/20'}`}>
+            {isReset
+              ? <KeyRound size={20} className="text-amber-400" />
+              : <CheckCircle size={20} className="text-green-400" />
+            }
           </div>
           <div>
-            <h2 className="font-semibold text-white">Usuario creado</h2>
+            <h2 className="font-semibold text-white">{isReset ? 'Contraseña restablecida' : 'Usuario creado'}</h2>
             <p className="text-xs text-slate-400">{name} · {email}</p>
           </div>
         </div>
         <p className="text-sm text-slate-300">
-          Guarda o comparte esta contraseña temporal con el usuario.
+          {isReset
+            ? 'Comparte esta nueva contraseña temporal con el usuario.'
+            : 'Guarda o comparte esta contraseña temporal con el usuario.'
+          }
           {' '}<span className="text-amber-400 font-medium">No volverá a mostrarse.</span>
         </p>
         <div className="bg-slate-800 rounded-xl p-4 flex items-center justify-between gap-3">
@@ -185,6 +192,7 @@ export default function UsersPage() {
   const [teamFilter, setTeamFilter] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [createdUser, setCreatedUser] = useState(null)
+  const [resetUser, setResetUser] = useState(null)
   const qc = useQueryClient()
 
   const { data: users, isLoading } = useQuery({
@@ -204,9 +212,16 @@ export default function UsersPage() {
 
   const resetPasswordMutation = useMutation({
     mutationFn: (id) => usersAPI.resetPassword(id),
-    onSuccess: (res) => {
-      toast.success(`Contraseña temporal: ${res.data.temp_password}`, { duration: 8000 })
+    onSuccess: (res, userId) => {
+      // Find the user by id so we can show their name/email in the modal
+      const user = users?.find(u => u.id === userId)
+      setResetUser({
+        full_name: user?.full_name ?? '—',
+        email: user?.email ?? '—',
+        temp_password: res.data.temp_password,
+      })
     },
+    onError: (err) => toast.error(err.response?.data?.detail || 'Error al resetear contraseña'),
   })
 
   return (
@@ -338,6 +353,16 @@ export default function UsersPage() {
           email={createdUser.email}
           password={createdUser.temp_password}
           onClose={() => setCreatedUser(null)}
+          mode="created"
+        />
+      )}
+      {resetUser && (
+        <TempPasswordModal
+          name={resetUser.full_name}
+          email={resetUser.email}
+          password={resetUser.temp_password}
+          onClose={() => setResetUser(null)}
+          mode="reset"
         />
       )}
     </div>

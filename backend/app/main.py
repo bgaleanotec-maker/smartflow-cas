@@ -51,6 +51,7 @@ async def _run_column_migrations():
             ("bp_activities", "reminder_days_before", "INTEGER DEFAULT 3"),
             ("bp_activities", "reminder_sent_at", "DATETIME"),
             ("bp_activities", "tags", "JSON"),
+            ("bp_activities", "grupo", "VARCHAR(100)"),
         ]
         async with AsyncSessionLocal() as db:
             for table, column, col_def in migrations:
@@ -80,6 +81,7 @@ async def _run_column_migrations():
             "ALTER TABLE bp_activities ADD COLUMN IF NOT EXISTS reminder_days_before INTEGER DEFAULT 3",
             "ALTER TABLE bp_activities ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMP WITH TIME ZONE",
             "ALTER TABLE bp_activities ADD COLUMN IF NOT EXISTS tags JSON",
+            "ALTER TABLE bp_activities ADD COLUMN IF NOT EXISTS grupo VARCHAR(100)",
             # bp_lines AI columns
             "ALTER TABLE bp_lines ADD COLUMN IF NOT EXISTS is_ai_generated BOOLEAN DEFAULT FALSE",
             "ALTER TABLE bp_lines ADD COLUMN IF NOT EXISTS ai_confidence FLOAT",

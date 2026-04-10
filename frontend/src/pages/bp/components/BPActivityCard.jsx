@@ -39,6 +39,15 @@ const CATEGORY_COLORS = {
   tecnologia: 'bg-sky-500/15 text-sky-400',
 }
 
+const GRUPO_COLORS = {
+  'Margen': 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+  'Opex': 'bg-red-500/15 text-red-400 border-red-500/30',
+  'Magnitud': 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+  'Juntas': 'bg-violet-500/15 text-violet-400 border-violet-500/30',
+  'Brookfield': 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+  'Vicepresidencia': 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+}
+
 export default function BPActivityCard({ activity, onStatusChange, onEdit, onOpenDrawer }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -113,6 +122,11 @@ export default function BPActivityCard({ activity, onStatusChange, onEdit, onOpe
             <span className={clsx('badge text-xs', CATEGORY_COLORS[activity.category] || 'bg-slate-500/15 text-slate-400')}>
               {CATEGORY_LABELS[activity.category] || activity.category}
             </span>
+            {activity.grupo && (
+              <span className={clsx('badge text-xs border', GRUPO_COLORS[activity.grupo] || 'bg-slate-500/15 text-slate-400 border-slate-500/30')}>
+                {activity.grupo}
+              </span>
+            )}
             {activity.due_date && (
               <span className={clsx(
                 'flex items-center gap-1 text-xs',

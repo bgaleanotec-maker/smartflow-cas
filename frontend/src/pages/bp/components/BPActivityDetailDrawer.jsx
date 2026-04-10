@@ -28,6 +28,25 @@ const STATUS_CONFIG = {
 
 const REMINDER_OPTIONS = [1, 2, 3, 5, 7, 14]
 
+const GRUPO_OPTIONS = [
+  { value: '', label: 'Sin grupo' },
+  { value: 'Margen', label: 'Margen' },
+  { value: 'Opex', label: 'Opex' },
+  { value: 'Magnitud', label: 'Magnitud' },
+  { value: 'Juntas', label: 'Juntas' },
+  { value: 'Brookfield', label: 'Brookfield' },
+  { value: 'Vicepresidencia', label: 'Vicepresidencia' },
+]
+
+const GRUPO_COLORS = {
+  'Margen': 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+  'Opex': 'bg-red-500/15 text-red-400 border-red-500/30',
+  'Magnitud': 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+  'Juntas': 'bg-violet-500/15 text-violet-400 border-violet-500/30',
+  'Brookfield': 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+  'Vicepresidencia': 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+}
+
 const PRIORITY_COLORS_MAP = {
   critica: '#ef4444',
   alta: '#f97316',
@@ -402,6 +421,7 @@ export default function BPActivityDetailDrawer({ bpId, activity, onClose, onUpda
         status: activity.status || 'pendiente',
         priority: activity.priority || 'media',
         category: activity.category || 'operativo',
+        grupo: activity.grupo || '',
         owner_id: activity.owner_id || '',
         due_date: activity.due_date || '',
         start_date: activity.start_date || '',
@@ -449,6 +469,8 @@ export default function BPActivityDetailDrawer({ bpId, activity, onClose, onUpda
     else if (payload.actual_hours !== null) payload.actual_hours = parseFloat(payload.actual_hours)
     // Store tags as { list: [...] }
     payload.tags = form.tags?.length > 0 ? { list: form.tags } : null
+    // grupo: empty string → null
+    if (!payload.grupo) payload.grupo = null
     updateMutation.mutate(payload)
   }
 
@@ -522,6 +544,21 @@ export default function BPActivityDetailDrawer({ bpId, activity, onClose, onUpda
                   </select>
                 ) : (
                   <span className={clsx('badge text-xs border', PRIORITY_CONFIG[form.priority]?.color)}>{PRIORITY_CONFIG[form.priority]?.label}</span>
+                )}
+                {canWrite ? (
+                  <select
+                    className="input py-0.5 px-2 text-xs"
+                    value={form.grupo || ''}
+                    onChange={(e) => handleChange('grupo', e.target.value)}
+                  >
+                    {GRUPO_OPTIONS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
+                  </select>
+                ) : (
+                  form.grupo && (
+                    <span className={clsx('badge text-xs border', GRUPO_COLORS[form.grupo] || 'bg-slate-500/15 text-slate-400 border-slate-500/30')}>
+                      {form.grupo}
+                    </span>
+                  )
                 )}
                 {activity.is_milestone && (
                   <span className="badge text-xs bg-amber-500/15 text-amber-400 border border-amber-500/30">◆ Hito</span>

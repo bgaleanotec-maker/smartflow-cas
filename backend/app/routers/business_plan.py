@@ -145,6 +145,7 @@ def _activity_to_dict(act: BPActivity) -> dict:
         "is_milestone": act.is_milestone,
         "reminder_days_before": act.reminder_days_before,
         "tags": act.tags,
+        "grupo": act.grupo,
         "checklist_total": len(checklist),
         "checklist_done": sum(1 for i in checklist if i.is_completed),
         "comment_count": len([c for c in comments if not c.is_deleted]),
@@ -592,6 +593,7 @@ async def list_activities(
     status: Optional[str] = None,
     category: Optional[str] = None,
     priority: Optional[str] = None,
+    grupo: Optional[str] = None,
 ):
     query = (
         select(BPActivity)
@@ -603,6 +605,8 @@ async def list_activities(
         query = query.where(BPActivity.category == category)
     if priority:
         query = query.where(BPActivity.priority == priority)
+    if grupo:
+        query = query.where(BPActivity.grupo == grupo)
     result = await db.execute(query)
     activities = result.scalars().all()
     out = [_activity_to_dict(a) for a in activities]

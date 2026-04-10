@@ -65,6 +65,16 @@ const ACTIVITY_CATEGORIES = [
   { value: 'tecnologia', label: 'Tecnología' },
 ]
 
+const ACTIVITY_GRUPOS = [
+  { value: '', label: 'Todos los grupos' },
+  { value: 'Margen', label: 'Margen' },
+  { value: 'Opex', label: 'Opex' },
+  { value: 'Magnitud', label: 'Magnitud' },
+  { value: 'Juntas', label: 'Juntas' },
+  { value: 'Brookfield', label: 'Brookfield' },
+  { value: 'Vicepresidencia', label: 'Vicepresidencia' },
+]
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatCOP(value, unit = 'COP') {
@@ -264,6 +274,12 @@ function ActivityModal({ activity, users, onClose, onSave }) {
               <label className="label">Avance ({form.progress}%)</label>
               <input type="range" min={0} max={100} step={5} className="w-full accent-brand-500" value={form.progress} onChange={(e) => setForm({ ...form, progress: parseInt(e.target.value) })} />
             </div>
+          </div>
+          <div>
+            <label className="label">Grupo CAS</label>
+            <select className="input" value={form.grupo || ''} onChange={(e) => setForm({ ...form, grupo: e.target.value || null })}>
+              {ACTIVITY_GRUPOS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+            </select>
           </div>
           <div>
             <label className="label">Notas</label>
@@ -607,6 +623,7 @@ function ActividadesTab({ bp, bpId, canWrite, onOpenDrawer }) {
   const [actModal, setActModal] = useState(null) // null | 'new' | activity
   const [statusFilter, setStatusFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
+  const [grupoFilter, setGrupoFilter] = useState('')
 
   const { data: users } = useQuery({
     queryKey: ['users-list'],
@@ -646,6 +663,7 @@ function ActividadesTab({ bp, bpId, canWrite, onOpenDrawer }) {
   const activities = (bp.activities || []).filter((a) => {
     if (statusFilter && a.status !== statusFilter) return false
     if (categoryFilter && a.category !== categoryFilter) return false
+    if (grupoFilter && a.grupo !== grupoFilter) return false
     return true
   })
 
@@ -668,9 +686,12 @@ function ActividadesTab({ bp, bpId, canWrite, onOpenDrawer }) {
           <select className="input py-1.5 text-sm" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
             {ACTIVITY_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
-          {(statusFilter || categoryFilter) && (
+          <select className="input py-1.5 text-sm" value={grupoFilter} onChange={(e) => setGrupoFilter(e.target.value)}>
+            {ACTIVITY_GRUPOS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+          </select>
+          {(statusFilter || categoryFilter || grupoFilter) && (
             <button
-              onClick={() => { setStatusFilter(''); setCategoryFilter('') }}
+              onClick={() => { setStatusFilter(''); setCategoryFilter(''); setGrupoFilter('') }}
               className="text-xs text-slate-400 hover:text-slate-100 flex items-center gap-1"
             >
               <X size={12} /> Limpiar
@@ -689,7 +710,7 @@ function ActividadesTab({ bp, bpId, canWrite, onOpenDrawer }) {
         <div className="card border border-slate-700/50 text-center py-10">
           <Target size={32} className="text-slate-600 mx-auto mb-2" />
           <p className="text-slate-500 text-sm">
-            {statusFilter || categoryFilter ? 'No hay actividades con estos filtros.' : 'No hay actividades en este BP. ¡Agrega la primera!'}
+            {(statusFilter || categoryFilter || grupoFilter) ? 'No hay actividades con estos filtros.' : 'No hay actividades en este BP. ¡Agrega la primera!'}
           </p>
         </div>
       ) : (

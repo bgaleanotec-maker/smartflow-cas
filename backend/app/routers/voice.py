@@ -387,13 +387,18 @@ async def transcribe_chunk(
     else:
         ts_in_meeting = None
 
+    # If Whisper returned an error, store empty text (don't save error messages as transcript)
+    transcript_text = result.get("text", "") or ""
+    if result.get("error") or transcript_text.startswith("["):
+        transcript_text = ""
+
     chunk = TranscriptChunk(
         meeting_id=meeting_id,
         sequence_num=seq_num,
         speaker_id=user.id,
         speaker_name=user.full_name,
-        text=result.get("text", ""),
-        confidence=result.get("confidence"),
+        text=transcript_text,
+        confidence=result.get("confidence") if not result.get("error") else None,
         language=result.get("language"),
         duration_seconds=result.get("duration"),
         timestamp_in_meeting=ts_in_meeting,

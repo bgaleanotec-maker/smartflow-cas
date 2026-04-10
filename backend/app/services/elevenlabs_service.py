@@ -115,7 +115,7 @@ async def text_to_speech(
       - High-fidelity content: model=eleven_multilingual_v2, optimize_streaming_latency=0
     """
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=12.0) as client:
             resp = await client.post(
                 f"{ELEVENLABS_BASE_URL}/v1/text-to-speech/{voice_id}"
                 f"?output_format={output_format}"
@@ -633,7 +633,7 @@ async def aria_speak(
     latency_opt = 3 if model == MODEL_FLASH_V2_5 else 1
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=12.0) as client:
             body: dict = {
                 "text": text,
                 "model_id": model,

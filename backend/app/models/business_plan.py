@@ -152,6 +152,7 @@ class BPActivity(Base):
     reminder_days_before: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
     reminder_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     tags: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # list of tag strings
+    grupo: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # CAS sub-group: Margen, Opex, Magnitud, Juntas, Brookfield, Vicepresidencia...
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
