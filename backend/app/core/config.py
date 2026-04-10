@@ -5,7 +5,7 @@ from typing import Optional
 class Settings(BaseSettings):
     # App
     APP_NAME: str = "SmartFlow"
-    VERSION: str = "1.3.0"  # Voice AI + Executive Dashboard + ARIA 2026-04-09
+    VERSION: str = "1.4.0"  # DB migrations + Whisper/ElevenLabs skill upgrades 2026-04-10
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
     FRONTEND_URL: str = "http://localhost:5173"
