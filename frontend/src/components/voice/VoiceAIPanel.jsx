@@ -67,6 +67,12 @@ const STATUS = {
   error: 'Error al procesar',
 }
 
+// ─── VAD constants ────────────────────────────────────────────────────────────
+const VAD_THRESHOLD = 14       // RMS amplitude level (0–128) to detect speech
+const VAD_ONSET_MS = 180       // ms of continuous speech before recording starts
+const VAD_SILENCE_MS = 1100    // ms of silence after speech before sending
+const VAD_MIN_RECORD_MS = 400  // minimum recording duration to bother sending
+
 // ─── Speaker colors for transcript ───────────────────────────────────────────
 const SPEAKER_COLORS = [
   'bg-brand-600',
@@ -279,19 +285,33 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   const [textInput, setTextInput] = useState('')
   const [slowWarning, setSlowWarning] = useState(false)
 
+  // Wrapper: keeps ariaStatusRef in sync with ariaStatus state
+  const setStatus = (s) => { ariaStatusRef.current = s; setAriaStatus(s) }
+
   const mediaRecorderRef = useRef(null)
   const streamRef = useRef(null)
   const audioContextRef = useRef(null)
   const analyserRef = useRef(null)
   const chunksRef = useRef([])
   const chunkIntervalRef = useRef(null)
-  const autoStopTimerRef = useRef(null)   // auto-stop recording in conversation mode
   const transcriptEndRef = useRef(null)
   const chatEndRef = useRef(null)
-  // Keep a ref to startAriaRecording so playAudio / sendAriaMessage can call it
-  // without stale closures (the ref is updated via useEffect on every render)
   const conversationActiveRef = useRef(false)
-  const startAriaRecordingRef = useRef(null)
+
+  // VAD system
+  const ariaStatusRef = useRef('idle')      // mirrors ariaStatus for VAD loop (no stale closures)
+  const isARIASpeakingRef = useRef(false)   // mirrors isARIASpeaking
+  const vadStreamRef = useRef(null)         // persistent mic stream for VAD
+  const vadContextRef = useRef(null)        // AudioContext for VAD
+  const vadAnalyserRef = useRef(null)       // AnalyserNode
+  const vadIntervalRef = useRef(null)       // setInterval handle
+  const vadRecorderRef = useRef(null)       // MediaRecorder for current speech segment
+  const vadChunksRef = useRef([])           // audio chunks for current segment
+  const speechActiveRef = useRef(false)     // currently recording a speech segment
+  const speechOnsetRef = useRef(null)       // timestamp when speech onset first detected (debounce)
+  const silenceStartRef = useRef(null)      // timestamp when silence started after speech
+  const recordingStartRef = useRef(null)    // timestamp when current recording started
+  const ariaAudioRef = useRef(null)         // current ARIA HTML Audio element (for interruption)
 
   // Auto-scroll
   useEffect(() => {
@@ -347,7 +367,6 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   }, [isOpen])
 
   const cleanupAudio = useCallback(() => {
-    if (autoStopTimerRef.current) { clearTimeout(autoStopTimerRef.current); autoStopTimerRef.current = null }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop()
     }
@@ -370,8 +389,8 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   // ── ARIA Chat ──────────────────────────────────────────────────────────────
 
   const sendAriaMessage = async (text) => {
-    if (ariaStatus === 'processing') return
-    setAriaStatus('processing')
+    if (ariaStatusRef.current === 'processing') return
+    setStatus('processing')
     setSlowWarning(false)
 
     // Show "server waking up" warning after 5s (Render free tier cold start)
@@ -380,7 +399,7 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
     // Safety timeout — if still processing after 25s, reset to idle
     const safetyTimer = setTimeout(() => {
       setSlowWarning(false)
-      setAriaStatus((s) => s === 'processing' ? 'idle' : s)
+      setStatus('idle')
     }, 25000)
 
     // Build recent chat history to pass to backend (last 6 messages for context)
@@ -410,40 +429,29 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       clearTimeout(slowTimer)
       clearTimeout(safetyTimer)
       setSlowWarning(false)
-      setAriaStatus(conversationActiveRef.current ? 'idle' : 'error')
-      if (!conversationActiveRef.current) setTimeout(() => setAriaStatus('idle'), 2000)
-      // On error in conversation, give a moment before re-listening
-      if (conversationActiveRef.current) {
-        setTimeout(() => {
-          if (conversationActiveRef.current) startAriaRecordingRef.current?.()
-        }, 1200)
-      }
+      setStatus('idle')
     }
   }
 
   const playAudio = (b64) => {
-    setAriaStatus('speaking')
+    setStatus('speaking')
+    isARIASpeakingRef.current = true
     setIsARIASpeaking(true)
     const audio = new Audio(`data:audio/mpeg;base64,${b64}`)
+    ariaAudioRef.current = audio
     audio.play().catch(() => {})
     audio.onended = () => {
-      setAriaStatus('idle')
+      ariaAudioRef.current = null
+      isARIASpeakingRef.current = false
       setIsARIASpeaking(false)
-      // Conversation mode: auto-restart listening after ARIA finishes speaking
-      if (conversationActiveRef.current) {
-        setTimeout(() => {
-          if (conversationActiveRef.current) startAriaRecordingRef.current?.()
-        }, 450)
-      }
+      setStatus('idle')
+      // VAD loop will auto-detect next speech — no manual restart needed
     }
     audio.onerror = () => {
-      setAriaStatus('idle')
+      ariaAudioRef.current = null
+      isARIASpeakingRef.current = false
       setIsARIASpeaking(false)
-      if (conversationActiveRef.current) {
-        setTimeout(() => {
-          if (conversationActiveRef.current) startAriaRecordingRef.current?.()
-        }, 450)
-      }
+      setStatus('idle')
     }
   }
 
@@ -451,11 +459,10 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   // Uses sentence-chunking to avoid Chrome's known onend bug with long strings
   const speakWithBrowser = useCallback((text) => {
     const done = () => {
-      setAriaStatus('idle')
+      isARIASpeakingRef.current = false
       setIsARIASpeaking(false)
-      if (conversationActiveRef.current) {
-        setTimeout(() => { if (conversationActiveRef.current) startAriaRecordingRef.current?.() }, 500)
-      }
+      setStatus('idle')
+      // VAD auto-detects next speech
     }
 
     if (!window.speechSynthesis) { done(); return }
@@ -497,154 +504,195 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       speakNext()
     }
 
-    setAriaStatus('speaking')
+    setStatus('speaking')
+    isARIASpeakingRef.current = true
     setIsARIASpeaking(true)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Start ARIA mic recording → transcribe → send to ARIA
-  const startAriaRecording = async () => {
-    if (ariaStatus !== 'idle') return
+  // ── VAD: Interrupt ARIA if currently speaking ─────────────────────────────
+  const interruptARIA = () => {
+    if (ariaAudioRef.current) {
+      try { ariaAudioRef.current.pause() } catch {}
+      ariaAudioRef.current = null
+    }
+    if (window.speechSynthesis) window.speechSynthesis.cancel()
+    isARIASpeakingRef.current = false
+    setIsARIASpeaking(false)
+  }
+
+  // ── VAD: Start a new speech segment recording ─────────────────────────────
+  const startVADRecording = () => {
+    if (!vadStreamRef.current || speechActiveRef.current) return
+    speechActiveRef.current = true
+    recordingStartRef.current = Date.now()
+    vadChunksRef.current = []
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      streamRef.current = stream
+      const mr = new MediaRecorder(vadStreamRef.current, { mimeType: 'audio/webm' })
+      vadRecorderRef.current = mr
 
-      // Audio analyser
-      const ctx = new AudioContext()
-      audioContextRef.current = ctx
-      const source = ctx.createMediaStreamSource(stream)
-      const analyser = ctx.createAnalyser()
-      analyser.fftSize = 64
-      source.connect(analyser)
-      analyserRef.current = analyser
-      setAnalyserNode(analyser)
-
-      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' })
-      mediaRecorderRef.current = mr
-      chunksRef.current = []
-
-      mr.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data)
-      }
+      mr.ondataavailable = (e) => { if (e.data.size > 0) vadChunksRef.current.push(e.data) }
 
       mr.onstop = async () => {
-        // Clear any pending auto-stop timer
-        if (autoStopTimerRef.current) { clearTimeout(autoStopTimerRef.current); autoStopTimerRef.current = null }
-        cleanupAudio()
+        const duration = Date.now() - (recordingStartRef.current || 0)
+        speechActiveRef.current = false
+        silenceStartRef.current = null
 
-        // Helper: restart conversation after failed/empty transcription
-        const restartIfConversation = (delay = 600) => {
-          if (conversationActiveRef.current) {
-            setTimeout(() => { if (conversationActiveRef.current) startAriaRecordingRef.current?.() }, delay)
-          }
-        }
-
-        if (chunksRef.current.length === 0) {
-          setAriaStatus('idle')
-          restartIfConversation()
+        if (vadChunksRef.current.length === 0 || duration < VAD_MIN_RECORD_MS) {
+          setStatus('idle')
           return
         }
-        setAriaStatus('processing')
 
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
-        chunksRef.current = []
+        setStatus('processing')
+        const blob = new Blob(vadChunksRef.current, { type: 'audio/webm' })
+        vadChunksRef.current = []
 
         try {
-          let tempMeetingId = null
+          let userText = ''
           try {
             const mRes = await voiceAPI.createMeeting({ title: 'ARIA Chat', meeting_type: 'aria_chat' })
-            tempMeetingId = mRes.data.id
-          } catch { /* meeting creation failed — transcribe without saving */ }
-
-          let userText = ''
-          if (tempMeetingId) {
+            const tempId = mRes.data.id
             try {
-              const tRes = await voiceAPI.transcribeChunk(tempMeetingId, blob)
+              const tRes = await voiceAPI.transcribeChunk(tempId, blob)
               userText = tRes.data.text || ''
-              voiceAPI.deleteMeeting(tempMeetingId).catch(() => {})
-            } catch {
-              voiceAPI.deleteMeeting(tempMeetingId).catch(() => {})
+            } finally {
+              voiceAPI.deleteMeeting(tempId).catch(() => {})
             }
-          }
+          } catch { /* transcription failed — silent */ }
 
-          // Filter blank or Whisper error messages — never send them to ARIA
-          const isWhisperError = !userText.trim()
-            || userText.startsWith('[No se pudo')
-            || userText.startsWith('[Could not')
-            || (userText.startsWith('[') && userText.endsWith(']'))
-          if (isWhisperError) {
-            setAriaStatus('idle')
-            restartIfConversation()   // keep conversation going even if no speech detected
-            return
-          }
+          const isWhisperError = !userText.trim() || userText.startsWith('[')
+          if (isWhisperError) { setStatus('idle'); return }
 
           await sendAriaMessage(userText)
         } catch {
-          setAriaStatus('error')
-          setTimeout(() => setAriaStatus('idle'), 2000)
-          restartIfConversation(2500)
+          setStatus('idle')
         }
       }
 
       mr.start()
-      setAriaStatus('listening')
-
-      // In conversation mode: auto-stop after 6s so user doesn't have to tap
-      if (conversationActiveRef.current) {
-        autoStopTimerRef.current = setTimeout(() => {
-          autoStopTimerRef.current = null
-          if (mediaRecorderRef.current?.state === 'recording') {
-            mediaRecorderRef.current.stop()
-          }
-        }, 6000)
-      }
+      setStatus('listening')
     } catch {
-      setAriaStatus('error')
-      setTimeout(() => setAriaStatus('idle'), 2000)
+      speechActiveRef.current = false
+      setStatus('idle')
     }
   }
 
-  const stopAriaRecording = () => {
-    if (autoStopTimerRef.current) { clearTimeout(autoStopTimerRef.current); autoStopTimerRef.current = null }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop()
+  // ── VAD: Stop current speech segment recording ────────────────────────────
+  const stopVADRecording = () => {
+    if (vadRecorderRef.current?.state === 'recording') {
+      vadRecorderRef.current.stop()
     }
   }
 
-  // Keep ref current on every render (avoids stale closures in playAudio / sendAriaMessage)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { startAriaRecordingRef.current = startAriaRecording })
+  // ── VAD: Start continuous listening loop ──────────────────────────────────
+  const startVAD = async () => {
+    if (vadStreamRef.current) return  // already running
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      vadStreamRef.current = stream
+
+      const ctx = new AudioContext()
+      vadContextRef.current = ctx
+      const source = ctx.createMediaStreamSource(stream)
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 512
+      analyser.smoothingTimeConstant = 0.4
+      source.connect(analyser)
+      vadAnalyserRef.current = analyser
+      setAnalyserNode(analyser)
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount)
+
+      vadIntervalRef.current = setInterval(() => {
+        if (!conversationActiveRef.current) return
+
+        analyser.getByteFrequencyData(dataArray)
+        let sum = 0
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i] * dataArray[i]
+        const rms = Math.sqrt(sum / dataArray.length)
+        const isSpeaking = rms > VAD_THRESHOLD
+        const now = Date.now()
+
+        if (isSpeaking) {
+          silenceStartRef.current = null
+
+          // Interrupt ARIA if it's currently speaking
+          if (isARIASpeakingRef.current) {
+            interruptARIA()
+            setStatus('idle')
+            speechOnsetRef.current = null
+            return
+          }
+
+          if (speechActiveRef.current) return  // already recording
+
+          // Speech onset debounce: must be loud for VAD_ONSET_MS before we start recording
+          if (!speechOnsetRef.current) {
+            speechOnsetRef.current = now
+          } else if (now - speechOnsetRef.current >= VAD_ONSET_MS) {
+            speechOnsetRef.current = null
+            if (ariaStatusRef.current === 'idle') {
+              startVADRecording()
+            }
+          }
+        } else {
+          // Silence
+          speechOnsetRef.current = null
+
+          if (!speechActiveRef.current) return  // nothing to end
+
+          if (!silenceStartRef.current) {
+            silenceStartRef.current = now
+          } else if (now - silenceStartRef.current >= VAD_SILENCE_MS) {
+            // User stopped speaking — send the recording
+            stopVADRecording()
+          }
+        }
+      }, 50)  // 50ms polling = 20Hz
+    } catch (err) {
+      console.error('VAD failed to start:', err)
+    }
+  }
+
+  // ── VAD: Stop everything ──────────────────────────────────────────────────
+  const stopVAD = () => {
+    if (vadIntervalRef.current) { clearInterval(vadIntervalRef.current); vadIntervalRef.current = null }
+    if (vadRecorderRef.current?.state !== 'inactive') {
+      try { vadRecorderRef.current?.stop() } catch {}
+    }
+    vadRecorderRef.current = null
+    if (vadStreamRef.current) { vadStreamRef.current.getTracks().forEach(t => t.stop()); vadStreamRef.current = null }
+    if (vadContextRef.current) { try { vadContextRef.current.close() } catch {} vadContextRef.current = null }
+    vadAnalyserRef.current = null
+    speechActiveRef.current = false
+    speechOnsetRef.current = null
+    silenceStartRef.current = null
+    setAnalyserNode(null)
+  }
 
   const endConversation = () => {
     conversationActiveRef.current = false
     setIsConversationActive(false)
-    if (autoStopTimerRef.current) { clearTimeout(autoStopTimerRef.current); autoStopTimerRef.current = null }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop()
-    }
-    // Stop browser TTS if speaking
-    if (window.speechSynthesis) window.speechSynthesis.cancel()
-    cleanupAudio()
-    setAriaStatus('idle')
-    setIsARIASpeaking(false)
+    interruptARIA()
+    stopVAD()
+    cleanupAudio()  // for meeting recording cleanup
+    setStatus('idle')
   }
 
   const handleAriaMicClick = () => {
     if (isConversationActive) {
-      // Pressing mic while in conversation: if listening → send current audio and continue
-      // conversation will auto-restart after ARIA responds
-      if (ariaStatus === 'listening') {
-        stopAriaRecording()
+      // If currently recording → manually stop and send now (early send)
+      if (speechActiveRef.current) {
+        stopVADRecording()
       }
-      // If processing or speaking: ignore (don't interrupt)
     } else {
       // Start conversation mode
-      if (ariaStatus === 'listening') {
-        stopAriaRecording()
-      } else if (ariaStatus === 'idle' || ariaStatus === 'error') {
-        conversationActiveRef.current = true
-        setIsConversationActive(true)
-        startAriaRecording()
-      }
+      conversationActiveRef.current = true
+      setIsConversationActive(true)
+      startVAD().then(() => {
+        // Auto-send greeting after mic is ready
+        sendAriaMessage('saludo_inicial')
+      })
     }
   }
 
@@ -883,11 +931,11 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
                 {/* Status */}
                 <p className="text-center text-xs text-slate-400 mt-1 mb-3 px-4">
                   {isConversationActive && ariaStatus === 'idle'
-                    ? 'Iniciando escucha...'
+                    ? '👂 Escuchando... habla cuando quieras'
                     : isConversationActive && ariaStatus === 'listening'
-                    ? '🎙️ Te escucho — habla ahora (o toca para enviar)'
+                    ? '🎙️ Captando tu voz...'
                     : isConversationActive && ariaStatus === 'speaking'
-                    ? '🔊 ARIA está hablando...'
+                    ? '🔊 ARIA está hablando... (habla para interrumpir)'
                     : isConversationActive && ariaStatus === 'processing'
                     ? '⏳ Procesando...'
                     : STATUS[ariaStatus] || STATUS.idle}
@@ -897,18 +945,18 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
                 <div className="flex flex-col items-center gap-3 mb-4">
                   {!isConversationActive ? (
                     <div className="flex flex-col items-center gap-1">
-                      <MicButton state={ariaStatus} onClick={handleAriaMicClick} conversationListening={false} />
-                      {ariaStatus === 'idle' && (
-                        <p className="text-[10px] text-slate-600 mt-1">Toca para conversar</p>
-                      )}
+                      <MicButton state={ariaStatus} onClick={handleAriaMicClick} />
+                      {ariaStatus === 'idle' && <p className="text-[10px] text-slate-600 mt-1">Toca para conversar</p>}
                     </div>
                   ) : (
                     <div className="flex items-center gap-4">
-                      <MicButton state={ariaStatus} onClick={handleAriaMicClick} conversationListening={ariaStatus === 'listening'} />
-                      <button
-                        onClick={endConversation}
-                        className="flex flex-col items-center gap-1 px-4 py-2 rounded-xl bg-red-900/40 border border-red-700/50 text-red-400 hover:bg-red-900/60 transition-colors text-xs font-medium"
-                      >
+                      {/* In conversation mode: mic just sends early if speaking, else disabled */}
+                      <MicButton
+                        state={ariaStatus}
+                        onClick={handleAriaMicClick}
+                        conversationListening={ariaStatus === 'listening'}
+                      />
+                      <button onClick={endConversation} className="flex flex-col items-center gap-1 px-4 py-2 rounded-xl bg-red-900/40 border border-red-700/50 text-red-400 hover:bg-red-900/60 transition-colors text-xs font-medium">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                         Terminar
                       </button>
