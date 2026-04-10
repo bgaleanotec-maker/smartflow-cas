@@ -469,7 +469,7 @@ export default function BPActivityDetailDrawer({ bpId, activity, onClose, onUpda
 
   if (!activity) return null
 
-  const priorityCfg = PRIORITY_CONFIG[form.status] || PRIORITY_CONFIG.media
+  const priorityCfg = PRIORITY_CONFIG[form.priority] || PRIORITY_CONFIG.media
   const statusCfg = STATUS_CONFIG[form.status] || STATUS_CONFIG.pendiente
 
   return (
