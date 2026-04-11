@@ -37,7 +37,10 @@ class Settings(BaseSettings):
     ELEVENLABS_API_KEY: Optional[str] = None
     ELEVENLABS_VOICE_ID: str = "UgBBYS2sOqTuMpoF3BR0"  # Voz configurada equipo CAS
 
-    # Groq (cloud Whisper — recommended for Render free tier, 0 RAM usage)
+    # Deepgram Nova-3 (premium STT: diarization + noise suppression + Spanish)
+    DEEPGRAM_API_KEY: Optional[str] = None
+
+    # Groq (cloud Whisper — fast fallback, free 28800s/day)
     GROQ_API_KEY: Optional[str] = None
     GROQ_MODEL: str = "whisper-large-v3-turbo"
 
@@ -77,6 +80,8 @@ _ENV_FALLBACK_MAP = {
     ("elevenlabs", "api_key"): "ELEVENLABS_API_KEY",
     ("elevenlabs", "voice_id"): "ELEVENLABS_VOICE_ID",
     ("elevenlabs", "model"): None,
+    ("deepgram", "api_key"): "DEEPGRAM_API_KEY",
+    ("deepgram", "model"): None,
     ("groq", "api_key"): "GROQ_API_KEY",
     ("groq", "model"): "GROQ_MODEL",
     ("gemini", "api_key"): "GEMINI_API_KEY",

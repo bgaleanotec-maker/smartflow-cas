@@ -1000,6 +1000,20 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       setIsRecordingMeeting(true)
       setRecordingStart(Date.now())
       meetingRecordingRef.current = true
+      chunksRef.current = []   // reset audio buffer for this recording
+
+      // ── Parallel audio recording → complete blob for Deepgram on finalize ─
+      // MediaRecorder accumulates all audio; sent to Deepgram when finalized.
+      // Web Speech API provides real-time preview below.
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
+      try {
+        const mr = new MediaRecorder(stream, { mimeType })
+        mediaRecorderRef.current = mr
+        mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+        mr.start(5000)  // collect in 5s chunks — keeps memory manageable
+      } catch { /* MediaRecorder unavailable — Deepgram won't have audio, Web Speech still works */ }
 
       // ── Web Speech API — real-time transcription ──────────────────────
       // Each final phrase is saved directly to the DB as a TranscriptChunk.
@@ -1007,7 +1021,7 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition
       if (SR) {
         const sr = new SR()
-        sr.lang = 'es-ES'
+        sr.lang = 'es-CO'
         sr.continuous = true
         sr.interimResults = true
         sr.maxAlternatives = 1
@@ -1074,6 +1088,49 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
     }
   }
 
+  // Stop Web Speech + collect mic audio → returns complete Blob for Deepgram/Groq
+  const stopAndGetAudio = () => new Promise((resolve) => {
+    // Stop speech recognition immediately
+    stopMeetingSpeech()
+    meetingRecordingRef.current = false
+
+    const cleanup = () => {
+      if (streamRef.current) {
+        if (streamRef.current._originalStreams) {
+          streamRef.current._originalStreams.forEach(s => s.getTracks().forEach(t => t.stop()))
+        }
+        streamRef.current.getTracks().forEach(t => t.stop())
+        streamRef.current = null
+      }
+      if (audioContextRef.current) { audioContextRef.current.close(); audioContextRef.current = null }
+      setAnalyserNode(null)
+      setIsRecordingMeeting(false)
+    }
+
+    const mr = mediaRecorderRef.current
+    if (!mr || mr.state === 'inactive') {
+      const blob = new Blob(chunksRef.current || [], { type: 'audio/webm' })
+      cleanup()
+      resolve(blob)
+      return
+    }
+
+    mr.onstop = () => {
+      const blob = new Blob(chunksRef.current || [], { type: 'audio/webm' })
+      cleanup()
+      resolve(blob)
+    }
+
+    if (mr.state === 'recording') {
+      mr.requestData()
+      mr.stop()
+    } else {
+      const blob = new Blob(chunksRef.current || [], { type: 'audio/webm' })
+      cleanup()
+      resolve(blob)
+    }
+  })
+
   const stopMeetingRecording = () => {
     stopMeetingSpeech()
     if (streamRef.current) {
@@ -1091,10 +1148,43 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
 
   const finalizeMeeting = async () => {
     if (!meeting) return
-    stopMeetingRecording()  // stop speech recognition + mic
+
+    // 1. Stop Web Speech recognition + get complete audio blob
+    const completeBlob = await stopAndGetAudio()
     setFinalizing(true)
+    setTranscribingChunk(true)
+
     try {
-      // Finalize: Gemini reads the chunks already saved in DB during recording
+      // 2. Send full audio → Deepgram (diarización) o Groq (fallback)
+      if (completeBlob && completeBlob.size > 2000) {
+        try {
+          const tRes = await voiceAPI.transcribeComplete(meeting.id, completeBlob)
+          const { segments, chunks, source } = tRes.data || {}
+
+          if (segments && segments.length > 0) {
+            // ✅ Deepgram: cada segmento tiene su hablante identificado
+            setTranscript(segments.map((s, i) => ({
+              speaker: s.speaker_label,
+              text: s.text,
+              seq: i + 1,
+            })))
+          } else if (chunks && chunks.length > 0) {
+            // Groq/Whisper: sin diarización pero con texto completo
+            setTranscript(chunks.map(c => ({
+              speaker: c.speaker_name || 'Usuario',
+              text: c.text,
+              seq: c.sequence_num,
+            })))
+          }
+          console.info('✅ Transcripción con:', source || 'desconocido')
+        } catch (tErr) {
+          console.warn('Transcripción completa falló, usando Web Speech preview:', tErr)
+          // Se conserva el transcript en tiempo real que ya estaba visible
+        }
+      }
+      setTranscribingChunk(false)
+
+      // 3. Finalizar reunión: timestamps + análisis Gemini
       const res = await voiceAPI.finalizeMeeting(meeting.id)
       setMeeting(res.data)
       setAnalysis(res.data)
@@ -1103,6 +1193,7 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       setMeeting(prev => prev ? { ...prev, _finalizeError: msg } : prev)
     } finally {
       setFinalizing(false)
+      setTranscribingChunk(false)
     }
   }
 
@@ -1645,9 +1736,16 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
                       )}
 
                       {finalizing ? (
-                        <div className="flex items-center gap-2 text-sm text-slate-400">
-                          <Loader2 size={16} className="animate-spin" />
-                          Finalizando análisis con IA...
+                        <div className="flex flex-col items-center gap-1.5">
+                          <div className="flex items-center gap-2 text-sm text-slate-300">
+                            <Loader2 size={16} className="animate-spin text-brand-400" />
+                            {transcribingChunk
+                              ? '🎙️ Transcribiendo con Deepgram — identificando hablantes...'
+                              : '🤖 Analizando con IA...'}
+                          </div>
+                          {transcribingChunk && (
+                            <p className="text-[11px] text-slate-500">Puede tomar 10-30s según duración</p>
+                          )}
                         </div>
                       ) : (
                         <button

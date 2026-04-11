@@ -518,10 +518,15 @@ async def transcribe_complete(
     file: UploadFile = File(...),
 ):
     """
-    Transcribe a complete audio recording in one shot.
-    Much more reliable than per-chunk: sends the full valid webm file.
-    MediaRecorder webm chunks after the first are incomplete without their header —
-    this endpoint accepts the accumulated full recording.
+    Transcribe the complete meeting audio with the best available engine.
+
+    Priority:
+      1. Deepgram Nova-3 — diarization (who spoke), noise suppression, Spanish, fast
+      2. Groq Whisper — fast cloud, no diarization
+      3. Local faster-whisper — fallback, uses RAM
+
+    Returns diarized segments if Deepgram is used:
+      [{"speaker_label": "Hablante 1", "text": "Buenos días...", "start": 0.1, "end": 12.3}]
     """
     meeting = (
         await db.execute(
@@ -534,70 +539,116 @@ async def transcribe_complete(
     if not meeting:
         raise HTTPException(status_code=404, detail="Reunión no encontrada")
 
-    groq_api_key = await get_service_config_value(db, "groq", "api_key")
-    model_size = await get_service_config_value(db, "whisper", "model") or "base"
-
     audio_bytes = await file.read()
     logger.info(f"transcribe-complete: {len(audio_bytes)} bytes, meeting {meeting_id}")
 
     if len(audio_bytes) < 1000:
-        return {"text": "", "chunks": [], "source": "none", "error": "Audio demasiado corto"}
+        return {"text": "", "segments": [], "chunks": [], "source": "none", "error": "Audio demasiado corto"}
 
-    from app.services.whisper_service import transcribe_audio
-    result = await transcribe_audio(
-        audio_bytes,
-        model_size=model_size,
-        groq_api_key=groq_api_key,
-    )
+    # ── 1. Deepgram (preferred: diarization + noise + Spanish) ───────────────
+    deepgram_key = await get_service_config_value(db, "deepgram", "api_key")
+    deepgram_model = await get_service_config_value(db, "deepgram", "model") or "nova-3"
 
-    transcript_text = (result.get("text") or "").strip()
-    transcription_source = result.get("source", "unknown")
-
-    if result.get("error") or not transcript_text or transcript_text.startswith("["):
-        logger.warning(f"transcribe-complete failed: {result.get('error')} source={transcription_source}")
-        return {
-            "text": "",
-            "chunks": [],
-            "source": transcription_source,
-            "error": result.get("error") or "Sin texto detectado",
-        }
-
-    # Delete previous empty/failed chunks from this meeting
-    from sqlalchemy import delete as sql_delete
-    await db.execute(
-        sql_delete(TranscriptChunk).where(
-            TranscriptChunk.meeting_id == meeting_id,
+    result = None
+    if deepgram_key:
+        from app.services.deepgram_service import transcribe_with_deepgram
+        result = await transcribe_with_deepgram(
+            audio_bytes,
+            api_key=deepgram_key,
+            model=deepgram_model,
+            language="es",
+            diarize=True,
         )
-    )
+        if result.get("error"):
+            logger.warning(f"Deepgram failed, falling back: {result['error']}")
+            result = None
 
-    # Save transcript as a single chunk — finalize_meeting will use this
-    chunk = TranscriptChunk(
-        meeting_id=meeting_id,
-        sequence_num=1,
-        speaker_id=user.id,
-        speaker_name=user.full_name,
-        text=transcript_text,
-        confidence=result.get("confidence"),
-        language=result.get("language"),
-        duration_seconds=result.get("duration"),
-        timestamp_in_meeting=0,
-    )
-    db.add(chunk)
+    # ── 2. Groq Whisper (fallback: fast, no diarization) ────────────────────
+    if not result:
+        groq_api_key = await get_service_config_value(db, "groq", "api_key")
+        model_size = await get_service_config_value(db, "whisper", "model") or "base"
+        from app.services.whisper_service import transcribe_audio
+        whisper_result = await transcribe_audio(
+            audio_bytes,
+            model_size=model_size,
+            groq_api_key=groq_api_key,
+        )
+        if not whisper_result.get("error") and whisper_result.get("text"):
+            text = whisper_result["text"].strip()
+            result = {
+                "text": text,
+                "diarized_text": text,
+                "segments": [],
+                "speaker_count": 1,
+                "language": whisper_result.get("language", "es"),
+                "confidence": whisper_result.get("confidence", 0.8),
+                "duration": whisper_result.get("duration", 0.0),
+                "source": whisper_result.get("source", "whisper"),
+                "error": None,
+            }
 
-    if not meeting.whisper_model_used:
-        meeting.whisper_model_used = f"{transcription_source}:{model_size}"
-    if not meeting.language_detected and result.get("language"):
-        meeting.language_detected = result["language"]
+    if not result or not result.get("text"):
+        return {"text": "", "segments": [], "chunks": [], "source": "none", "error": "Sin texto detectado"}
+
+    transcription_source = result["source"]
+    segments = result.get("segments", [])  # [{speaker_label, text, start, end}]
+
+    # ── Save diarized chunks to DB (replace Web Speech API preview chunks) ──
+    from sqlalchemy import delete as sql_delete
+    await db.execute(sql_delete(TranscriptChunk).where(TranscriptChunk.meeting_id == meeting_id))
+
+    saved_chunks = []
+    if segments:
+        # One chunk per speaker segment
+        for i, seg in enumerate(segments):
+            chunk = TranscriptChunk(
+                meeting_id=meeting_id,
+                sequence_num=i + 1,
+                speaker_id=user.id,
+                speaker_name=seg["speaker_label"],
+                text=seg["text"],
+                confidence=result.get("confidence"),
+                language=result.get("language", "es"),
+                duration_seconds=round(seg["end"] - seg["start"], 2),
+                timestamp_in_meeting=round(seg["start"], 2),
+            )
+            db.add(chunk)
+            saved_chunks.append(chunk)
+    else:
+        # Single chunk — no diarization
+        chunk = TranscriptChunk(
+            meeting_id=meeting_id,
+            sequence_num=1,
+            speaker_id=user.id,
+            speaker_name=user.full_name,
+            text=result["text"],
+            confidence=result.get("confidence"),
+            language=result.get("language", "es"),
+            duration_seconds=result.get("duration"),
+            timestamp_in_meeting=0,
+        )
+        db.add(chunk)
+        saved_chunks.append(chunk)
+
+    meeting.whisper_model_used = f"{transcription_source}:{deepgram_model if deepgram_key else 'fallback'}"
+    if not meeting.language_detected:
+        meeting.language_detected = result.get("language", "es")
 
     await db.flush()
     await db.commit()
     await db.refresh(meeting, ["chunks"])
 
-    logger.info(f"transcribe-complete OK: {len(transcript_text)} chars, source={transcription_source}")
+    logger.info(
+        f"transcribe-complete OK: {len(result['text'])} chars, "
+        f"{result.get('speaker_count', 1)} hablantes, source={transcription_source}"
+    )
     return {
-        "text": transcript_text,
-        "chunks": [_chunk_to_dict(c) for c in (meeting.chunks or [])],
+        "text": result["text"],
+        "diarized_text": result.get("diarized_text", result["text"]),
+        "segments": segments,
+        "speaker_count": result.get("speaker_count", 1),
         "source": transcription_source,
+        "chunks": [_chunk_to_dict(c) for c in (meeting.chunks or [])],
         "error": None,
     }
 

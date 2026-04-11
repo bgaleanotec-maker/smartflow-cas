@@ -158,6 +158,30 @@ SERVICE_REGISTRY = {
             },
         ],
     },
+    "deepgram": {
+        "display_name": "Deepgram Nova-3 (Transcripción Premium ⭐)",
+        "description": "Transcripción con identificación de hablantes (quién habla), español colombiano, resistente a ruido. $200 créditos gratis sin vencimiento.",
+        "icon": "Mic",
+        "fields": [
+            {
+                "key_name": "api_key",
+                "label": "API Key",
+                "field_type": "password",
+                "required": True,
+                "placeholder": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "help": "Obtén tu key gratis en deepgram.com → Console → API Keys ($200 créditos gratis)",
+            },
+            {
+                "key_name": "model",
+                "label": "Modelo",
+                "field_type": "text",
+                "required": False,
+                "placeholder": "nova-3",
+                "default": "nova-3",
+                "help": "nova-3 = mejor para español/ruido. nova-2 = más barato.",
+            },
+        ],
+    },
     "groq": {
         "display_name": "Groq (Transcripción en nube ⚡)",
         "description": "Whisper en la nube de Groq. Gratis, rapidísimo (1-2s), y no usa RAM del servidor. Recomendado para Render free tier.",

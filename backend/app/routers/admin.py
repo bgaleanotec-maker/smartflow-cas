@@ -330,8 +330,22 @@ async def test_integration(service_name: str, db: DB, admin: AdminUser):
         if not api_key:
             return {"success": False, "message": "No hay API key configurada"}
 
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            if service_name == "resend":
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            if service_name == "deepgram":
+                # Test by fetching account balance/projects
+                resp = await client.get(
+                    "https://api.deepgram.com/v1/projects",
+                    headers={"Authorization": f"Token {api_key}"},
+                )
+                if resp.status_code == 200:
+                    model = await get_service_config_value(db, "deepgram", "model") or "nova-3"
+                    return {
+                        "success": True,
+                        "message": f"Deepgram conectado ✓ · modelo {model} · diarización activada · español Latam · resistente a ruido"
+                    }
+                return {"success": False, "message": f"Deepgram {resp.status_code}: verifica la API key en console.deepgram.com"}
+
+            elif service_name == "resend":
                 resp = await client.get(
                     "https://api.resend.com/domains",
                     headers={"Authorization": f"Bearer {api_key}"},
