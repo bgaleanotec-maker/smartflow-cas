@@ -310,6 +310,13 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   const [pendingAction, setPendingAction] = useState(null)   // para confirmar acciones IA
   const [textLoading, setTextLoading] = useState(false)      // cargando respuesta de texto
   const [transcribingChunk, setTranscribingChunk] = useState(false)  // meeting: processing chunk
+  // ── Nota de Voz ───────────────────────────────────────────────────────────
+  const [noteText, setNoteText] = useState('')
+  const [noteInterim, setNoteInterim] = useState('')
+  const [noteListening, setNoteListening] = useState(false)
+  const [noteCopied, setNoteCopied] = useState(false)
+  const noteSrRef = useRef(null)
+  const noteActiveRef = useRef(false)
 
   const mediaRecorderRef = useRef(null)
   const streamRef = useRef(null)
@@ -1107,6 +1114,57 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
     })
   }
 
+  // ── Nota de Voz — dictado libre ───────────────────────────────────────────
+  const startNoteListening = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SR) return
+    const sr = new SR()
+    sr.lang = 'es-CO'
+    sr.continuous = true
+    sr.interimResults = true
+    noteSrRef.current = sr
+    noteActiveRef.current = true
+
+    sr.onresult = (event) => {
+      const results = Array.from(event.results).slice(event.resultIndex)
+      const interim = results.filter(r => !r.isFinal).map(r => r[0].transcript).join(' ')
+      setNoteInterim(interim)
+      const finals = results.filter(r => r.isFinal).map(r => r[0].transcript.trim()).filter(Boolean)
+      if (finals.length > 0) {
+        setNoteInterim('')
+        setNoteText(prev => {
+          const add = finals.join(' ')
+          return prev ? prev + ' ' + add : add
+        })
+      }
+    }
+    sr.onend = () => {
+      setNoteInterim('')
+      if (noteActiveRef.current) { try { sr.start() } catch { noteActiveRef.current = false; setNoteListening(false) } }
+    }
+    sr.onerror = () => {
+      setNoteInterim('')
+      if (noteActiveRef.current) { setTimeout(() => { try { sr.start() } catch {} }, 300) }
+    }
+    sr.start()
+    setNoteListening(true)
+  }
+
+  const stopNoteListening = () => {
+    noteActiveRef.current = false
+    setNoteListening(false)
+    setNoteInterim('')
+    if (noteSrRef.current) { try { noteSrRef.current.stop() } catch {} noteSrRef.current = null }
+  }
+
+  const copyNote = () => {
+    if (!noteText.trim()) return
+    navigator.clipboard.writeText(noteText).then(() => {
+      setNoteCopied(true)
+      setTimeout(() => setNoteCopied(false), 2000)
+    })
+  }
+
   // Cleanup on unmount
   useEffect(() => () => cleanupAudio(), [cleanupAudio])
 
@@ -1165,7 +1223,18 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
                       : 'text-slate-400 hover:text-slate-200',
                   )}
                 >
-                  Grabar Reunión
+                  Reunión
+                </button>
+                <button
+                  onClick={() => { setMode('note'); stopNoteListening() }}
+                  className={clsx(
+                    'px-3 py-1.5 rounded-md text-xs font-semibold transition-colors',
+                    mode === 'note'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow'
+                      : 'text-slate-400 hover:text-slate-200',
+                  )}
+                >
+                  Nota de Voz
                 </button>
               </div>
               <button
@@ -1626,6 +1695,87 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* ── NOTA DE VOZ MODE ──────────────────────────────────────── */}
+            {mode === 'note' && (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Header */}
+                <div className="px-4 pt-4 pb-3 flex flex-col items-center gap-1">
+                  <div className={clsx(
+                    'w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300',
+                    noteListening
+                      ? 'bg-emerald-500/20 ring-2 ring-emerald-400/50 shadow-lg shadow-emerald-500/20'
+                      : 'bg-slate-800',
+                  )}>
+                    <Mic size={28} className={noteListening ? 'text-emerald-400' : 'text-slate-400'} />
+                    {noteListening && (
+                      <span className="absolute w-16 h-16 rounded-full bg-emerald-500/20 animate-ping" />
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    {noteListening ? '🔴 Escuchando...' : 'Presiona para dictar'}
+                  </p>
+                </div>
+
+                {/* Mic button */}
+                <div className="flex justify-center gap-3 px-4 pb-3">
+                  <button
+                    onClick={noteListening ? stopNoteListening : startNoteListening}
+                    className={clsx(
+                      'flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-lg',
+                      noteListening
+                        ? 'bg-red-600 hover:bg-red-500 text-white shadow-red-600/30'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30',
+                    )}
+                  >
+                    {noteListening ? <><Square size={14} /> Detener</> : <><Mic size={14} /> Dictar</>}
+                  </button>
+                  <button
+                    onClick={() => { setNoteText(''); setNoteInterim('') }}
+                    className="px-4 py-2.5 rounded-xl text-sm text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 transition-colors"
+                  >
+                    Limpiar
+                  </button>
+                </div>
+
+                {/* Text area — editable, grows with content */}
+                <div className="flex-1 flex flex-col px-4 pb-4 gap-2 overflow-hidden">
+                  <div className="relative flex-1 min-h-0">
+                    <textarea
+                      value={noteText + (noteInterim ? (noteText ? ' ' : '') + noteInterim : '')}
+                      onChange={e => setNoteText(e.target.value)}
+                      placeholder="El texto dictado aparece aquí en tiempo real. También puedes escribir directamente."
+                      className="w-full h-full resize-none bg-slate-900 border border-slate-700 rounded-xl px-3 py-3 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-600 leading-relaxed"
+                    />
+                    {noteListening && noteInterim && (
+                      <span className="absolute bottom-3 right-3 text-emerald-400 animate-pulse text-lg">▌</span>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={copyNote}
+                      disabled={!noteText.trim()}
+                      className={clsx(
+                        'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all',
+                        noteText.trim()
+                          ? noteCopied
+                            ? 'bg-emerald-700 text-white'
+                            : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20'
+                          : 'bg-slate-800 text-slate-600 cursor-not-allowed',
+                      )}
+                    >
+                      {noteCopied ? <><Check size={14} /> Copiado</> : <><Copy size={14} /> Copiar texto</>}
+                    </button>
+                  </div>
+
+                  <p className="text-[11px] text-slate-600 text-center leading-relaxed">
+                    Copia el texto y pégalo en cualquier campo del sistema — comentarios, descripción de actividad, standup, etc.
+                  </p>
+                </div>
               </div>
             )}
           </div>
