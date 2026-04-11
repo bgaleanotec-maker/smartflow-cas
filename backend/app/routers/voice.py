@@ -106,232 +106,9 @@ def _meeting_to_dict(m: VoiceMeeting) -> dict:
     }
 
 
-# ─── Context cache ────────────────────────────────────────────────────────────
-# Leaders/admins share a single full-data snapshot (updated every 3 min).
-# Regular members get a user-specific snapshot.
-# This means at most one DB query set per 3 minutes per cache key — cheap and fast.
-_context_cache: dict = {}
-_CONTEXT_CACHE_TTL = 180  # seconds
-
-
-def _context_cache_key(user) -> str:
-    is_leader = user.role in (UserRole.ADMIN, UserRole.LEADER, UserRole.DIRECTIVO)
-    return "leaders" if is_leader else f"user_{user.id}"
-
-
-async def _get_smartflow_context(db, user) -> str:
-    key = _context_cache_key(user)
-    now = time.time()
-    if key in _context_cache:
-        ctx, ts = _context_cache[key]
-        if now - ts < _CONTEXT_CACHE_TTL:
-            return ctx
-    ctx = await _build_smartflow_context(db, user)
-    _context_cache[key] = (ctx, now)
-    return ctx
-
-
-async def _build_smartflow_context(db, user) -> str:
-    """
-    Full system snapshot for ARIA: businesses, BPs, BP activities, projects,
-    incidents, demands, recurring activity instances, team members, recent meetings.
-    Respects role permissions: leaders see everything, members see their own data.
-    """
-    try:
-        from app.models.business_plan import BPActivity, BPActivityStatus, BusinessPlan
-        from app.models.business import Business
-        from app.models.project import Project, ProjectStatus
-        from app.models.incident import Incident, IncidentStatus
-        from app.models.demand import DemandRequest, DemandStatus
-        from app.models.activities import ActivityInstance, ActivityStatus, RecurringActivity
-        from app.models.user import User
-        from datetime import date as date_type
-
-        today = date_type.today()
-        sections = []
-        is_leader = user.role in (UserRole.ADMIN, UserRole.LEADER, UserRole.DIRECTIVO)
-
-        # ── 1. Equipo (líderes ven todos los miembros) ────────────────────────
-        if is_leader:
-            users_rows = (await db.execute(
-                select(User.full_name, User.role, User.team)
-                .where(User.is_active == True)
-                .order_by(User.full_name)
-                .limit(30)
-            )).all()
-            if users_rows:
-                team_str = ", ".join(f"{u.full_name} ({u.role.value})" for u in users_rows)
-                sections.append(f"EQUIPO ({len(users_rows)} miembros activos): {team_str}")
-
-        # ── 2. Negocios activos ───────────────────────────────────────────────
-        bizs = (await db.execute(
-            select(Business).where(Business.is_active == True).order_by(Business.name)
-        )).scalars().all()
-        if bizs:
-            biz_names = ", ".join(b.name for b in bizs)
-            sections.append(f"NEGOCIOS ACTIVOS ({len(bizs)}): {biz_names}")
-
-        # ── 3. Planes de negocio ──────────────────────────────────────────────
-        bp_q = (
-            select(BusinessPlan, Business.name.label("biz_name"))
-            .join(Business, BusinessPlan.business_id == Business.id)
-            .where(BusinessPlan.is_deleted == False)
-            .order_by(BusinessPlan.year.desc(), Business.name)
-            .limit(20)
-        )
-        bp_rows = (await db.execute(bp_q)).all()
-        if bp_rows:
-            bp_lines = ["PLANES DE NEGOCIO:"]
-            for bp, biz_name in bp_rows:
-                bp_lines.append(f"  • [{biz_name}] {bp.name or f'BP {bp.year}'} — {bp.status.value} ({bp.year})")
-            sections.append("\n".join(bp_lines))
-
-        # ── 4. Actividades BP pendientes / en progreso ────────────────────────
-        acts_q = (
-            select(BPActivity, BusinessPlan.name.label("bp_name"), Business.name.label("biz_name"))
-            .join(BusinessPlan, BPActivity.bp_id == BusinessPlan.id)
-            .join(Business, BusinessPlan.business_id == Business.id)
-            .where(
-                BPActivity.is_deleted == False,
-                BPActivity.status.in_([BPActivityStatus.PENDIENTE, BPActivityStatus.EN_PROGRESO]),
-            )
-        )
-        if not is_leader:
-            acts_q = acts_q.where(BPActivity.owner_id == user.id)
-        acts_q = acts_q.order_by(BPActivity.due_date.asc().nullslast()).limit(20)
-        act_rows = (await db.execute(acts_q)).all()
-
-        if act_rows:
-            act_lines = [f"ACTIVIDADES BP PENDIENTES/EN PROGRESO ({len(act_rows)}):"]
-            for act, bp_name, biz_name in act_rows:
-                due_str = ""
-                if act.due_date:
-                    days = (act.due_date - today).days
-                    due_str = f" · vence {act.due_date}"
-                    if days < 0:
-                        due_str += f" (VENCIDA hace {abs(days)}d ⚠️)"
-                    elif days == 0:
-                        due_str += " (HOY ⚠️)"
-                    elif days <= 5:
-                        due_str += f" (en {days}d)"
-                grupo = f" [{act.grupo}]" if getattr(act, "grupo", None) else ""
-                pct = f" {act.progress}%" if getattr(act, "progress", None) else ""
-                owner = f" · dueño: {act.owner.full_name}" if getattr(act, "owner", None) else ""
-                act_lines.append(
-                    f"  • {act.title}{grupo} — {act.status.value} · {act.priority.value} · {biz_name}{pct}{due_str}{owner}"
-                )
-            sections.append("\n".join(act_lines))
-        else:
-            sections.append("ACTIVIDADES BP: Sin actividades pendientes.")
-
-        # ── 5. Proyectos activos / planificación ──────────────────────────────
-        proj_q = (
-            select(Project)
-            .where(Project.status.in_([ProjectStatus.ACTIVE, ProjectStatus.PLANNING]))
-            .order_by(Project.due_date.asc().nullslast())
-            .limit(15)
-        )
-        if not is_leader:
-            proj_q = proj_q.where(Project.is_private == False)
-        proj_rows = (await db.execute(proj_q)).scalars().all()
-        if proj_rows:
-            proj_lines = [f"PROYECTOS ({len(proj_rows)}):"]
-            for p in proj_rows:
-                due = f" · vence {p.due_date}" if p.due_date else ""
-                prog = f" {p.progress}%" if p.progress else ""
-                proj_lines.append(f"  • {p.name} — {p.status.value}{prog}{due}")
-            sections.append("\n".join(proj_lines))
-
-        # ── 6. Incidentes abiertos ────────────────────────────────────────────
-        inc_q = (
-            select(Incident)
-            .where(Incident.status.in_([IncidentStatus.OPEN, IncidentStatus.INVESTIGATING]))
-            .order_by(Incident.created_at.desc())
-            .limit(10)
-        )
-        inc_rows = (await db.execute(inc_q)).scalars().all()
-        if inc_rows:
-            inc_lines = [f"INCIDENTES ABIERTOS ({len(inc_rows)}):"]
-            for inc in inc_rows:
-                inc_lines.append(f"  • [{inc.incident_number}] {inc.title} — {inc.status.value} ({inc.severity.value})")
-            sections.append("\n".join(inc_lines))
-
-        # ── 7. Demandas activas ───────────────────────────────────────────────
-        dem_q = (
-            select(DemandRequest)
-            .where(DemandRequest.status.in_([
-                DemandStatus.ENVIADA, DemandStatus.EN_EVALUACION,
-                DemandStatus.APROBADA, DemandStatus.EN_EJECUCION,
-            ]))
-            .order_by(DemandRequest.created_at.desc())
-            .limit(10)
-        )
-        if not is_leader:
-            dem_q = dem_q.where(DemandRequest.requested_by_id == user.id)
-        dem_rows = (await db.execute(dem_q)).scalars().all()
-        if dem_rows:
-            dem_lines = [f"DEMANDAS ACTIVAS ({len(dem_rows)}):"]
-            for d in dem_rows:
-                dem_lines.append(f"  • [{d.demand_number}] {d.title} — {d.status.value}")
-            sections.append("\n".join(dem_lines))
-
-        # ── 8. Instancias de actividades recurrentes (pendientes / vencidas) ──
-        ai_q = (
-            select(ActivityInstance, RecurringActivity.title.label("act_title"))
-            .join(RecurringActivity, ActivityInstance.activity_id == RecurringActivity.id)
-            .where(
-                ActivityInstance.status.in_([ActivityStatus.SIN_INICIAR, ActivityStatus.EN_PROCESO, ActivityStatus.VENCIDA]),
-                ActivityInstance.due_date <= date_type.fromordinal(today.toordinal() + 7),  # próximos 7 días + vencidas
-            )
-        )
-        if not is_leader:
-            ai_q = ai_q.where(ActivityInstance.assigned_to_id == user.id)
-        ai_q = ai_q.order_by(ActivityInstance.due_date.asc()).limit(15)
-        ai_rows = (await db.execute(ai_q)).all()
-        if ai_rows:
-            ai_lines = [f"ACTIVIDADES RECURRENTES PRÓXIMAS/VENCIDAS ({len(ai_rows)}):"]
-            for inst, act_title in ai_rows:
-                days = (inst.due_date - today).days
-                urgency = " (VENCIDA ⚠️)" if days < 0 else " (HOY)" if days == 0 else f" (en {days}d)"
-                ai_lines.append(f"  • {inst.title or act_title} — {inst.status.value} · vence {inst.due_date}{urgency}")
-            sections.append("\n".join(ai_lines))
-
-        # ── 9. Reuniones recientes ────────────────────────────────────────────
-        mtg_q = (
-            select(VoiceMeeting)
-            .where(
-                VoiceMeeting.is_deleted == False,
-                VoiceMeeting.status == MeetingStatus.COMPLETED,
-                VoiceMeeting.meeting_type == MeetingType.MEETING,
-            )
-            .order_by(VoiceMeeting.started_at.desc())
-            .limit(5)
-        )
-        if not is_leader:
-            mtg_q = mtg_q.where(VoiceMeeting.created_by_id == user.id)
-        recent_meetings = (await db.execute(mtg_q)).scalars().all()
-        if recent_meetings:
-            mtg_lines = ["REUNIONES RECIENTES:"]
-            for m in recent_meetings:
-                date_str = m.started_at.strftime("%Y-%m-%d") if m.started_at else "N/A"
-                dur = f" {m.duration_seconds // 60}min" if m.duration_seconds else ""
-                summary = f"\n    Resumen: {m.ai_summary[:150]}..." if m.ai_summary else ""
-                n_actions = f" | {len(m.ai_action_items)} acciones" if m.ai_action_items else ""
-                mtg_lines.append(f"  • {m.title} ({date_str}{dur}){n_actions}{summary}")
-            sections.append("\n".join(mtg_lines))
-
-        if not sections:
-            return ""
-
-        header = (
-            f"=== SmartFlow — contexto completo del sistema para {user.full_name} "
-            f"(rol: {user.role.value}) · {today} ==="
-        )
-        return header + "\n\n" + "\n\n".join(sections)
-
-    except Exception as exc:
-        logger.warning(f"_build_smartflow_context error: {exc}", exc_info=True)
-        return ""
+# ─── Context via aria_intelligence service ───────────────────────────────────
+# The old cache + build functions have been replaced by the dedicated
+# aria_intelligence service which supports intent-aware, role-filtered queries.
 
 
 async def _call_gemini(api_key: str, model: str, prompt: str, temperature: float = 0.7, max_tokens: int = 512) -> Optional[str]:
@@ -873,17 +650,7 @@ async def aria_voice_chat(body: AriaChatBody, db: DB, user: CurrentUser):
     role_value = user.role.value if hasattr(user.role, "value") else str(user.role)
     is_leader = user.role in (UserRole.ADMIN, UserRole.LEADER, UserRole.DIRECTIVO)
 
-    # Context snapshot (served from cache after first load — no DB hit every message)
-    smartflow_ctx = await _get_smartflow_context(db, user)
-
-    # Conversation history (last 6 turns, capped per message to control token cost)
-    history_lines = []
-    for h in (body.history or [])[-6:]:
-        role_label = "ARIA" if h.get("role") == "assistant" else first_name
-        history_lines.append(f"{role_label}: {str(h.get('content', ''))[:250]}")
-    history_block = ("\n\nHISTORIAL:\n" + "\n".join(history_lines)) if history_lines else ""
-
-    # Instruction to Gemini per turn type
+    # Instruction to Gemini per turn type (must be defined before context call)
     if is_greeting:
         instruction = (
             f"Saluda a {first_name} de forma breve y cálida (1 oración). "
@@ -893,6 +660,17 @@ async def aria_voice_chat(body: AriaChatBody, db: DB, user: CurrentUser):
         )
     else:
         instruction = body.text
+
+    # Context snapshot (intent-aware, cached via aria_intelligence service)
+    from app.services.aria_intelligence import get_context as get_aria_context
+    smartflow_ctx = await get_aria_context(db, user, instruction if not is_greeting else 'summary')
+
+    # Conversation history (last 6 turns, capped per message to control token cost)
+    history_lines = []
+    for h in (body.history or [])[-6:]:
+        role_label = "ARIA" if h.get("role") == "assistant" else first_name
+        history_lines.append(f"{role_label}: {str(h.get('content', ''))[:250]}")
+    history_block = ("\n\nHISTORIAL:\n" + "\n".join(history_lines)) if history_lines else ""
 
     # ── Gemini call ───────────────────────────────────────────────────────────
     gemini_api_key = await get_service_config_value(db, "gemini", "api_key")
@@ -976,12 +754,10 @@ async def refresh_aria_context(db: DB, user: CurrentUser):
     Force a fresh SmartFlow context snapshot for ARIA.
     Call this after bulk data changes (e.g., after a sprint planning session).
     """
-    key = _context_cache_key(user)
-    if key in _context_cache:
-        del _context_cache[key]
-    # Pre-warm the new context so next ARIA message is instant
-    await _get_smartflow_context(db, user)
-    return {"ok": True, "cache_key": key}
+    from app.services.aria_intelligence import invalidate_user, get_context as get_aria_context
+    invalidate_user(user)
+    await get_aria_context(db, user, 'summary')
+    return {"ok": True}
 
 
 # ─── Voices list ─────────────────────────────────────────────────────────────

@@ -178,38 +178,47 @@ def _parse_hecho(msg: str) -> dict:
 
 
 async def _get_summary(db, user) -> dict:
-    """Get system summary."""
-    today = date.today()
+    """Get system summary using aria_intelligence for a rich, role-aware context."""
+    from app.services.aria_intelligence import get_context as get_aria_context
+    ctx = await get_aria_context(db, user, 'resumen')
 
-    tasks_count = (await db.execute(select(func.count(Task.id)).where(Task.is_deleted == False))).scalar()
-    demands_count = (await db.execute(select(func.count(DemandRequest.id)).where(DemandRequest.is_deleted == False))).scalar()
-    incidents_open = (await db.execute(
-        select(func.count(Incident.id)).where(Incident.is_deleted == False, Incident.status.in_(["abierto", "en_investigacion"]))
-    )).scalar()
-    activities_pending = (await db.execute(
-        select(func.count(ActivityInstance.id)).where(ActivityInstance.status.in_([ActivityStatus.SIN_INICIAR, ActivityStatus.EN_PROCESO]))
-    )).scalar()
-    activities_overdue = (await db.execute(
-        select(func.count(ActivityInstance.id)).where(
-            ActivityInstance.due_date < today,
-            ActivityInstance.status.in_([ActivityStatus.SIN_INICIAR, ActivityStatus.EN_PROCESO])
-        )
-    )).scalar()
+    api_key = await get_service_config_value(db, "gemini", "api_key")
+    if not api_key or not ctx:
+        # Fallback: plain DB counts
+        today = date.today()
+        tasks_count = (await db.execute(select(func.count(Task.id)).where(Task.is_deleted == False))).scalar()
+        demands_count = (await db.execute(select(func.count(DemandRequest.id)).where(DemandRequest.is_deleted == False))).scalar()
+        incidents_open = (await db.execute(
+            select(func.count(Incident.id)).where(Incident.is_deleted == False, Incident.status.in_(["abierto", "en_investigacion"]))
+        )).scalar()
+        activities_pending = (await db.execute(
+            select(func.count(ActivityInstance.id)).where(ActivityInstance.status.in_([ActivityStatus.SIN_INICIAR, ActivityStatus.EN_PROCESO]))
+        )).scalar()
+        activities_overdue = (await db.execute(
+            select(func.count(ActivityInstance.id)).where(
+                ActivityInstance.due_date < today,
+                ActivityInstance.status.in_([ActivityStatus.SIN_INICIAR, ActivityStatus.EN_PROCESO])
+            )
+        )).scalar()
+        return {
+            "action": "message",
+            "message": f"**Resumen del Sistema:**\n\n"
+                f"- **Tareas:** {tasks_count} totales\n"
+                f"- **Demandas:** {demands_count} registradas\n"
+                f"- **Incidentes abiertos:** {incidents_open}\n"
+                f"- **Actividades pendientes:** {activities_pending}\n"
+                f"- **Actividades vencidas:** {activities_overdue}\n\n"
+                f"{'**Atencion:** Hay ' + str(activities_overdue) + ' actividades vencidas que requieren accion.' if activities_overdue > 0 else 'Todo bajo control.'}",
+        }
 
-    return {
-        "action": "message",
-        "message": f"**Resumen del Sistema:**\n\n"
-            f"- **Tareas:** {tasks_count} totales\n"
-            f"- **Demandas:** {demands_count} registradas\n"
-            f"- **Incidentes abiertos:** {incidents_open}\n"
-            f"- **Actividades pendientes:** {activities_pending}\n"
-            f"- **Actividades vencidas:** {activities_overdue}\n\n"
-            f"{'**Atencion:** Hay ' + str(activities_overdue) + ' actividades vencidas que requieren accion.' if activities_overdue > 0 else 'Todo bajo control.'}",
-    }
+    return await _ai_response('Dame un resumen ejecutivo del estado actual del sistema.', db, user, context_override=ctx)
 
 
-async def _ai_response(message: str, db, user, history=None) -> dict:
-    """Get AI response for general questions."""
+async def _ai_response(message: str, db, user, history=None, context_override: str = None) -> dict:
+    """
+    Get AI response using aria_intelligence context.
+    Builds a Gemini prompt with system rules + role-filtered context + history + question.
+    """
     api_key = await get_service_config_value(db, "gemini", "api_key")
 
     if not api_key:
@@ -224,22 +233,45 @@ async def _ai_response(message: str, db, user, history=None) -> dict:
                 "*Para respuestas con IA, configura Gemini en Admin > Integraciones.*",
         }
 
-    model = await get_service_config_value(db, "gemini", "model") or "gemini-pro"
+    # Get smart context filtered by role and intent
+    from app.services.aria_intelligence import get_context as get_aria_context
+    smartflow_ctx = context_override or await get_aria_context(db, user, message)
+
+    model = await get_service_config_value(db, "gemini", "model") or "gemini-1.5-flash"
+    if model in ("gemini-pro", "gemini-1.0-pro"):
+        model = "gemini-1.5-flash"
+
     system = (
         "Eres SmartFlow AI, asistente de gestion para CAS BO en Vanti. "
         "Respondes en espanol, de forma concisa y util. "
+        "USA SIEMPRE el bloque de CONTEXTO para responder con datos reales. "
         "Puedes ayudar con gestion de proyectos, demandas TI, incidentes, "
         "metodologia Lean/Scrum, y recomendaciones de mejora continua. "
-        f"El usuario es {user.full_name} con rol {user.role.value}."
+        f"El usuario es {user.full_name} con rol {user.role.value}. "
+        "NUNCA inventes datos que no esten en el contexto."
     )
 
-    contents = [{"parts": [{"text": system + "\n\nUsuario: " + message}]}]
+    # Build history block
+    history_lines = []
+    for h in (history or [])[-6:]:
+        role_label = "Asistente" if h.get("role") == "assistant" else user.full_name.split()[0]
+        history_lines.append(f"{role_label}: {str(h.get('content', ''))[:300]}")
+    history_block = ("\n\nHISTORIAL:\n" + "\n".join(history_lines)) if history_lines else ""
+
+    full_prompt = (
+        f"{system}\n\n"
+        f"{smartflow_ctx}"
+        f"{history_block}\n\n"
+        f"Pregunta: {message}"
+    )
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
+            api_version = "v1beta" if any(x in model for x in ("1.5", "2.0", "flash", "pro-latest")) else "v1"
             resp = await client.post(
-                f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent?key={api_key}",
-                json={"contents": contents, "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1024}},
+                f"https://generativelanguage.googleapis.com/{api_version}/models/{model}:generateContent?key={api_key}",
+                json={"contents": [{"parts": [{"text": full_prompt}]}],
+                      "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1024}},
             )
             if resp.status_code == 200:
                 data = resp.json()
