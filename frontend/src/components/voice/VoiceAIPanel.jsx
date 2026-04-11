@@ -922,8 +922,10 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       const res = await voiceAPI.finalizeMeeting(meeting.id)
       setMeeting(res.data)
       setAnalysis(res.data)
-    } catch {
-      alert('Error al finalizar la reunión.')
+    } catch (err) {
+      // Show inline error — don't block with alert
+      const msg = err?.response?.data?.detail || err?.message || 'Error al finalizar'
+      setMeeting(prev => prev ? { ...prev, _finalizeError: msg } : prev)
     } finally {
       setFinalizing(false)
     }

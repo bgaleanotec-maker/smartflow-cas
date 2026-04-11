@@ -715,16 +715,19 @@ async def finalize_meeting(meeting_id: int, db: DB, user: CurrentUser):
             started = started.replace(tzinfo=timezone.utc)
         meeting.duration_seconds = int((now_utc - started).total_seconds())
 
+    # Commit basic data NOW — meeting is safe even if Gemini analysis fails/times out
     await db.flush()
+    await db.commit()
 
-    # AI Analysis via Gemini
-    api_key = await get_service_config_value(db, "gemini", "api_key")
-    if api_key and full_transcript.strip():
-        model = await get_service_config_value(db, "gemini", "model") or "gemini-1.5-flash"
-        if model in ("gemini-pro", "gemini-1.0-pro"):
-            model = "gemini-1.5-flash"
+    # AI Analysis via Gemini — wrapped in try/except so it never blocks the response
+    try:
+        api_key = await get_service_config_value(db, "gemini", "api_key")
+        if api_key and full_transcript.strip():
+            model = await get_service_config_value(db, "gemini", "model") or "gemini-1.5-flash"
+            if model in ("gemini-pro", "gemini-1.0-pro"):
+                model = "gemini-1.5-flash"
 
-        analysis_prompt = f"""Analiza esta transcripción de reunión del equipo CAS de Vanti y responde en JSON válido:
+            analysis_prompt = f"""Analiza esta transcripción de reunión del equipo CAS de Vanti y responde en JSON válido:
 {{
   "summary": "Resumen ejecutivo de 3-4 oraciones",
   "action_items": [{{"text": "...", "owner_mentioned": "...", "priority": "alta/media/baja"}}],
@@ -738,51 +741,46 @@ async def finalize_meeting(meeting_id: int, db: DB, user: CurrentUser):
 Transcripción:
 {full_transcript}"""
 
-        ai_text = await _call_gemini(api_key, model, analysis_prompt, temperature=0.3, max_tokens=1500)
+            ai_text = await _call_gemini(api_key, model, analysis_prompt, temperature=0.3, max_tokens=1500)
 
-        if ai_text:
-            # Extract JSON from response (may be wrapped in markdown code block)
-            json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", ai_text, re.DOTALL)
-            if json_match:
-                ai_text = json_match.group(1)
-            else:
-                # Try to find bare JSON object
-                json_match = re.search(r"\{.*\}", ai_text, re.DOTALL)
+            if ai_text:
+                json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", ai_text, re.DOTALL)
                 if json_match:
-                    ai_text = json_match.group(0)
+                    ai_text = json_match.group(1)
+                else:
+                    json_match = re.search(r"\{.*\}", ai_text, re.DOTALL)
+                    if json_match:
+                        ai_text = json_match.group(0)
+                try:
+                    analysis = json.loads(ai_text)
+                    meeting.ai_summary = analysis.get("summary")
+                    meeting.ai_action_items = analysis.get("action_items")
+                    meeting.ai_decisions = analysis.get("decisions")
+                    meeting.ai_key_topics = analysis.get("key_topics")
+                    meeting.ai_participants_mentioned = analysis.get("participants_mentioned")
+                except json.JSONDecodeError:
+                    meeting.ai_summary = ai_text[:500] if ai_text else None
 
-            try:
-                analysis = json.loads(ai_text)
-                meeting.ai_summary = analysis.get("summary")
-                meeting.ai_action_items = analysis.get("action_items")
-                meeting.ai_decisions = analysis.get("decisions")
-                meeting.ai_key_topics = analysis.get("key_topics")
-                meeting.ai_participants_mentioned = analysis.get("participants_mentioned")
-            except json.JSONDecodeError:
-                logger.error(f"Failed to parse Gemini JSON for meeting {meeting_id}")
-                meeting.ai_summary = ai_text[:500] if ai_text else None
+            # Auto-link to BP activity
+            if meeting.bp_activity_id and meeting.ai_summary:
+                from app.models.business_plan import BPComment
+                dur_min = meeting.duration_seconds // 60 if meeting.duration_seconds else 0
+                db.add(BPComment(
+                    activity_id=meeting.bp_activity_id,
+                    author_id=meeting.created_by_id,
+                    content=(
+                        f"📝 **Reunión transcrita:** {meeting.title}\n"
+                        f"🕐 Duración: {dur_min} min\n\n"
+                        f"**Resumen IA:** {meeting.ai_summary}"
+                    ),
+                ))
+                meeting.auto_linked_actions = {"linked": True, "meeting_comment_added": True}
+
+    except Exception as exc:
+        logger.warning(f"Gemini analysis failed for meeting {meeting_id}: {exc}")
+        # Meeting is already saved — just mark completed without AI analysis
 
     meeting.status = MeetingStatus.COMPLETED
-
-    # ── Auto-link: if tied to a BP activity, add a comment with summary ──────
-    if meeting.bp_activity_id and meeting.ai_summary:
-        try:
-            from app.models.business_plan import BPComment
-            comment_text = (
-                f"📝 **Reunión transcrita:** {meeting.title}\n"
-                f"🕐 Duración: {meeting.duration_seconds // 60 if meeting.duration_seconds else 0} min\n\n"
-                f"**Resumen IA:** {meeting.ai_summary}"
-            )
-            auto_comment = BPComment(
-                activity_id=meeting.bp_activity_id,
-                author_id=meeting.created_by_id,
-                content=comment_text,
-            )
-            db.add(auto_comment)
-            meeting.auto_linked_actions = {"linked": True, "meeting_comment_added": True}
-        except Exception as e:
-            logger.warning(f"Could not auto-link meeting to BP activity: {e}")
-
     await db.flush()
     await db.refresh(meeting, ["created_by", "chunks", "business"])
     await db.commit()

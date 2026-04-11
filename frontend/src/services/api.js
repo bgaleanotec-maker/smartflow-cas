@@ -294,7 +294,7 @@ export const voiceAPI = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
-  finalizeMeeting: (meetingId) => api.post(`/voice/meetings/${meetingId}/finalize`),
+  finalizeMeeting: (meetingId) => api.post(`/voice/meetings/${meetingId}/finalize`, {}, { timeout: 90000 }),
   tts: (data) => api.post('/voice/tts', data, { responseType: 'arraybuffer' }),
   ttsStream: (data) => api.post('/voice/tts/stream', data, { responseType: 'blob' }),
   ariaChat: (data, config) => api.post('/voice/aria-chat', data, { timeout: 22000, ...config }),
