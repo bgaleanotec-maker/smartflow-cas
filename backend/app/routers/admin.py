@@ -315,6 +315,17 @@ async def test_integration(service_name: str, db: DB, admin: AdminUser):
     import httpx
 
     try:
+        # Whisper runs locally — no API key needed, just confirm model config
+        if service_name == "whisper":
+            model = await get_service_config_value(db, "whisper", "model") or "base"
+            descriptions = {
+                "base": "rápido y liviano (~1s arranque) — recomendado para Render free tier",
+                "medium": "mejor precisión (~5s arranque)",
+                "large-v3": "máxima calidad (~15s arranque, requiere 4GB RAM)",
+            }
+            desc = descriptions.get(model, "modelo configurado")
+            return {"success": True, "message": f"Whisper local · modelo '{model}' · {desc}"}
+
         api_key = await get_service_config_value(db, service_name, "api_key")
         if not api_key:
             return {"success": False, "message": "No hay API key configurada"}
