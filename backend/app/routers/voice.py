@@ -469,6 +469,98 @@ async def transcribe_chunk(
     }
 
 
+@router.post("/meetings/{meeting_id}/transcribe-complete")
+async def transcribe_complete(
+    meeting_id: int,
+    db: DB,
+    user: CurrentUser,
+    file: UploadFile = File(...),
+):
+    """
+    Transcribe a complete audio recording in one shot.
+    Much more reliable than per-chunk: sends the full valid webm file.
+    MediaRecorder webm chunks after the first are incomplete without their header —
+    this endpoint accepts the accumulated full recording.
+    """
+    meeting = (
+        await db.execute(
+            select(VoiceMeeting).where(
+                VoiceMeeting.id == meeting_id,
+                VoiceMeeting.is_deleted == False,
+            )
+        )
+    ).scalar_one_or_none()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Reunión no encontrada")
+
+    groq_api_key = await get_service_config_value(db, "groq", "api_key")
+    model_size = await get_service_config_value(db, "whisper", "model") or "base"
+
+    audio_bytes = await file.read()
+    logger.info(f"transcribe-complete: {len(audio_bytes)} bytes, meeting {meeting_id}")
+
+    if len(audio_bytes) < 1000:
+        return {"text": "", "chunks": [], "source": "none", "error": "Audio demasiado corto"}
+
+    from app.services.whisper_service import transcribe_audio
+    result = await transcribe_audio(
+        audio_bytes,
+        model_size=model_size,
+        groq_api_key=groq_api_key,
+    )
+
+    transcript_text = (result.get("text") or "").strip()
+    transcription_source = result.get("source", "unknown")
+
+    if result.get("error") or not transcript_text or transcript_text.startswith("["):
+        logger.warning(f"transcribe-complete failed: {result.get('error')} source={transcription_source}")
+        return {
+            "text": "",
+            "chunks": [],
+            "source": transcription_source,
+            "error": result.get("error") or "Sin texto detectado",
+        }
+
+    # Delete previous empty/failed chunks from this meeting
+    from sqlalchemy import delete as sql_delete
+    await db.execute(
+        sql_delete(TranscriptChunk).where(
+            TranscriptChunk.meeting_id == meeting_id,
+        )
+    )
+
+    # Save transcript as a single chunk — finalize_meeting will use this
+    chunk = TranscriptChunk(
+        meeting_id=meeting_id,
+        sequence_num=1,
+        speaker_id=user.id,
+        speaker_name=user.full_name,
+        text=transcript_text,
+        confidence=result.get("confidence"),
+        language=result.get("language"),
+        duration_seconds=result.get("duration"),
+        timestamp_in_meeting=0,
+    )
+    db.add(chunk)
+
+    if not meeting.whisper_model_used:
+        meeting.whisper_model_used = f"{transcription_source}:{model_size}"
+    if not meeting.language_detected and result.get("language"):
+        meeting.language_detected = result["language"]
+
+    await db.flush()
+    await db.commit()
+    await db.refresh(meeting, ["chunks"])
+
+    logger.info(f"transcribe-complete OK: {len(transcript_text)} chars, source={transcription_source}")
+    return {
+        "text": transcript_text,
+        "chunks": [_chunk_to_dict(c) for c in (meeting.chunks or [])],
+        "source": transcription_source,
+        "error": None,
+    }
+
+
 @router.post("/meetings/{meeting_id}/finalize")
 async def finalize_meeting(meeting_id: int, db: DB, user: CurrentUser):
     """

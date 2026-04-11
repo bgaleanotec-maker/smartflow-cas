@@ -844,90 +844,138 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       setAnalyserNode(analyser)
 
       // Prefer webm, fallback to mp4 (Safari)
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+          ? 'audio/webm'
+          : 'audio/mp4'
+
       const mr = new MediaRecorder(stream, { mimeType })
       mediaRecorderRef.current = mr
       chunksRef.current = []
 
-      mr.ondataavailable = async (e) => {
+      // ── COLLECT all chunks — send complete audio on finalize ────────────
+      // Reason: webm format only includes the header in chunk[0].
+      // Chunks 2..N are continuation segments — not valid standalone webm files.
+      // Sending individual chunks to Whisper produces empty transcriptions.
+      // Solution: accumulate everything, send the full valid webm on finalize.
+      mr.ondataavailable = (e) => {
         if (e.data.size > 0) {
-          const blob = new Blob([e.data], { type: 'audio/webm' })
-          setTranscribingChunk(true)
-          try {
-            const res = await voiceAPI.transcribeChunk(meetingId, blob)
-            const { text, sequence_num } = res.data
-            if (text && text.trim()) {
-              setTranscript((prev) => [
-                ...prev,
-                {
-                  speaker: currentUser?.full_name || 'Yo',
-                  text,
-                  seq: sequence_num,
-                },
-              ])
-            }
-          } catch {
-            // Silently ignore — Whisper may be loading on cold start
-          } finally {
-            setTranscribingChunk(false)
-          }
+          chunksRef.current.push(e.data)
         }
       }
 
-      mr.start()
+      mr.start(3000)  // collect data every 3s — ensures data is available when stopped
       setIsRecordingMeeting(true)
       setRecordingStart(Date.now())
 
-      // Request data every 7 seconds — good balance of context vs latency for Whisper
-      chunkIntervalRef.current = setInterval(() => {
-        if (mr.state === 'recording') {
-          mr.requestData()
-        }
-      }, 7000)
     } catch (err) {
       alert(err.message || 'No se pudo acceder al audio. Verifica los permisos del navegador.')
     }
   }
 
-  const stopMeetingRecording = () => {
+  // Stop recording and return a Promise<Blob> with the complete audio
+  const stopAndGetAudio = () => new Promise((resolve) => {
     if (chunkIntervalRef.current) {
       clearInterval(chunkIntervalRef.current)
       chunkIntervalRef.current = null
     }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.requestData()
-      mediaRecorderRef.current.stop()
+
+    const cleanup = () => {
+      if (streamRef.current) {
+        if (streamRef.current._originalStreams) {
+          streamRef.current._originalStreams.forEach(s => s.getTracks().forEach(t => t.stop()))
+        }
+        streamRef.current.getTracks().forEach(t => t.stop())
+        streamRef.current = null
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close()
+        audioContextRef.current = null
+      }
+      setAnalyserNode(null)
+      setIsRecordingMeeting(false)
+    }
+
+    const mr = mediaRecorderRef.current
+    if (!mr || mr.state === 'inactive') {
+      const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+      cleanup()
+      resolve(blob)
+      return
+    }
+
+    mr.onstop = () => {
+      const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+      cleanup()
+      resolve(blob)
+    }
+
+    if (mr.state === 'recording') {
+      mr.requestData()
+      mr.stop()
+    } else {
+      const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+      cleanup()
+      resolve(blob)
+    }
+  })
+
+  const stopMeetingRecording = () => {
+    // Lightweight stop for unmount/cancel — doesn't return blob
+    if (chunkIntervalRef.current) { clearInterval(chunkIntervalRef.current); chunkIntervalRef.current = null }
+    if (mediaRecorderRef.current?.state !== 'inactive') {
+      try { mediaRecorderRef.current?.stop() } catch {}
     }
     if (streamRef.current) {
-      // Stop any mixed original streams too
       if (streamRef.current._originalStreams) {
         streamRef.current._originalStreams.forEach(s => s.getTracks().forEach(t => t.stop()))
       }
-      streamRef.current.getTracks().forEach((t) => t.stop())
+      streamRef.current.getTracks().forEach(t => t.stop())
       streamRef.current = null
     }
-    if (audioContextRef.current) {
-      audioContextRef.current.close()
-      audioContextRef.current = null
-    }
+    if (audioContextRef.current) { audioContextRef.current.close(); audioContextRef.current = null }
     setAnalyserNode(null)
     setIsRecordingMeeting(false)
   }
 
   const finalizeMeeting = async () => {
     if (!meeting) return
-    stopMeetingRecording()
     setFinalizing(true)
+    setTranscribingChunk(true)
+
     try {
+      // 1. Stop recording → get complete valid webm blob
+      const completeBlob = await stopAndGetAudio()
+
+      // 2. Send complete audio to backend for transcription (one shot, full context)
+      if (completeBlob && completeBlob.size > 2000) {
+        try {
+          const tRes = await voiceAPI.transcribeComplete(meeting.id, completeBlob)
+          if (tRes.data?.chunks?.length > 0) {
+            setTranscript(tRes.data.chunks.map(c => ({
+              speaker: c.speaker_name || 'Usuario',
+              text: c.text,
+              seq: c.sequence_num,
+            })))
+          }
+        } catch (tErr) {
+          console.warn('Transcripción falló:', tErr)
+          // Continue to finalize — meeting saved even without transcript
+        }
+      }
+      setTranscribingChunk(false)
+
+      // 3. Finalize: timestamps + Gemini AI analysis
       const res = await voiceAPI.finalizeMeeting(meeting.id)
       setMeeting(res.data)
       setAnalysis(res.data)
     } catch (err) {
-      // Show inline error — don't block with alert
       const msg = err?.response?.data?.detail || err?.message || 'Error al finalizar'
       setMeeting(prev => prev ? { ...prev, _finalizeError: msg } : prev)
     } finally {
       setFinalizing(false)
+      setTranscribingChunk(false)
     }
   }
 

@@ -294,6 +294,14 @@ export const voiceAPI = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
+  transcribeComplete: (meetingId, audioBlob) => {
+    const formData = new FormData()
+    formData.append('file', audioBlob, 'recording.webm')
+    return api.post(`/voice/meetings/${meetingId}/transcribe-complete`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,  // 2 min para grabaciones largas
+    })
+  },
   finalizeMeeting: (meetingId) => api.post(`/voice/meetings/${meetingId}/finalize`, {}, { timeout: 90000 }),
   tts: (data) => api.post('/voice/tts', data, { responseType: 'arraybuffer' }),
   ttsStream: (data) => api.post('/voice/tts/stream', data, { responseType: 'blob' }),
