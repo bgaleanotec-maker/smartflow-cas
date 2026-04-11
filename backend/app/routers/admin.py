@@ -362,6 +362,8 @@ async def test_integration(service_name: str, db: DB, admin: AdminUser):
                 return {"success": True, "message": "API key guardada (sin endpoint de prueba disponible)"}
 
             elif service_name == "elevenlabs":
+                key_preview = api_key[:8] + "..." + api_key[-4:] if len(api_key) > 12 else "***"
+                # Try /v1/user first (works on all plans)
                 resp = await client.get(
                     "https://api.elevenlabs.io/v1/user",
                     headers={"xi-api-key": api_key},
@@ -373,9 +375,21 @@ async def test_integration(service_name: str, db: DB, admin: AdminUser):
                     chars_limit = data.get("subscription", {}).get("character_limit", 0)
                     return {
                         "success": True,
-                        "message": f"ElevenLabs conectado · Plan: {tier} · Caracteres: {chars_used:,}/{chars_limit:,}"
+                        "message": f"ElevenLabs OK · Plan: {tier} · Caracteres: {chars_used:,}/{chars_limit:,}"
                     }
-                return {"success": False, "message": f"Error ElevenLabs: {resp.status_code} — verifica la API key"}
+                # Parse ElevenLabs error detail for better diagnosis
+                try:
+                    err_detail = resp.json().get("detail", {})
+                    if isinstance(err_detail, dict):
+                        err_msg = err_detail.get("message", str(err_detail))
+                    else:
+                        err_msg = str(err_detail)
+                except Exception:
+                    err_msg = resp.text[:100]
+                return {
+                    "success": False,
+                    "message": f"ElevenLabs {resp.status_code} · key usada: {key_preview} · {err_msg}"
+                }
 
             elif service_name == "whisper":
                 # Whisper runs locally, just confirm the model setting was saved
