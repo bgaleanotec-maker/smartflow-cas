@@ -414,10 +414,26 @@ async def transcribe_chunk(
     else:
         ts_in_meeting = None
 
-    # If Whisper returned an error, store empty text (don't save error messages as transcript)
+    # If Whisper returned an error or empty text, skip saving — no noise in transcript
     transcript_text = result.get("text", "") or ""
     if result.get("error") or transcript_text.startswith("["):
         transcript_text = ""
+
+    transcription_source = result.get("source", "unknown")
+    transcription_error = result.get("error")
+
+    if not transcript_text.strip():
+        # Nothing to save — return info so frontend can surface errors if needed
+        return {
+            "chunk_id": None,
+            "text": "",
+            "sequence_num": seq_num,
+            "confidence": None,
+            "language": None,
+            "duration": result.get("duration"),
+            "source": transcription_source,
+            "error": transcription_error,
+        }
 
     chunk = TranscriptChunk(
         meeting_id=meeting_id,
@@ -425,7 +441,7 @@ async def transcribe_chunk(
         speaker_id=user.id,
         speaker_name=user.full_name,
         text=transcript_text,
-        confidence=result.get("confidence") if not result.get("error") else None,
+        confidence=result.get("confidence"),
         language=result.get("language"),
         duration_seconds=result.get("duration"),
         timestamp_in_meeting=ts_in_meeting,
@@ -448,6 +464,8 @@ async def transcribe_chunk(
         "confidence": chunk.confidence,
         "language": chunk.language,
         "duration": chunk.duration_seconds,
+        "source": transcription_source,
+        "error": None,
     }
 
 
@@ -479,11 +497,12 @@ async def finalize_meeting(meeting_id: int, db: DB, user: CurrentUser):
     )
     chunks = chunks_result.scalars().all()
 
-    # Build full transcript
+    # Build full transcript — skip empty chunks (failed transcriptions)
     transcript_parts = []
     for c in chunks:
-        speaker = c.speaker_name or "Usuario"
-        transcript_parts.append(f"[{speaker}]: {c.text}")
+        if c.text and c.text.strip():
+            speaker = c.speaker_name or "Usuario"
+            transcript_parts.append(f"[{speaker}]: {c.text}")
     full_transcript = "\n".join(transcript_parts)
 
     meeting.full_transcript = full_transcript
