@@ -382,15 +382,21 @@ async def transcribe_chunk(
     if not meeting:
         raise HTTPException(status_code=404, detail="Reunión no encontrada")
 
-    # Get whisper model size from service_config / env
+    # Get transcription config — Groq (cloud, 0 RAM) preferred over local Whisper
+    groq_api_key = await get_service_config_value(db, "groq", "api_key")
+    groq_model = await get_service_config_value(db, "groq", "model") or "whisper-large-v3-turbo"
     model_size = await get_service_config_value(db, "whisper", "model") or "base"
 
     # Read audio bytes
     audio_bytes = await file.read()
 
-    # Transcribe
+    # Transcribe (Groq if key available → no RAM usage; else local faster-whisper)
     from app.services.whisper_service import transcribe_audio
-    result = await transcribe_audio(audio_bytes, model_size=model_size)
+    result = await transcribe_audio(
+        audio_bytes,
+        model_size=model_size,
+        groq_api_key=groq_api_key,
+    )
 
     # Determine sequence number
     count_result = await db.execute(

@@ -395,10 +395,29 @@ async def test_integration(service_name: str, db: DB, admin: AdminUser):
                 return {"success": False, "message": f"ElevenLabs {resp.status_code}: {err_msg}"}
 
             elif service_name == "whisper":
-                # Whisper runs locally, just confirm the model setting was saved
-                from app.core.config import get_service_config_value
                 model = await get_service_config_value(db, "whisper", "model") or "base"
-                return {"success": True, "message": f"Modelo Whisper configurado: {model} (se cargará en el próximo uso)"}
+                descriptions = {
+                    "tiny": "~75MB RAM — el más liviano",
+                    "base": "~150MB RAM — rápido y liviano",
+                    "medium": "~500MB RAM — mejor precisión",
+                    "large-v3": "~1.5GB RAM — máxima calidad",
+                }
+                return {"success": True, "message": f"Whisper local '{model}' · {descriptions.get(model, 'configurado')}"}
+
+            elif service_name == "groq":
+                # Test Groq by listing available models
+                resp = await client.get(
+                    "https://api.groq.com/openai/v1/models",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    timeout=8.0,
+                )
+                if resp.status_code == 200:
+                    groq_model = await get_service_config_value(db, "groq", "model") or "whisper-large-v3-turbo"
+                    return {
+                        "success": True,
+                        "message": f"Groq conectado ✓ · modelo: {groq_model} · 0 RAM en servidor · ~1-2s por fragmento"
+                    }
+                return {"success": False, "message": f"Groq {resp.status_code}: verifica la API key en console.groq.com"}
 
             return {"success": False, "message": "Test no implementado para este servicio"}
 

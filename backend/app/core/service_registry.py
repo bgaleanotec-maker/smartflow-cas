@@ -158,4 +158,28 @@ SERVICE_REGISTRY = {
             },
         ],
     },
+    "groq": {
+        "display_name": "Groq (Transcripción en nube ⚡)",
+        "description": "Whisper en la nube de Groq. Gratis, rapidísimo (1-2s), y no usa RAM del servidor. Recomendado para Render free tier.",
+        "icon": "Zap",
+        "fields": [
+            {
+                "key_name": "api_key",
+                "label": "API Key",
+                "field_type": "password",
+                "required": True,
+                "placeholder": "gsk_xxxxxxxxxxxxxxxxxxxxxxxx",
+                "help": "Obtén tu key gratis en console.groq.com → API Keys",
+            },
+            {
+                "key_name": "model",
+                "label": "Modelo Whisper",
+                "field_type": "text",
+                "required": False,
+                "placeholder": "whisper-large-v3-turbo",
+                "default": "whisper-large-v3-turbo",
+                "help": "whisper-large-v3-turbo = más rápido. whisper-large-v3 = más preciso.",
+            },
+        ],
+    },
 }

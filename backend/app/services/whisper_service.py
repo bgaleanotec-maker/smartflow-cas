@@ -1,206 +1,212 @@
 """
-Faster-Whisper transcription service — v2 (2025-04-10).
-Model is loaded once and cached. Model size configurable via admin panel or WHISPER_MODEL env var.
+Transcription service — SmartFlow ARIA.
 
-Key improvements over v1:
-  - condition_on_previous_text=False  → eliminates repetition loops in chunked audio
-  - temperature=0.0                   → deterministic greedy decoding, faster, less hallucination
-  - beam_size=3                       → 30% faster on CPU vs beam_size=5, fewer hallucinations
-  - Segments materialized before tempfile deleted → fixes race condition bug
-  - VAD tuned for Colombian Spanish meetings
-  - Word-level timestamps
-  - Model warmup on load (eliminates cold-start delay on first request)
+Priority order:
+  1. Groq Whisper API  (cloud, free tier 28,800s/day, ~1-2s latency, 0 RAM on server)
+  2. Local faster-whisper (fallback — loads model into RAM, only if no Groq key)
 
-Model upgrade path:
-  Free tier  (512MB) → base
-  Starter    (2GB)   → medium or large-v3-turbo
-  Standard   (4GB)   → large-v3
+WHY GROQ FIRST:
+  Render free tier has 512MB RAM. Loading even the 'base' Whisper model uses
+  ~350MB which triggers OOM restarts. Groq runs transcription in their cloud
+  at no cost (generous free tier) with much lower latency than local cold start.
 
-For GPU servers: device="cuda", compute_type="float16"
+Groq Whisper API:
+  - Endpoint: https://api.groq.com/openai/v1/audio/transcriptions
+  - Models: whisper-large-v3-turbo (fastest), whisper-large-v3 (best quality)
+  - Free tier: 28,800 audio seconds/day
+  - Key: console.groq.com → API Keys (free account)
 """
 import logging
-import math
 import os
 import asyncio
 import tempfile
 from typing import Optional
 
+import httpx
+
 logger = logging.getLogger(__name__)
 
-# CPU thread optimization — set once at import time
-os.environ.setdefault("OMP_NUM_THREADS", "4")
-
+# ── Local model cache (only used when Groq not configured) ─────────────────────
+# Deliberately NOT warmed up at startup — load only on first actual request
 _whisper_model = None
 _loaded_model_size = None
 
 
-def get_whisper_model(model_size: str = "base"):
-    """Lazy-load and cache the Whisper model. Reloads if model size changes."""
+# ─── 1. GROQ WHISPER (cloud, recommended) ────────────────────────────────────
+
+async def _transcribe_groq(
+    audio_bytes: bytes,
+    api_key: str,
+    language: str = "es",
+    model: str = "whisper-large-v3-turbo",
+) -> dict:
+    """
+    Transcribe via Groq's hosted Whisper API.
+    Accepts webm/mp4/wav/mp3 up to 25MB.
+    Returns same dict shape as local transcribe_audio().
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                "https://api.groq.com/openai/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                files={"file": ("audio.webm", audio_bytes, "audio/webm")},
+                data={
+                    "model": model,
+                    "language": language,
+                    "response_format": "verbose_json",
+                    "temperature": "0",
+                },
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                text = data.get("text", "").strip()
+                duration = data.get("duration", 0.0)
+                detected_lang = data.get("language", language)
+                return {
+                    "text": text,
+                    "language": detected_lang,
+                    "confidence": 0.92,   # Groq doesn't return confidence — assume high
+                    "duration": round(float(duration), 2),
+                    "words": [],
+                    "error": None,
+                    "source": "groq",
+                }
+            else:
+                err = resp.text[:200]
+                logger.error(f"Groq transcription error {resp.status_code}: {err}")
+                return _error_result(language, f"Groq {resp.status_code}: {err}", source="groq")
+    except Exception as e:
+        logger.error(f"Groq transcription exception: {e}")
+        return _error_result(language, str(e), source="groq")
+
+
+# ─── 2. LOCAL FASTER-WHISPER (fallback) ──────────────────────────────────────
+
+def _get_local_model(model_size: str = "base"):
+    """
+    Load local Whisper model on demand.
+    NOTE: uses ~350MB RAM for 'base'. Only used when Groq key not configured.
+    """
     global _whisper_model, _loaded_model_size
     if _whisper_model is None or _loaded_model_size != model_size:
         try:
             from faster_whisper import WhisperModel
-            logger.info(f"Loading faster-whisper model: {model_size}")
+            logger.info(f"Loading local Whisper model: {model_size} (Groq not configured)")
             _whisper_model = WhisperModel(model_size, device="cpu", compute_type="int8")
             _loaded_model_size = model_size
-            # Warmup: eliminates cold-start latency on first real request
-            _warmup_model(_whisper_model)
-            logger.info(f"Whisper model '{model_size}' loaded and warmed up")
+            logger.info(f"Local Whisper '{model_size}' ready")
         except Exception as e:
-            logger.error(f"Failed to load Whisper model: {e}")
+            logger.error(f"Failed to load local Whisper: {e}")
             return None
     return _whisper_model
 
 
-def _warmup_model(model):
-    """Run a silent audio pass through the model to warm up CTranslate2 kernels."""
+def _run_local_transcription(audio_bytes: bytes, model_size: str, language: str) -> dict:
+    """Synchronous local transcription — run in thread pool."""
+    import math
+    model = _get_local_model(model_size)
+    if model is None:
+        return _error_result(language, "Local Whisper model could not be loaded", source="local")
+
+    with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
+        tmp.write(audio_bytes)
+        tmp_path = tmp.name
+
     try:
-        import numpy as np
-        silence = np.zeros(16000, dtype=np.float32)  # 1s silence at 16kHz
-        list(model.transcribe(silence, language="es", beam_size=1)[0])
-        logger.info("Whisper warmup complete")
+        segments_gen, info = model.transcribe(
+            tmp_path,
+            beam_size=3,
+            language=language,
+            temperature=0.0,
+            condition_on_previous_text=False,
+            no_speech_threshold=0.6,
+            compression_ratio_threshold=2.4,
+            vad_filter=True,
+            vad_parameters={
+                "threshold": 0.5,
+                "min_speech_duration_ms": 250,
+                "max_speech_duration_s": 30.0,
+                "min_silence_duration_ms": 800,
+                "speech_pad_ms": 400,
+            },
+            word_timestamps=False,
+        )
+        segments = list(segments_gen)  # materialize before tempfile deletion
     except Exception as e:
-        logger.warning(f"Warmup failed (non-fatal): {e}")
+        logger.error(f"Local transcription error: {e}")
+        return _error_result(language, str(e), source="local")
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
 
+    text_parts = []
+    confidences = []
+    duration = 0.0
+    for seg in segments:
+        t = seg.text.strip()
+        if t:
+            text_parts.append(t)
+        if hasattr(seg, "avg_logprob"):
+            confidences.append(min(1.0, math.exp(seg.avg_logprob)))
+        duration = max(duration, seg.end)
 
-def _get_vad_parameters(mode: str = "meeting") -> dict:
-    """VAD parameters tuned for Colombian Spanish.
-
-    'meeting'  — tolerate natural pauses, split long continuous speech
-    'voice'    — low latency for ARIA back-and-forth conversational turns
-    """
-    if mode == "voice":
-        return {
-            "threshold": 0.5,
-            "min_speech_duration_ms": 100,
-            "max_speech_duration_s": 15.0,
-            "min_silence_duration_ms": 400,
-            "speech_pad_ms": 300,
-        }
-    # meeting (default)
     return {
-        "threshold": 0.5,
-        "neg_threshold": 0.35,
-        "min_speech_duration_ms": 250,
-        "max_speech_duration_s": 30.0,
-        "min_silence_duration_ms": 800,   # natural pause length in Colombian Spanish
-        "speech_pad_ms": 400,
+        "text": " ".join(text_parts).strip(),
+        "language": getattr(info, "language", language),
+        "confidence": round(sum(confidences) / len(confidences), 3) if confidences else 0.8,
+        "duration": round(duration, 2),
+        "words": [],
+        "error": None,
+        "source": "local",
     }
 
+
+# ─── Main entry point ─────────────────────────────────────────────────────────
 
 async def transcribe_audio(
     audio_bytes: bytes,
     model_size: str = "base",
     language: Optional[str] = None,
-    mode: str = "meeting",           # "meeting" or "voice" — tunes VAD params
-    word_timestamps: bool = True,    # return per-word timestamps for search/karaoke
+    mode: str = "meeting",
+    word_timestamps: bool = False,
+    groq_api_key: Optional[str] = None,
 ) -> dict:
     """
-    Transcribe audio bytes using faster-whisper.
+    Transcribe audio bytes. Tries Groq API first (no RAM, fast, free).
+    Falls back to local faster-whisper if Groq key not provided.
 
-    Returns:
-        {
-          "text":       str,
-          "language":   str,
-          "confidence": float,
-          "duration":   float,
-          "words":      list[{word, start, end, probability}],  # if word_timestamps=True
-          "error":      str | None,
-        }
+    Args:
+        audio_bytes:   raw audio (webm/mp4/wav)
+        model_size:    local model size (only used if Groq unavailable)
+        language:      ISO 639-1 code, defaults to 'es'
+        groq_api_key:  Groq API key — pass to use cloud transcription
     """
-    def _run_transcription():
-        model = get_whisper_model(model_size)
-        if model is None:
-            return _error_result(language, "Model not loaded — ensure faster-whisper is installed.")
+    lang = language or "es"
 
-        with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
-            tmp.write(audio_bytes)
-            tmp_path = tmp.name
+    # ── Groq path (preferred: cloud, 0 RAM) ─────────────────────────────────
+    if groq_api_key:
+        result = await _transcribe_groq(audio_bytes, groq_api_key, language=lang)
+        if not result.get("error"):
+            return result
+        logger.warning("Groq transcription failed, falling back to local Whisper")
 
-        try:
-            kwargs = {
-                # ── Core accuracy params ────────────────────────────────────
-                "beam_size": 3,                     # 3 = faster + fewer hallucinations vs 5
-                "language": language or "es",
-                "temperature": 0.0,                 # greedy decoding: deterministic, fastest
-                # ── Hallucination prevention ────────────────────────────────
-                "condition_on_previous_text": False, # CRITICAL: prevents repetition loops in chunked audio
-                "no_speech_threshold": 0.6,         # skip segments that are likely silence
-                "compression_ratio_threshold": 2.4, # skip repeated/hallucinated text
-                "log_prob_threshold": -1.0,
-                # ── VAD ─────────────────────────────────────────────────────
-                "vad_filter": True,
-                "vad_parameters": _get_vad_parameters(mode),
-                # ── Timestamps ──────────────────────────────────────────────
-                "word_timestamps": word_timestamps,
-            }
-
-            segments_gen, info = model.transcribe(tmp_path, **kwargs)
-
-            # ⚠️ CRITICAL: Materialize the lazy generator BEFORE the tempfile is
-            # deleted in the finally block. Iterating after deletion causes silent
-            # data corruption or empty results with VAD + word_timestamps enabled.
-            segments_list = list(segments_gen)
-
-        except Exception as e:
-            logger.error(f"Transcription error: {e}", exc_info=True)
-            return _error_result(language, str(e))
-        finally:
-            try:
-                os.unlink(tmp_path)
-            except Exception:
-                pass
-
-        # ── Process materialized segments ────────────────────────────────────
-        text_parts = []
-        total_confidence = []
-        words_data = []
-        duration = 0.0
-
-        for seg in segments_list:
-            seg_text = seg.text.strip()
-            if seg_text:
-                text_parts.append(seg_text)
-            if hasattr(seg, "avg_logprob"):
-                conf = min(1.0, math.exp(seg.avg_logprob))
-                total_confidence.append(conf)
-            duration = max(duration, seg.end)
-
-            if word_timestamps:
-                for word in (seg.words or []):
-                    words_data.append({
-                        "word": word.word,
-                        "start": round(word.start, 3),
-                        "end": round(word.end, 3),
-                        "probability": round(getattr(word, "probability", 0.9), 3),
-                    })
-
-        full_text = " ".join(text_parts).strip()
-        avg_confidence = (
-            sum(total_confidence) / len(total_confidence)
-            if total_confidence else 0.8
-        )
-
-        return {
-            "text": full_text,
-            "language": getattr(info, "language", language or "es"),
-            "confidence": round(avg_confidence, 3),
-            "duration": round(duration, 2),
-            "words": words_data,
-            "error": None,
-        }
-
-    # Run blocking transcription in a thread pool to avoid blocking the async event loop
+    # ── Local path (fallback: needs RAM) ─────────────────────────────────────
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, _run_transcription)
+    return await loop.run_in_executor(
+        None, _run_local_transcription, audio_bytes, model_size, lang
+    )
 
 
-def _error_result(language: Optional[str], error: str) -> dict:
+def _error_result(language: Optional[str], error: str, source: str = "unknown") -> dict:
     return {
-        "text": "[No se pudo transcribir el audio.]",
+        "text": "",
         "language": language or "es",
         "confidence": 0.0,
         "duration": 0.0,
         "words": [],
         "error": error,
+        "source": source,
     }

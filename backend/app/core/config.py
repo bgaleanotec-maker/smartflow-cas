@@ -37,7 +37,10 @@ class Settings(BaseSettings):
     ELEVENLABS_API_KEY: Optional[str] = None
     ELEVENLABS_VOICE_ID: str = "UgBBYS2sOqTuMpoF3BR0"  # Voz configurada equipo CAS
 
-    # Whisper transcription
+    # Groq (cloud Whisper — recommended for Render free tier, 0 RAM usage)
+    GROQ_API_KEY: Optional[str] = None
+
+    # Whisper transcription (local fallback when Groq not configured)
     WHISPER_MODEL: str = "base"  # base / medium / large-v3 (depends on server RAM)
 
     # CORS — all known frontend origins
@@ -68,7 +71,9 @@ _ENV_FALLBACK_MAP = {
     ("ultra", "instance_id"): "ULTRA_INSTANCE_ID",
     ("elevenlabs", "api_key"): "ELEVENLABS_API_KEY",
     ("elevenlabs", "voice_id"): "ELEVENLABS_VOICE_ID",
-    ("elevenlabs", "model"): None,  # defaults to eleven_multilingual_v2 in service
+    ("elevenlabs", "model"): None,
+    ("groq", "api_key"): "GROQ_API_KEY",
+    ("groq", "model"): None,
     ("whisper", "model"): "WHISPER_MODEL",
 }
 
