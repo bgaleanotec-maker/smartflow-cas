@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Mic, MicOff, X, Users, Radio, Square, Copy, Check,
-  Play, Loader2, ChevronDown, Volume2, VolumeX, Monitor, Headphones,
+  Play, Loader2, Volume2, Headphones, CheckCircle, MessageSquare, Send,
 } from 'lucide-react'
-import { voiceAPI, adminAPI, bpAPI } from '../../services/api'
+import { voiceAPI, adminAPI, bpAPI, aiAPI } from '../../services/api'
 import SoundVisualizer from './SoundVisualizer'
 import clsx from 'clsx'
 
@@ -179,7 +180,7 @@ function MicButton({ state, onClick, conversationListening = false }) {
 }
 
 // ─── Chat bubble with streaming text effect ──────────────────────────────────
-function ChatBubble({ role, text, audioB64, onReplay, stream = false }) {
+function ChatBubble({ role, text, audioB64, onReplay, stream = false, type, onConfirm, onCancel }) {
   const isARIA = role === 'aria'
   const [displayed, setDisplayed] = useState(stream ? '' : text)
   const [typing, setTyping] = useState(stream)
@@ -196,22 +197,27 @@ function ChatBubble({ role, text, audioB64, onReplay, stream = false }) {
     return () => clearInterval(iv)
   }, [text, stream, isARIA])
 
+  const bubbleClass = isARIA
+    ? type === 'success'
+      ? 'bg-emerald-900/40 border border-emerald-700/40 text-emerald-200 rounded-tl-sm'
+      : type === 'action'
+      ? 'bg-amber-900/30 border border-amber-700/40 text-amber-100 rounded-tl-sm'
+      : 'bg-gradient-to-br from-indigo-900/80 to-purple-900/80 border border-purple-700/40 text-slate-100 rounded-tl-sm'
+    : 'bg-slate-700 text-slate-100 rounded-tr-sm'
+
   return (
     <div className={clsx('flex gap-2 animate-fade-in', isARIA ? 'flex-row' : 'flex-row-reverse')}>
       {isARIA && (
-        <div className="w-7 h-7 rounded-full bg-purple-700 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 mt-1">
+        <div className={clsx(
+          'w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 mt-1',
+          type === 'success' ? 'bg-emerald-700' : type === 'action' ? 'bg-amber-700' : 'bg-purple-700',
+        )}>
           AI
         </div>
       )}
-      <div
-        className={clsx(
-          'max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed',
-          isARIA
-            ? 'bg-gradient-to-br from-indigo-900/80 to-purple-900/80 border border-purple-700/40 text-slate-100 rounded-tl-sm'
-            : 'bg-slate-700 text-slate-100 rounded-tr-sm',
-        )}
-      >
-        <p>{displayed}{typing && <span className="animate-pulse text-purple-400 ml-0.5">▌</span>}</p>
+      <div className={clsx('max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed', bubbleClass)}>
+        {type === 'success' && <CheckCircle size={13} className="inline mr-1.5 text-emerald-400" />}
+        <span>{displayed}{typing && <span className="animate-pulse text-purple-400 ml-0.5">▌</span>}</span>
         {isARIA && audioB64 && (
           <button
             onClick={() => onReplay(audioB64)}
@@ -220,6 +226,22 @@ function ChatBubble({ role, text, audioB64, onReplay, stream = false }) {
             <Play size={11} />
             Reproducir
           </button>
+        )}
+        {type === 'action' && onConfirm && (
+          <div className="flex gap-2 mt-2 pt-2 border-t border-amber-700/30">
+            <button
+              onClick={onConfirm}
+              className="text-xs px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors"
+            >
+              Confirmar
+            </button>
+            <button
+              onClick={onCancel}
+              className="text-xs px-3 py-1 rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -249,6 +271,7 @@ function RecordingTimer({ startedAt }) {
 
 // ─── Main VoiceAIPanel ────────────────────────────────────────────────────────
 export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClose }) {
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
 
   // Sync with external open state (e.g. from mobile bottom nav ARIA button)
@@ -284,6 +307,8 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   const [isConversationActive, setIsConversationActive] = useState(false)
   const [textInput, setTextInput] = useState('')
   const [slowWarning, setSlowWarning] = useState(false)
+  const [pendingAction, setPendingAction] = useState(null)   // para confirmar acciones IA
+  const [textLoading, setTextLoading] = useState(false)      // cargando respuesta de texto
   const [transcribingChunk, setTranscribingChunk] = useState(false)  // meeting: processing chunk
 
   const mediaRecorderRef = useRef(null)
@@ -311,6 +336,7 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   const silenceStartRef = useRef(null)      // timestamp when silence started after speech
   const recordingStartRef = useRef(null)    // timestamp when current recording started
   const ariaAudioRef = useRef(null)         // current ARIA HTML Audio element (for interruption)
+  const ariaMeetingIdRef = useRef(null)     // persistent ARIA chat meeting (saves transcriptions)
   // Web Speech API — primary transcription (browser-native, free, instant)
   const srRef = useRef(null)                // SpeechRecognition instance (ARIA mode)
   const webSpeechActiveRef = useRef(false)  // whether Web Speech API is in use (ARIA)
@@ -326,10 +352,10 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   // Keep chatRef in sync so VAD interval closures always read latest chat
   useEffect(() => { chatRef.current = chat }, [chat])
 
-  // Auto-scroll
+  // Auto-scroll — también cuando cambia el interim (texto siendo hablado ahora)
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [transcript])
+  }, [transcript, interimTranscript])
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chat])
@@ -406,6 +432,9 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
     setStatus('processing')
     setSlowWarning(false)
 
+    // Pausar Web Speech mientras ARIA procesa — evita doble-envío durante cold start
+    pauseWebSpeech()
+
     // Show "server waking up" warning after 5s (Render free tier cold start)
     const slowTimer = setTimeout(() => setSlowWarning(true), 5000)
 
@@ -420,7 +449,14 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
 
     try {
       const res = await voiceAPI.ariaChat(
-        { text, user_name: currentUser?.full_name || 'Usuario', meeting_id: null, history },
+        {
+          text,
+          user_name: currentUser?.full_name || 'Usuario',
+          user_role: currentUser?.role || 'member',
+          user_team: currentUser?.team || null,
+          meeting_id: ariaMeetingIdRef.current || null,
+          history,
+        },
         { timeout: 22000 },   // axios timeout: 22s
       )
       clearTimeout(slowTimer)
@@ -443,7 +479,84 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       clearTimeout(safetyTimer)
       setSlowWarning(false)
       setStatus('idle')
+      resumeWebSpeech()
     }
+  }
+
+  // ── Chat de texto con aiAPI (rol/permisos + acciones) ─────────────────────
+  // Separado del path de voz: no requiere audio, responde en función del rol.
+  const sendTextMessage = async () => {
+    const userMsg = textInput.trim()
+    if (!userMsg || textLoading || ariaStatus === 'processing') return
+    setTextInput('')
+    setPendingAction(null)
+
+    // Handle pending action confirmation
+    const confirmWords = ['si', 'sí', 'confirmo', 'ok', 'dale', 'yes', 'confirmar']
+    const cancelWords = ['no', 'cancelar', 'cancel']
+
+    if (pendingAction) {
+      setChat(prev => [...prev, { role: 'user', text: userMsg }])
+      if (confirmWords.includes(userMsg.toLowerCase())) {
+        setTextLoading(true)
+        try {
+          const res = await aiAPI.executeAction({ action_type: pendingAction.action, data: pendingAction.data })
+          setChat(prev => [...prev, { role: 'aria', text: res.data.message, type: 'success', isNew: true }])
+          if (res.data.redirect) setTimeout(() => navigate(res.data.redirect), 1500)
+        } catch {
+          setChat(prev => [...prev, { role: 'aria', text: 'Error al ejecutar la acción. Intenta de nuevo.', isNew: true }])
+        }
+        setPendingAction(null)
+        setTextLoading(false)
+        return
+      }
+      if (cancelWords.includes(userMsg.toLowerCase())) {
+        setChat(prev => [...prev, { role: 'aria', text: 'Acción cancelada. ¿En qué más puedo ayudarte?', isNew: true }])
+        setPendingAction(null)
+        setTextLoading(false)
+        return
+      }
+    }
+
+    setChat(prev => [...prev, { role: 'user', text: userMsg }])
+    setTextLoading(true)
+
+    try {
+      const res = await aiAPI.chat({ message: userMsg })
+      const data = res.data
+      if (data.action && data.action !== 'message') {
+        setPendingAction({ action: data.action, data: data.data })
+      }
+      setChat(prev => [...prev, {
+        role: 'aria',
+        text: data.message,
+        type: data.action && data.action !== 'message' ? 'action' : undefined,
+        isNew: true,
+      }])
+    } catch {
+      setChat(prev => [...prev, { role: 'aria', text: 'Error de conexión. Verifica tu sesión.', isNew: true }])
+    }
+    setTextLoading(false)
+  }
+
+  // ── Confirmar o cancelar acción pendiente desde los botones del bubble ────
+  const confirmAction = async (confirmed) => {
+    if (!pendingAction) return
+    setChat(prev => [...prev, { role: 'user', text: confirmed ? 'Confirmar' : 'Cancelar' }])
+    setPendingAction(null)
+    if (!confirmed) {
+      setChat(prev => [...prev, { role: 'aria', text: 'Acción cancelada. ¿En qué más puedo ayudarte?', isNew: true }])
+      return
+    }
+    setTextLoading(true)
+    try {
+      const res = await aiAPI.executeAction({ action_type: pendingAction.action, data: pendingAction.data })
+      setChat(prev => [...prev, { role: 'aria', text: res.data.message, type: 'success', isNew: true }])
+      if (res.data.redirect) setTimeout(() => navigate(res.data.redirect), 1500)
+    } catch {
+      setChat(prev => [...prev, { role: 'aria', text: 'Error al ejecutar la acción. Intenta de nuevo.', isNew: true }])
+    }
+    setTextLoading(false)
   }
 
   const playAudio = (b64) => {
@@ -492,6 +605,7 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
     const pickVoice = () => {
       const voices = window.speechSynthesis.getVoices()
       return voices.find(v => v.lang === 'es-CO')
+        || voices.find(v => v.lang === 'es-ES')
         || voices.find(v => v.lang === 'es-US')
         || voices.find(v => v.lang.startsWith('es'))
         || null
@@ -500,7 +614,7 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
     const speakNext = () => {
       if (idx >= sentences.length) { done(); return }
       const utt = new SpeechSynthesisUtterance(sentences[idx])
-      utt.lang = 'es-CO'
+      utt.lang = 'es-ES'
       utt.rate = 1.0
       utt.pitch = 1.05
       const voice = pickVoice()
@@ -562,7 +676,7 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
 
     stopWebSpeech()
     const sr = new SR()
-    sr.lang = 'es-CO'
+    sr.lang = 'es-ES'
     sr.continuous = true
     sr.interimResults = true
     sr.maxAlternatives = 1
@@ -662,13 +776,10 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
         try {
           let userText = ''
           try {
-            const mRes = await voiceAPI.createMeeting({ title: 'ARIA Chat', meeting_type: 'aria_chat' })
-            const tempId = mRes.data.id
-            try {
-              const tRes = await voiceAPI.transcribeChunk(tempId, blob)
+            // Use persistent meeting (avoids creating/deleting temp meetings and loses no data)
+            if (ariaMeetingIdRef.current) {
+              const tRes = await voiceAPI.transcribeChunk(ariaMeetingIdRef.current, blob)
               userText = tRes.data.text || ''
-            } finally {
-              voiceAPI.deleteMeeting(tempId).catch(() => {})
             }
           } catch { /* transcription failed — silent */ }
 
@@ -787,6 +898,23 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
     setAnalyserNode(null)
   }
 
+  // ── Create persistent ARIA meeting to store the conversation ─────────────────
+  const createAriaMeeting = async () => {
+    if (ariaMeetingIdRef.current) return  // already created this session
+    try {
+      const now = new Date().toLocaleDateString('es-CO', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+      const payload = {
+        title: `ARIA - ${currentUser?.full_name || 'Usuario'} - ${now}`,
+        meeting_type: 'aria_chat',
+      }
+      if (selectedBusinessId) payload.business_id = parseInt(selectedBusinessId)
+      if (selectedBpId) payload.bp_id = parseInt(selectedBpId)
+      if (selectedActivityId) payload.bp_activity_id = parseInt(selectedActivityId)
+      const res = await voiceAPI.createMeeting(payload)
+      ariaMeetingIdRef.current = res.data.id
+    } catch { /* non-blocking — conversation still works without persistence */ }
+  }
+
   const endConversation = () => {
     conversationActiveRef.current = false
     setIsConversationActive(false)
@@ -794,6 +922,11 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
     stopVAD()
     cleanupAudio()  // for meeting recording cleanup
     setStatus('idle')
+    // Finalize ARIA meeting to save transcript + trigger AI summary
+    if (ariaMeetingIdRef.current) {
+      voiceAPI.finalizeMeeting(ariaMeetingIdRef.current).catch(() => {})
+      ariaMeetingIdRef.current = null
+    }
   }
 
   const handleAriaMicClick = () => {
@@ -803,10 +936,10 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
         stopVADRecording()
       }
     } else {
-      // Start conversation mode — VAD opens mic and listens continuously
-      // Greeting already sent by the useEffect on panel open (no double greeting)
+      // Start conversation mode — create persistent meeting then open VAD
       conversationActiveRef.current = true
       setIsConversationActive(true)
+      createAriaMeeting()  // async, non-blocking — meeting created before first message
       startVAD()
     }
   }
@@ -867,7 +1000,7 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition
       if (SR) {
         const sr = new SR()
-        sr.lang = 'es-CO'
+        sr.lang = 'es-ES'
         sr.continuous = true
         sr.interimResults = true
         sr.maxAlternatives = 1
@@ -1117,16 +1250,32 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
 
                 {/* Chat history */}
                 <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3">
-                  {chat.map((msg, i) => (
-                    <ChatBubble
-                      key={i}
-                      role={msg.role}
-                      text={msg.text}
-                      audioB64={msg.audioB64}
-                      onReplay={playAudio}
-                      stream={!!msg.isNew && msg.role === 'aria' && i === chat.length - 1}
-                    />
-                  ))}
+                  {chat.map((msg, i) => {
+                    const isLastAction = msg.type === 'action' && i === chat.length - 1 && !!pendingAction
+                    return (
+                      <ChatBubble
+                        key={i}
+                        role={msg.role}
+                        text={msg.text}
+                        audioB64={msg.audioB64}
+                        onReplay={playAudio}
+                        stream={!!msg.isNew && msg.role === 'aria' && i === chat.length - 1}
+                        type={msg.type}
+                        onConfirm={isLastAction ? () => confirmAction(true) : undefined}
+                        onCancel={isLastAction ? () => confirmAction(false) : undefined}
+                      />
+                    )
+                  })}
+                  {textLoading && (
+                    <div className="flex justify-start">
+                      <div className="flex gap-2">
+                        <div className="w-7 h-7 rounded-full bg-purple-700 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">AI</div>
+                        <div className="bg-gradient-to-br from-indigo-900/80 to-purple-900/80 border border-purple-700/40 rounded-2xl rounded-tl-sm px-4 py-3">
+                          <Loader2 size={14} className="animate-spin text-purple-400" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div ref={chatEndRef} />
                 </div>
 
@@ -1142,36 +1291,31 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
                   </a>
                 </div>
 
-                {/* Text input — always available as fallback when mic/Whisper doesn't work */}
+                {/* Text input — chat de texto con IA (rol/permisos + acciones) */}
                 <div className="flex-shrink-0 border-t border-slate-800 px-3 py-2">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <MessageSquare size={10} className="text-slate-600" />
+                    <span className="text-[10px] text-slate-600">Chat IA · responde según tu rol</span>
+                  </div>
                   <div className="flex gap-2 items-center">
                     <input
                       type="text"
                       value={textInput}
                       onChange={(e) => setTextInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && textInput.trim() && ariaStatus !== 'processing') {
-                          const msg = textInput.trim()
-                          setTextInput('')
-                          sendAriaMessage(msg)
-                        }
-                      }}
-                      placeholder="Escribe tu mensaje..."
-                      disabled={ariaStatus === 'processing' || ariaStatus === 'speaking'}
+                      onKeyDown={(e) => { if (e.key === 'Enter') sendTextMessage() }}
+                      placeholder="Escribe o usa el micrófono..."
+                      disabled={textLoading}
                       className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-brand-500 disabled:opacity-40"
                     />
                     <button
-                      onClick={() => {
-                        if (textInput.trim() && ariaStatus !== 'processing') {
-                          const msg = textInput.trim()
-                          setTextInput('')
-                          sendAriaMessage(msg)
-                        }
-                      }}
-                      disabled={!textInput.trim() || ariaStatus === 'processing' || ariaStatus === 'speaking'}
+                      onClick={sendTextMessage}
+                      disabled={!textInput.trim() || textLoading}
                       className="p-2 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                      aria-label="Enviar mensaje"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                      {textLoading
+                        ? <Loader2 size={16} className="text-white animate-spin" />
+                        : <Send size={16} className="text-white" />}
                     </button>
                   </div>
                 </div>
