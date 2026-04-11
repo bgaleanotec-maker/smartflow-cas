@@ -10,6 +10,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 import toast from 'react-hot-toast'
 import { leanProAPI, aiAPI } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
+import VoiceInputButton from '../../components/voice/VoiceInputButton'
 
 const MOOD_ICONS = { feliz: Smile, neutral: Meh, preocupado: Frown, bloqueado: AlertTriangle }
 const MOOD_COLORS = { feliz: 'text-green-400', neutral: 'text-yellow-400', preocupado: 'text-orange-400', bloqueado: 'text-red-400' }
@@ -43,15 +44,24 @@ function StandupForm({ onClose }) {
       <div className="space-y-4">
         <div>
           <label className="label text-xs flex items-center gap-1"><CheckCircle size={12} className="text-green-400" /> Que hice ayer / que complete</label>
-          <textarea className="input w-full h-20" placeholder="Describe las tareas completadas..." value={form.what_did} onChange={e => setForm(p => ({ ...p, what_did: e.target.value }))} />
+          <div className="relative">
+            <textarea className="input w-full h-20 pr-10" placeholder="Describe las tareas completadas..." value={form.what_did} onChange={e => setForm(p => ({ ...p, what_did: e.target.value }))} />
+            <VoiceInputButton onText={(t) => setForm(p => ({ ...p, what_did: p.what_did ? p.what_did + ' ' + t : t }))} className="absolute bottom-2 right-2" />
+          </div>
         </div>
         <div>
           <label className="label text-xs flex items-center gap-1"><Target size={12} className="text-blue-400" /> Que hare hoy</label>
-          <textarea className="input w-full h-20" placeholder="Tareas planeadas para hoy..." value={form.what_will} onChange={e => setForm(p => ({ ...p, what_will: e.target.value }))} />
+          <div className="relative">
+            <textarea className="input w-full h-20 pr-10" placeholder="Tareas planeadas para hoy..." value={form.what_will} onChange={e => setForm(p => ({ ...p, what_will: e.target.value }))} />
+            <VoiceInputButton onText={(t) => setForm(p => ({ ...p, what_will: p.what_will ? p.what_will + ' ' + t : t }))} className="absolute bottom-2 right-2" />
+          </div>
         </div>
         <div>
           <label className="label text-xs flex items-center gap-1"><AlertTriangle size={12} className="text-red-400" /> Impedimentos / Bloqueantes</label>
-          <textarea className="input w-full h-16" placeholder="Algo que te bloquea? (deja vacio si no hay)" value={form.blockers} onChange={e => setForm(p => ({ ...p, blockers: e.target.value }))} />
+          <div className="relative">
+            <textarea className="input w-full h-16 pr-10" placeholder="Algo que te bloquea? (deja vacio si no hay)" value={form.blockers} onChange={e => setForm(p => ({ ...p, blockers: e.target.value }))} />
+            <VoiceInputButton onText={(t) => setForm(p => ({ ...p, blockers: p.blockers ? p.blockers + ' ' + t : t }))} className="absolute bottom-2 right-2" />
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -248,7 +258,10 @@ export default function LeanProPage() {
             <div className="card border-yellow-500/30">
               <div className="space-y-3">
                 <input className="input w-full" placeholder="Titulo de la mejora *" value={kaizenForm.title} onChange={e => setKaizenForm(p => ({ ...p, title: e.target.value }))} />
-                <textarea className="input w-full h-16" placeholder="Descripcion..." value={kaizenForm.description} onChange={e => setKaizenForm(p => ({ ...p, description: e.target.value }))} />
+                <div className="relative">
+                  <textarea className="input w-full h-16 pr-10" placeholder="Descripcion..." value={kaizenForm.description} onChange={e => setKaizenForm(p => ({ ...p, description: e.target.value }))} />
+                  <VoiceInputButton onText={(t) => setKaizenForm(p => ({ ...p, description: p.description ? p.description + ' ' + t : t }))} className="absolute bottom-2 right-2" />
+                </div>
                 <div className="grid grid-cols-3 gap-3">
                   <select className="input" value={kaizenForm.category} onChange={e => setKaizenForm(p => ({ ...p, category: e.target.value }))}>
                     <option value="proceso">Proceso</option><option value="herramienta">Herramienta</option><option value="comunicacion">Comunicacion</option><option value="calidad">Calidad</option><option value="eficiencia">Eficiencia</option>
@@ -305,15 +318,24 @@ export default function LeanProPage() {
                 </div>
                 <div>
                   <label className="label text-xs text-green-400">Que salio bien</label>
-                  <textarea className="input w-full h-16" value={retroForm.went_well} onChange={e => setRetroForm(p => ({ ...p, went_well: e.target.value }))} />
+                  <div className="relative">
+                    <textarea className="input w-full h-16 pr-10" value={retroForm.went_well} onChange={e => setRetroForm(p => ({ ...p, went_well: e.target.value }))} />
+                    <VoiceInputButton onText={(t) => setRetroForm(p => ({ ...p, went_well: p.went_well ? p.went_well + ' ' + t : t }))} className="absolute bottom-2 right-2" />
+                  </div>
                 </div>
                 <div>
                   <label className="label text-xs text-orange-400">Que mejorar</label>
-                  <textarea className="input w-full h-16" value={retroForm.to_improve} onChange={e => setRetroForm(p => ({ ...p, to_improve: e.target.value }))} />
+                  <div className="relative">
+                    <textarea className="input w-full h-16 pr-10" value={retroForm.to_improve} onChange={e => setRetroForm(p => ({ ...p, to_improve: e.target.value }))} />
+                    <VoiceInputButton onText={(t) => setRetroForm(p => ({ ...p, to_improve: p.to_improve ? p.to_improve + ' ' + t : t }))} className="absolute bottom-2 right-2" />
+                  </div>
                 </div>
                 <div>
                   <label className="label text-xs text-blue-400">Acciones concretas</label>
-                  <textarea className="input w-full h-16" value={retroForm.action_items} onChange={e => setRetroForm(p => ({ ...p, action_items: e.target.value }))} />
+                  <div className="relative">
+                    <textarea className="input w-full h-16 pr-10" value={retroForm.action_items} onChange={e => setRetroForm(p => ({ ...p, action_items: e.target.value }))} />
+                    <VoiceInputButton onText={(t) => setRetroForm(p => ({ ...p, action_items: p.action_items ? p.action_items + ' ' + t : t }))} className="absolute bottom-2 right-2" />
+                  </div>
                 </div>
                 <div>
                   <label className="label text-xs text-pink-400">Kudos / Reconocimientos</label>

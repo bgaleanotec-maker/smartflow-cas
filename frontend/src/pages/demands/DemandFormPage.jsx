@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { demandsAPI, demandAdminAPI } from '../../services/api'
+import VoiceInputButton from '../../components/voice/VoiceInputButton'
 
 const STEPS = [
   { id: 1, title: 'Datos Basicos', desc: 'Nombre de la iniciativa y area solicitante' },
@@ -214,7 +215,10 @@ export default function DemandFormPage() {
           {step === 3 && (
             <>
               <FormField label="Situacion actual" required help="Describe la situacion actual que genera dificultades en el proceso que deseas mejorar o cambiar">
-                <textarea className="input w-full h-32" value={form.situacion_actual} onChange={e => set('situacion_actual', e.target.value)} placeholder="Describe detalladamente la situacion actual..." />
+                <div className="relative">
+                  <textarea className="input w-full h-32 pr-10" value={form.situacion_actual} onChange={e => set('situacion_actual', e.target.value)} placeholder="Describe detalladamente la situacion actual..." />
+                  <VoiceInputButton onText={(t) => set('situacion_actual', form.situacion_actual ? form.situacion_actual + ' ' + t : t)} className="absolute bottom-2 right-2" />
+                </div>
               </FormField>
               <FormField label="Pilares estrategicos impactados" help="Cuantos pilares estrategicos esta impactando esta iniciativa">
                 <select className="input w-full" value={form.pilares_estrategicos_id} onChange={e => set('pilares_estrategicos_id', e.target.value)}>
@@ -223,7 +227,10 @@ export default function DemandFormPage() {
                 </select>
               </FormField>
               <FormField label="Justificacion de impacto en pilares" help="Describe como impacta en los pilares estrategicos e indicadores">
-                <textarea className="input w-full h-24" value={form.justificacion_pilares} onChange={e => set('justificacion_pilares', e.target.value)} placeholder="Describe como impacta y por que..." />
+                <div className="relative">
+                  <textarea className="input w-full h-24 pr-10" value={form.justificacion_pilares} onChange={e => set('justificacion_pilares', e.target.value)} placeholder="Describe como impacta y por que..." />
+                  <VoiceInputButton onText={(t) => set('justificacion_pilares', form.justificacion_pilares ? form.justificacion_pilares + ' ' + t : t)} className="absolute bottom-2 right-2" />
+                </div>
               </FormField>
             </>
           )}
@@ -311,7 +318,10 @@ export default function DemandFormPage() {
                 </FormField>
               )}
               <FormField label="Descripcion de la oportunidad" help="Describe cuales son los ahorros o cuales serian los ingresos cuantitativamente">
-                <textarea className="input w-full h-24" value={form.oportunidad_negocio} onChange={e => set('oportunidad_negocio', e.target.value)} />
+                <div className="relative">
+                  <textarea className="input w-full h-24 pr-10" value={form.oportunidad_negocio} onChange={e => set('oportunidad_negocio', e.target.value)} />
+                  <VoiceInputButton onText={(t) => set('oportunidad_negocio', form.oportunidad_negocio ? form.oportunidad_negocio + ' ' + t : t)} className="absolute bottom-2 right-2" />
+                </div>
               </FormField>
             </>
           )}
@@ -348,7 +358,10 @@ export default function DemandFormPage() {
                 </FormField>
               )}
               <FormField label="Impacto de no ejecutar la iniciativa" help="Describe el impacto de no ejecutar la iniciativa y/o de no cumplir el deadline">
-                <textarea className="input w-full h-24" value={form.impacto_no_ejecutar} onChange={e => set('impacto_no_ejecutar', e.target.value)} />
+                <div className="relative">
+                  <textarea className="input w-full h-24 pr-10" value={form.impacto_no_ejecutar} onChange={e => set('impacto_no_ejecutar', e.target.value)} />
+                  <VoiceInputButton onText={(t) => set('impacto_no_ejecutar', form.impacto_no_ejecutar ? form.impacto_no_ejecutar + ' ' + t : t)} className="absolute bottom-2 right-2" />
+                </div>
               </FormField>
             </>
           )}
@@ -377,7 +390,10 @@ export default function DemandFormPage() {
                   </div>
                   <div>
                     <label className="label text-xs">Descripcion del requerimiento</label>
-                    <textarea className="input w-full text-sm h-20" value={req.descripcion_requerimiento} onChange={e => updateReq(idx, 'descripcion_requerimiento', e.target.value)} />
+                    <div className="relative">
+                      <textarea className="input w-full text-sm h-20 pr-10" value={req.descripcion_requerimiento} onChange={e => updateReq(idx, 'descripcion_requerimiento', e.target.value)} />
+                      <VoiceInputButton onText={(t) => updateReq(idx, 'descripcion_requerimiento', req.descripcion_requerimiento ? req.descripcion_requerimiento + ' ' + t : t)} className="absolute bottom-2 right-2" />
+                    </div>
                   </div>
                   <div>
                     <label className="label text-xs">Que se necesita</label>

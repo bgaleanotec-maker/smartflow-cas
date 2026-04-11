@@ -84,6 +84,15 @@ async def get_me(current_user: CurrentUser, db: DB):
     return result.scalar_one()
 
 
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(current_user: CurrentUser):
+    """Cierra la sesión del usuario. El cliente debe descartar los tokens localmente.
+    En producción con Redis, aquí se blacklistearía el refresh_token."""
+    # Token blacklisting requires Redis. Without it, tokens expire naturally.
+    # Frontend must delete access_token and refresh_token from storage.
+    return None
+
+
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
 async def change_password(payload: PasswordChange, current_user: CurrentUser, db: DB):
     if not verify_password(payload.current_password, current_user.hashed_password):

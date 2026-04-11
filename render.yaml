@@ -23,6 +23,16 @@ services:
         value: "false"
       - key: FRONTEND_URL
         value: https://smartflow-casbo.onrender.com
+      # ── IA / Voice keys — obtener gratis ──────────────────────────────────
+      # GEMINI: https://ai.google.dev → "Get API key" (free tier, requerido para ARIA)
+      - key: GEMINI_API_KEY
+        sync: false    # set manually in Render dashboard → Environment
+      # GROQ:  https://console.groq.com → API Keys (free 28,800s/día de Whisper)
+      - key: GROQ_API_KEY
+        sync: false    # set manually in Render dashboard → Environment
+      # ELEVENLABS: ya configurado — mover aquí si quieres centralizar
+      # - key: ELEVENLABS_API_KEY
+      #   sync: false
 
   # ─── FRONTEND ─────────────────────────────────────────────────────────────
   - type: web

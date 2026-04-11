@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { hechosAPI } from '../../services/api'
+import VoiceInputButton from '../../components/voice/VoiceInputButton'
 
 const IMPACT_COLORS = {
   alto: 'bg-red-500/10 text-red-400 border-red-500/20',
@@ -113,7 +114,10 @@ export default function HechosPage() {
           </div>
           <div className="space-y-3">
             <input className="input w-full" placeholder="Titulo del hecho relevante *" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} />
-            <textarea className="input w-full h-24" placeholder="Descripcion detallada..." value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
+            <div className="relative">
+              <textarea className="input w-full h-24 pr-10" placeholder="Descripcion detallada..." value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
+              <VoiceInputButton onText={(t) => setForm(p => ({ ...p, description: p.description ? p.description + ' ' + t : t }))} className="absolute bottom-2 right-2" />
+            </div>
             <div className="grid sm:grid-cols-3 gap-3">
               <select className="input" value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}>
                 <option value="comercial">Comercial</option>
@@ -131,7 +135,10 @@ export default function HechosPage() {
                 <input type="number" className="input w-24" placeholder="Ano" value={form.year} onChange={e => setForm(p => ({ ...p, year: Number(e.target.value) }))} />
               </div>
             </div>
-            <textarea className="input w-full h-16" placeholder="Accion requerida..." value={form.action_required} onChange={e => setForm(p => ({ ...p, action_required: e.target.value }))} />
+            <div className="relative">
+              <textarea className="input w-full h-16 pr-10" placeholder="Accion requerida..." value={form.action_required} onChange={e => setForm(p => ({ ...p, action_required: e.target.value }))} />
+              <VoiceInputButton onText={(t) => setForm(p => ({ ...p, action_required: p.action_required ? p.action_required + ' ' + t : t }))} className="absolute bottom-2 right-2" />
+            </div>
             <input className="input w-full" placeholder="Responsable" value={form.responsible_name} onChange={e => setForm(p => ({ ...p, responsible_name: e.target.value }))} />
             <button onClick={() => form.title && createMutation.mutate(form)} disabled={!form.title} className="btn-primary">
               Registrar Hecho

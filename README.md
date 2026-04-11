@@ -41,8 +41,8 @@ npm run dev
 
 ## Credenciales iniciales
 - **Email**: admin@smartflow.app
-- **Password**: SmartFlow2024!
-- ⚠️ Cambiar contraseña en el primer login
+- **Password**: Estocastico#77
+- ⚠️ Cambiar contraseña en el primer login desde el panel de perfil
 
 ## Estructura del proyecto
 ```

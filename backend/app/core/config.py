@@ -39,6 +39,11 @@ class Settings(BaseSettings):
 
     # Groq (cloud Whisper — recommended for Render free tier, 0 RAM usage)
     GROQ_API_KEY: Optional[str] = None
+    GROQ_MODEL: str = "whisper-large-v3-turbo"
+
+    # Gemini (LLM for ARIA voice chat + meeting analysis — REQUIRED for ARIA responses)
+    # Free key: https://ai.google.dev → Get API key
+    GEMINI_API_KEY: Optional[str] = None
 
     # Whisper transcription (local fallback when Groq not configured)
     WHISPER_MODEL: str = "base"  # base / medium / large-v3 (depends on server RAM)
@@ -73,7 +78,9 @@ _ENV_FALLBACK_MAP = {
     ("elevenlabs", "voice_id"): "ELEVENLABS_VOICE_ID",
     ("elevenlabs", "model"): None,
     ("groq", "api_key"): "GROQ_API_KEY",
-    ("groq", "model"): None,
+    ("groq", "model"): "GROQ_MODEL",
+    ("gemini", "api_key"): "GEMINI_API_KEY",
+    ("gemini", "model"): None,
     ("whisper", "model"): "WHISPER_MODEL",
 }
 

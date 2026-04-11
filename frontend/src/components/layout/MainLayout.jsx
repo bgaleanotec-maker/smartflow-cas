@@ -11,7 +11,6 @@ import {
 import { useAuthStore } from '../../stores/authStore'
 import { usePomodoroStore } from '../../stores/pomodoroStore'
 import clsx from 'clsx'
-import AIChatWidget from '../AIChatWidget'
 import VoiceAIPanel from '../voice/VoiceAIPanel'
 
 const navItems = [
@@ -427,10 +426,7 @@ export default function MainLayout() {
         </div>
       )}
 
-      {/* ── AI Chat Widget — position aware of mobile nav ── */}
-      <AIChatWidget />
-
-      {/* ── Voice AI Panel — position aware of mobile nav ── */}
+      {/* ── Voice AI Panel (chat + voz + reuniones) ── */}
       <VoiceAIPanel
         currentUser={user}
         externalOpen={voicePanelOpen}

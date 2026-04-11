@@ -1,5 +1,6 @@
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, status, Query
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from app.core.deps import DB, CurrentUser
@@ -178,6 +179,41 @@ async def delete_task(task_id: int, db: DB, current_user: CurrentUser):
         raise HTTPException(status_code=404, detail="Tarea no encontrada")
     task.is_deleted = True
     await db.flush()
+
+
+class LogTimeBody(BaseModel):
+    hours: float
+    description: Optional[str] = None
+
+    @field_validator("hours")
+    @classmethod
+    def hours_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("Las horas deben ser un valor positivo mayor a 0")
+        if v > 24:
+            raise ValueError("No se pueden registrar más de 24 horas por entrada")
+        return round(v, 2)
+
+
+@router.post("/{task_id}/log-time", status_code=status.HTTP_200_OK)
+async def log_time(task_id: int, payload: LogTimeBody, db: DB, current_user: CurrentUser):
+    """Registra horas trabajadas en una tarea. Acumula en logged_hours."""
+    result = await db.execute(
+        select(Task).where(Task.id == task_id, Task.is_deleted == False)
+    )
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+
+    task.logged_hours = (task.logged_hours or 0) + payload.hours
+    await db.flush()
+    return {
+        "task_id": task_id,
+        "hours_added": payload.hours,
+        "total_logged_hours": task.logged_hours,
+        "description": payload.description,
+        "logged_by": current_user.full_name,
+    }
 
 
 @router.post("/{task_id}/subtasks", response_model=SubTaskResponse, status_code=201)

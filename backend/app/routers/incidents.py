@@ -1,5 +1,6 @@
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, status, Query
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from app.core.deps import DB, CurrentUser
@@ -182,22 +183,30 @@ async def update_incident(
     return incident
 
 
+class CommentBody(BaseModel):
+    comment: str
+    type: str = "comment"  # "comment" | "update" | "escalation" | "resolution"
+
+
 @router.post("/{incident_id}/comment", status_code=status.HTTP_201_CREATED)
 async def add_comment(
-    incident_id: int, comment: str, db: DB, current_user: CurrentUser
+    incident_id: int, payload: CommentBody, db: DB, current_user: CurrentUser
 ):
+    """Agrega un comentario o entrada al timeline del incidente.
+    Antes aceptaba el comentario como query param — ahora usa JSON body (fix BUG-006)."""
     result = await db.execute(
-        select(Incident).where(Incident.id == incident_id)
+        select(Incident).where(Incident.id == incident_id, Incident.is_deleted == False)
     )
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Incidente no encontrado")
 
+    action = payload.type if payload.type in ("comment", "update", "escalation", "resolution") else "comment"
     entry = IncidentTimeline(
         incident_id=incident_id,
         user_id=current_user.id,
-        action="comment",
-        description=comment,
+        action=action,
+        description=payload.comment,
     )
     db.add(entry)
     await db.flush()
-    return {"message": "Comentario agregado"}
+    return {"message": "Comentario agregado", "action": action}

@@ -8,6 +8,7 @@ import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import { bpAPI, usersAPI, voiceAPI } from '../../../services/api'
 import { useAuthStore } from '../../../stores/authStore'
+import VoiceInputButton from '../../../components/voice/VoiceInputButton'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -300,14 +301,17 @@ function CommentsSection({ bpId, activity }) {
       <div className="flex gap-2 mt-2">
         <Avatar name={user?.full_name} size="sm" />
         <div className="flex-1 flex gap-2">
-          <textarea
-            className="input flex-1 py-2 text-sm resize-none"
-            rows={2}
-            placeholder="Escribe un comentario..."
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && e.ctrlKey) handleSend() }}
-          />
+          <div className="relative flex-1">
+            <textarea
+              className="input w-full py-2 text-sm resize-none pr-10"
+              rows={2}
+              placeholder="Escribe un comentario..."
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && e.ctrlKey) handleSend() }}
+            />
+            <VoiceInputButton onText={(t) => setNewComment(p => p ? p + ' ' + t : t)} className="absolute bottom-2 right-2" />
+          </div>
           <button
             onClick={handleSend}
             disabled={!newComment.trim() || addMutation.isPending}
@@ -671,13 +675,16 @@ export default function BPActivityDetailDrawer({ bpId, activity, onClose, onUpda
           {/* Description */}
           <Section title="Descripción" defaultOpen>
             {canWrite ? (
-              <textarea
-                className="input w-full resize-none text-sm"
-                rows={3}
-                placeholder="Describe la actividad..."
-                value={form.description || ''}
-                onChange={(e) => handleChange('description', e.target.value)}
-              />
+              <div className="relative">
+                <textarea
+                  className="input w-full resize-none text-sm pr-10"
+                  rows={3}
+                  placeholder="Describe la actividad..."
+                  value={form.description || ''}
+                  onChange={(e) => handleChange('description', e.target.value)}
+                />
+                <VoiceInputButton onText={(t) => handleChange('description', form.description ? form.description + ' ' + t : t)} className="absolute bottom-2 right-2" />
+              </div>
             ) : (
               <p className="text-sm text-slate-300 leading-relaxed">
                 {activity.description || <span className="text-slate-600">Sin descripción</span>}
@@ -772,13 +779,16 @@ export default function BPActivityDetailDrawer({ bpId, activity, onClose, onUpda
           {(activity.notes || canWrite) && (
             <Section title="Notas internas" defaultOpen={false}>
               {canWrite ? (
-                <textarea
-                  className="input w-full resize-none text-sm"
-                  rows={2}
-                  placeholder="Notas internas..."
-                  value={form.notes || ''}
-                  onChange={(e) => handleChange('notes', e.target.value)}
-                />
+                <div className="relative">
+                  <textarea
+                    className="input w-full resize-none text-sm pr-10"
+                    rows={2}
+                    placeholder="Notas internas..."
+                    value={form.notes || ''}
+                    onChange={(e) => handleChange('notes', e.target.value)}
+                  />
+                  <VoiceInputButton onText={(t) => handleChange('notes', form.notes ? form.notes + ' ' + t : t)} className="absolute bottom-2 right-2" />
+                </div>
               ) : (
                 <p className="text-sm text-slate-400 italic">{activity.notes}</p>
               )}
