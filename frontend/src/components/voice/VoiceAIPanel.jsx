@@ -854,18 +854,41 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       mediaRecorderRef.current = mr
       chunksRef.current = []
 
-      // ── COLLECT all chunks — send complete audio on finalize ────────────
-      // Reason: webm format only includes the header in chunk[0].
-      // Chunks 2..N are continuation segments — not valid standalone webm files.
-      // Sending individual chunks to Whisper produces empty transcriptions.
-      // Solution: accumulate everything, send the full valid webm on finalize.
-      mr.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data)
-        }
+      // ── REAL-TIME transcription: header + new segment ────────────────
+      // WebM structure: chunk[0] = EBML header + Tracks (init segment)
+      //                 chunk[N] = audio cluster (media segment)
+      // A valid webm = init_segment + any_media_segment
+      // So: Blob([chunk0, chunkN]) is always a valid, decodable ~6s webm file.
+      // This gives real-time transcription without the "invalid webm" problem.
+      mr.ondataavailable = async (e) => {
+        if (e.data.size < 1000) return   // skip tiny/silent data
+
+        chunksRef.current.push(e.data)
+        const isFirst = chunksRef.current.length === 1
+
+        // Build valid webm: init header + this audio segment
+        const blobToSend = isFirst
+          ? new Blob([e.data], { type: mimeType })
+          : new Blob([chunksRef.current[0], e.data], { type: mimeType })
+
+        if (blobToSend.size < 3000) return  // still too small — silent segment
+
+        setTranscribingChunk(true)
+        try {
+          const res = await voiceAPI.transcribeChunk(meetingId, blobToSend)
+          const text = res.data?.text?.trim()
+          if (text) {
+            setTranscript(prev => [...prev, {
+              speaker: currentUser?.full_name || 'Yo',
+              text,
+              seq: res.data.sequence_num || chunksRef.current.length,
+            }])
+          }
+        } catch { /* silent — server may still be loading */ }
+        finally { setTranscribingChunk(false) }
       }
 
-      mr.start(3000)  // collect data every 3s — ensures data is available when stopped
+      mr.start(6000)  // emit a chunk every 6 seconds → real-time transcription
       setIsRecordingMeeting(true)
       setRecordingStart(Date.now())
 
@@ -948,20 +971,22 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       // 1. Stop recording → get complete valid webm blob
       const completeBlob = await stopAndGetAudio()
 
-      // 2. Send complete audio to backend for transcription (one shot, full context)
+      // 2. Send COMPLETE audio for final high-quality transcription
+      //    (replaces real-time segments with full-context, accurate version)
       if (completeBlob && completeBlob.size > 2000) {
         try {
           const tRes = await voiceAPI.transcribeComplete(meeting.id, completeBlob)
-          if (tRes.data?.chunks?.length > 0) {
-            setTranscript(tRes.data.chunks.map(c => ({
-              speaker: c.speaker_name || 'Usuario',
-              text: c.text,
-              seq: c.sequence_num,
-            })))
+          if (tRes.data?.text?.trim()) {
+            // Replace the real-time transcript with the accurate complete version
+            setTranscript([{
+              speaker: currentUser?.full_name || 'Yo',
+              text: tRes.data.text,
+              seq: 1,
+            }])
           }
         } catch (tErr) {
-          console.warn('Transcripción falló:', tErr)
-          // Continue to finalize — meeting saved even without transcript
+          console.warn('Transcripción completa falló:', tErr)
+          // Keep the real-time transcript that was collected — better than nothing
         }
       }
       setTranscribingChunk(false)
