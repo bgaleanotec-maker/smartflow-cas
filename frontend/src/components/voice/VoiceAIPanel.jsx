@@ -312,8 +312,12 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
   const recordingStartRef = useRef(null)    // timestamp when current recording started
   const ariaAudioRef = useRef(null)         // current ARIA HTML Audio element (for interruption)
   // Web Speech API — primary transcription (browser-native, free, instant)
-  const srRef = useRef(null)                // SpeechRecognition instance
-  const webSpeechActiveRef = useRef(false)  // whether Web Speech API is in use
+  const srRef = useRef(null)                // SpeechRecognition instance (ARIA mode)
+  const webSpeechActiveRef = useRef(false)  // whether Web Speech API is in use (ARIA)
+  // Meeting mode — separate Web Speech instance
+  const meetingSrRef = useRef(null)         // SpeechRecognition for meeting recording
+  const meetingRecordingRef = useRef(false) // mirrors isRecordingMeeting for closures
+  const [interimTranscript, setInterimTranscript] = useState('') // text being spoken now
 
   // Wrapper: keeps ariaStatusRef in sync with ariaStatus state (defined after all refs)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -829,11 +833,21 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
     }
   }
 
+  // ── Meeting Web Speech API ────────────────────────────────────────────────
+  const stopMeetingSpeech = () => {
+    meetingRecordingRef.current = false
+    setInterimTranscript('')
+    if (meetingSrRef.current) {
+      try { meetingSrRef.current.abort() } catch {}
+      meetingSrRef.current = null
+    }
+  }
+
   const startMeetingRecording = async (meetingId) => {
     try {
+      // ── Microphone stream for visualizer ──────────────────────────────
       const { stream, audioContext: mixedCtx } = await getAudioStream(audioSource)
       streamRef.current = stream
-
       const ctx = mixedCtx || new AudioContext()
       audioContextRef.current = ctx
       const source = ctx.createMediaStreamSource(stream)
@@ -843,113 +857,85 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       analyserRef.current = analyser
       setAnalyserNode(analyser)
 
-      // Prefer webm, fallback to mp4 (Safari)
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/webm')
-          ? 'audio/webm'
-          : 'audio/mp4'
+      setIsRecordingMeeting(true)
+      setRecordingStart(Date.now())
+      meetingRecordingRef.current = true
 
-      const mr = new MediaRecorder(stream, { mimeType })
-      mediaRecorderRef.current = mr
-      chunksRef.current = []
+      // ── Web Speech API — real-time transcription ──────────────────────
+      // Each final phrase is saved directly to the DB as a TranscriptChunk.
+      // No webm encoding issues. Works instantly in Chrome/Edge.
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+      if (SR) {
+        const sr = new SR()
+        sr.lang = 'es-CO'
+        sr.continuous = true
+        sr.interimResults = true
+        sr.maxAlternatives = 1
+        meetingSrRef.current = sr
 
-      // ── REAL-TIME transcription: header + new segment ────────────────
-      // WebM structure: chunk[0] = EBML header + Tracks (init segment)
-      //                 chunk[N] = audio cluster (media segment)
-      // A valid webm = init_segment + any_media_segment
-      // So: Blob([chunk0, chunkN]) is always a valid, decodable ~6s webm file.
-      // This gives real-time transcription without the "invalid webm" problem.
-      mr.ondataavailable = async (e) => {
-        if (e.data.size < 1000) return   // skip tiny/silent data
+        sr.onresult = async (event) => {
+          const results = Array.from(event.results).slice(event.resultIndex)
 
-        chunksRef.current.push(e.data)
-        const isFirst = chunksRef.current.length === 1
+          // Show interim text while speaking
+          const interim = results.filter(r => !r.isFinal).map(r => r[0].transcript).join(' ')
+          setInterimTranscript(interim)
 
-        // Build valid webm: init header + this audio segment
-        const blobToSend = isFirst
-          ? new Blob([e.data], { type: mimeType })
-          : new Blob([chunksRef.current[0], e.data], { type: mimeType })
-
-        if (blobToSend.size < 3000) return  // still too small — silent segment
-
-        setTranscribingChunk(true)
-        try {
-          const res = await voiceAPI.transcribeChunk(meetingId, blobToSend)
-          const text = res.data?.text?.trim()
-          if (text) {
+          // Save each final phrase to state + DB
+          const finals = results.filter(r => r.isFinal).map(r => r[0].transcript.trim()).filter(Boolean)
+          for (const text of finals) {
+            setInterimTranscript('')
             setTranscript(prev => [...prev, {
               speaker: currentUser?.full_name || 'Yo',
               text,
-              seq: res.data.sequence_num || chunksRef.current.length,
+              seq: prev.length + 1,
             }])
+            try {
+              await voiceAPI.addTextChunk(meetingId, text, currentUser?.full_name || 'Usuario')
+            } catch { /* save failed — text still visible locally */ }
           }
-        } catch { /* silent — server may still be loading */ }
-        finally { setTranscribingChunk(false) }
-      }
+        }
 
-      mr.start(6000)  // emit a chunk every 6 seconds → real-time transcription
-      setIsRecordingMeeting(true)
-      setRecordingStart(Date.now())
+        sr.onend = () => {
+          setInterimTranscript('')
+          // Auto-restart while recording is active
+          if (meetingRecordingRef.current) {
+            setTimeout(() => {
+              if (meetingRecordingRef.current && meetingSrRef.current) {
+                try { meetingSrRef.current.start() } catch {}
+              }
+            }, 300)
+          }
+        }
+
+        sr.onerror = (e) => {
+          if (e.error === 'not-allowed') {
+            setTranscribingChunk(false)
+            return
+          }
+          // no-speech is normal during silence — just restart
+          if (meetingRecordingRef.current) {
+            setTimeout(() => {
+              if (meetingRecordingRef.current && meetingSrRef.current) {
+                try { meetingSrRef.current.start() } catch {}
+              }
+            }, 500)
+          }
+        }
+
+        sr.start()
+        setTranscribingChunk(false)
+      } else {
+        // Fallback for Firefox: show warning
+        setTranscribingChunk(true)
+      }
 
     } catch (err) {
       alert(err.message || 'No se pudo acceder al audio. Verifica los permisos del navegador.')
     }
   }
 
-  // Stop recording and return a Promise<Blob> with the complete audio
-  const stopAndGetAudio = () => new Promise((resolve) => {
-    if (chunkIntervalRef.current) {
-      clearInterval(chunkIntervalRef.current)
-      chunkIntervalRef.current = null
-    }
-
-    const cleanup = () => {
-      if (streamRef.current) {
-        if (streamRef.current._originalStreams) {
-          streamRef.current._originalStreams.forEach(s => s.getTracks().forEach(t => t.stop()))
-        }
-        streamRef.current.getTracks().forEach(t => t.stop())
-        streamRef.current = null
-      }
-      if (audioContextRef.current) {
-        audioContextRef.current.close()
-        audioContextRef.current = null
-      }
-      setAnalyserNode(null)
-      setIsRecordingMeeting(false)
-    }
-
-    const mr = mediaRecorderRef.current
-    if (!mr || mr.state === 'inactive') {
-      const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
-      cleanup()
-      resolve(blob)
-      return
-    }
-
-    mr.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
-      cleanup()
-      resolve(blob)
-    }
-
-    if (mr.state === 'recording') {
-      mr.requestData()
-      mr.stop()
-    } else {
-      const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
-      cleanup()
-      resolve(blob)
-    }
-  })
-
   const stopMeetingRecording = () => {
-    // Lightweight stop for unmount/cancel — doesn't return blob
-    if (chunkIntervalRef.current) { clearInterval(chunkIntervalRef.current); chunkIntervalRef.current = null }
-    if (mediaRecorderRef.current?.state !== 'inactive') {
-      try { mediaRecorderRef.current?.stop() } catch {}
-    }
+    stopMeetingSpeech()
     if (streamRef.current) {
       if (streamRef.current._originalStreams) {
         streamRef.current._originalStreams.forEach(s => s.getTracks().forEach(t => t.stop()))
@@ -960,38 +946,15 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
     if (audioContextRef.current) { audioContextRef.current.close(); audioContextRef.current = null }
     setAnalyserNode(null)
     setIsRecordingMeeting(false)
+    setTranscribingChunk(false)
   }
 
   const finalizeMeeting = async () => {
     if (!meeting) return
+    stopMeetingRecording()  // stop speech recognition + mic
     setFinalizing(true)
-    setTranscribingChunk(true)
-
     try {
-      // 1. Stop recording → get complete valid webm blob
-      const completeBlob = await stopAndGetAudio()
-
-      // 2. Send COMPLETE audio for final high-quality transcription
-      //    (replaces real-time segments with full-context, accurate version)
-      if (completeBlob && completeBlob.size > 2000) {
-        try {
-          const tRes = await voiceAPI.transcribeComplete(meeting.id, completeBlob)
-          if (tRes.data?.text?.trim()) {
-            // Replace the real-time transcript with the accurate complete version
-            setTranscript([{
-              speaker: currentUser?.full_name || 'Yo',
-              text: tRes.data.text,
-              seq: 1,
-            }])
-          }
-        } catch (tErr) {
-          console.warn('Transcripción completa falló:', tErr)
-          // Keep the real-time transcript that was collected — better than nothing
-        }
-      }
-      setTranscribingChunk(false)
-
-      // 3. Finalize: timestamps + Gemini AI analysis
+      // Finalize: Gemini reads the chunks already saved in DB during recording
       const res = await voiceAPI.finalizeMeeting(meeting.id)
       setMeeting(res.data)
       setAnalysis(res.data)
@@ -1000,7 +963,6 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       setMeeting(prev => prev ? { ...prev, _finalizeError: msg } : prev)
     } finally {
       setFinalizing(false)
-      setTranscribingChunk(false)
     }
   }
 
@@ -1488,18 +1450,10 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
                     {/* Live transcript */}
                     <div className="flex-1 overflow-y-auto px-4 py-2 space-y-2 border-t border-slate-800">
                       <p className="text-[10px] text-slate-500 uppercase tracking-wider py-1">Transcripción en vivo</p>
-                      {transcribingChunk && (
-                        <div className="flex items-center gap-2 text-xs text-amber-400/80 mb-1">
-                          <Loader2 size={11} className="animate-spin flex-shrink-0" />
-                          Transcribiendo fragmento...
-                        </div>
-                      )}
-                      {transcript.length === 0 && (
+                      {transcript.length === 0 && !interimTranscript && (
                         <p className="text-xs text-slate-600 text-center mt-4">
                           {isRecordingMeeting
-                            ? transcribingChunk
-                              ? '⏳ Procesando audio con Whisper (puede tardar en el arranque)...'
-                              : '🎙️ Grabando... texto aparece cada ~7s cuando hay voz.'
+                            ? '🎙️ Habla — el texto aparece aquí en tiempo real'
                             : 'Sin transcripciones aún.'}
                         </p>
                       )}
@@ -1513,6 +1467,17 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
                           <p className="text-sm text-slate-300 leading-relaxed">{item.text}</p>
                         </div>
                       ))}
+                      {/* Interim text — what's being spoken right now */}
+                      {interimTranscript && (
+                        <div className="flex gap-2 items-start opacity-60">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded text-white flex-shrink-0 mt-0.5 ${getSpeakerColor(currentUser?.full_name)}`}>
+                            {(currentUser?.full_name || 'Yo').split(' ')[0].slice(0, 8)}
+                          </span>
+                          <p className="text-sm text-slate-400 leading-relaxed italic">
+                            {interimTranscript}<span className="animate-pulse">▌</span>
+                          </p>
+                        </div>
+                      )}
                       <div ref={transcriptEndRef} />
                     </div>
                   </div>

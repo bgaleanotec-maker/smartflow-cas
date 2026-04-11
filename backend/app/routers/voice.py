@@ -166,6 +166,11 @@ class JoinMeetingBody(BaseModel):
     session_code: str
 
 
+class TextChunkBody(BaseModel):
+    text: str
+    speaker_name: str = ""
+
+
 # ─── Meeting CRUD ─────────────────────────────────────────────────────────────
 
 
@@ -467,6 +472,42 @@ async def transcribe_chunk(
         "source": transcription_source,
         "error": None,
     }
+
+
+@router.post("/meetings/{meeting_id}/add-text-chunk")
+async def add_text_chunk(meeting_id: int, body: TextChunkBody, db: DB, user: CurrentUser):
+    """
+    Save a transcribed text phrase directly (from Web Speech API).
+    No audio processing needed — text arrives already transcribed by the browser.
+    """
+    text = (body.text or "").strip()
+    if not text:
+        return {"ok": False}
+
+    meeting = (await db.execute(
+        select(VoiceMeeting).where(VoiceMeeting.id == meeting_id, VoiceMeeting.is_deleted == False)
+    )).scalar_one_or_none()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Reunión no encontrada")
+
+    seq_result = await db.execute(
+        select(func.count(TranscriptChunk.id)).where(TranscriptChunk.meeting_id == meeting_id)
+    )
+    seq_num = (seq_result.scalar() or 0) + 1
+
+    chunk = TranscriptChunk(
+        meeting_id=meeting_id,
+        sequence_num=seq_num,
+        speaker_id=user.id,
+        speaker_name=body.speaker_name or user.full_name,
+        text=text,
+        confidence=0.92,   # Web Speech API typical accuracy
+        language="es",
+    )
+    db.add(chunk)
+    await db.flush()
+    await db.commit()
+    return {"ok": True, "sequence_num": seq_num}
 
 
 @router.post("/meetings/{meeting_id}/transcribe-complete")

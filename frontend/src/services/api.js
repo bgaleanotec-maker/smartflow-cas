@@ -294,6 +294,8 @@ export const voiceAPI = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
+  addTextChunk: (meetingId, text, speakerName) =>
+    api.post(`/voice/meetings/${meetingId}/add-text-chunk`, { text, speaker_name: speakerName }),
   transcribeComplete: (meetingId, audioBlob) => {
     const formData = new FormData()
     formData.append('file', audioBlob, 'recording.webm')
