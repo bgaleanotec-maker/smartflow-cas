@@ -314,6 +314,15 @@ export const voiceAPI = {
   meetingsByBusiness: (bizId) => api.get(`/voice/meetings/by-business/${bizId}`),
 }
 
+// ─── Reminders ───────────────────────────────────────────────────────────────
+export const remindersAPI = {
+  list: (includeDone = false) => api.get('/reminders', { params: { include_done: includeDone } }),
+  create: (data) => api.post('/reminders', data),
+  update: (id, data) => api.patch(`/reminders/${id}`, data),
+  done: (id) => api.patch(`/reminders/${id}`, { is_done: true }),
+  delete: (id) => api.delete(`/reminders/${id}`),
+}
+
 // ─── ARIA Financial Intelligence ─────────────────────────────────────────────
 export const ariaAPI = {
   getAssumptions: (businessId, year) => api.get('/bp-ai/assumptions', { params: { business_id: businessId, year } }),

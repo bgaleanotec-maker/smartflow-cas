@@ -6,12 +6,13 @@ import {
   Users, Settings, LogOut, ChevronLeft, ChevronRight,
   Bell, Search, Menu, X, FileText, BarChart3, Newspaper, Landmark,
   Plane, LayoutGrid, Zap, TrendingUp, Crown, Mic2, MoreHorizontal,
-  Mic,
+  Mic, Home, MessageSquareMore,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { usePomodoroStore } from '../../stores/pomodoroStore'
 import clsx from 'clsx'
 import VoiceAIPanel from '../voice/VoiceAIPanel'
+import QuickChatPanel from '../mobile/QuickChatPanel'
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -40,6 +41,7 @@ export default function MainLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [voicePanelOpen, setVoicePanelOpen] = useState(false)
+  const [quickChatOpen, setQuickChatOpen] = useState(false)
   const { user, logout } = useAuthStore()
   const { isRunning, formatTime, sessionType } = usePomodoroStore()
   const navigate = useNavigate()
@@ -250,14 +252,14 @@ export default function MainLayout() {
       {/* ── Mobile bottom navigation ── */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-lg border-t border-slate-800 safe-bottom">
         <div className="flex items-center justify-around h-[60px]">
-          {/* Dashboard */}
+          {/* Inicio móvil */}
           <NavLink
-            to="/dashboard"
+            to="/mobile"
             className={({ isActive }) =>
               clsx('mobile-nav-item', isActive && 'active')
             }
           >
-            <LayoutDashboard size={20} />
+            <Home size={20} />
             <span>Inicio</span>
           </NavLink>
 
@@ -284,16 +286,14 @@ export default function MainLayout() {
             <span className="text-[10px] font-medium text-brand-400 mt-0.5">ARIA</span>
           </button>
 
-          {/* Reuniones */}
-          <NavLink
-            to="/meetings"
-            className={({ isActive }) =>
-              clsx('mobile-nav-item', isActive && 'active')
-            }
+          {/* Chat rápido IA */}
+          <button
+            onClick={() => setQuickChatOpen(true)}
+            className={clsx('mobile-nav-item', quickChatOpen && 'active')}
           >
-            <Mic2 size={20} />
-            <span>Reuniones</span>
-          </NavLink>
+            <MessageSquareMore size={20} />
+            <span>Chat IA</span>
+          </button>
 
           {/* Más */}
           <button
@@ -432,6 +432,11 @@ export default function MainLayout() {
         externalOpen={voicePanelOpen}
         onExternalClose={() => setVoicePanelOpen(false)}
       />
+
+      {/* ── Quick Chat IA Panel ── */}
+      {quickChatOpen && (
+        <QuickChatPanel onClose={() => setQuickChatOpen(false)} />
+      )}
     </div>
   )
 }

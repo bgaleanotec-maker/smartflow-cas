@@ -113,27 +113,49 @@ def _meeting_to_dict(m: VoiceMeeting) -> dict:
 
 async def _call_gemini(api_key: str, model: str, prompt: str, temperature: float = 0.7, max_tokens: int = 512) -> Optional[str]:
     """Call Gemini API and return the text response."""
+    # Always use v1beta — it supports all models including legacy ones
+    api_version = "v1beta"
+    timeout = 25.0 if max_tokens <= 512 else 90.0
+
+    # Normalize model name: upgrade legacy models
+    if model in ("gemini-pro", "gemini-1.0-pro", "gemini-1.5-flash", None, ""):
+        model = "gemini-2.0-flash"
+
+    # Models to try in order (primary + fallback)
+    models_to_try = [model]
+    if model != "gemini-2.0-flash":
+        models_to_try.append("gemini-2.0-flash")
+
     try:
-        # Use v1beta for newer models (1.5-flash, 2.0-flash); v1 for legacy
-        api_version = "v1beta" if any(x in model for x in ("1.5", "2.0", "flash", "pro-latest")) else "v1"
-        timeout = 18.0 if max_tokens <= 512 else 60.0
         async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.post(
-                f"https://generativelanguage.googleapis.com/{api_version}/models/{model}:generateContent?key={api_key}",
-                json={
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens},
-                },
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                return (
-                    data.get("candidates", [{}])[0]
-                    .get("content", {})
-                    .get("parts", [{}])[0]
-                    .get("text", "")
+            for try_model in models_to_try:
+                url = f"https://generativelanguage.googleapis.com/{api_version}/models/{try_model}:generateContent?key={api_key}"
+                resp = await client.post(
+                    url,
+                    json={
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens},
+                    },
                 )
-            logger.error(f"Gemini error {resp.status_code}: {resp.text[:300]}")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    text = (
+                        data.get("candidates", [{}])[0]
+                        .get("content", {})
+                        .get("parts", [{}])[0]
+                        .get("text", "")
+                    )
+                    if text:
+                        logger.info(f"Gemini OK with model={try_model}, {len(text)} chars")
+                        return text
+                    logger.warning(f"Gemini {try_model} returned empty text, data={str(data)[:200]}")
+                else:
+                    logger.error(f"Gemini {try_model} error {resp.status_code}: {resp.text[:300]}")
+                    # 404 = model not found, try next; other errors may be fatal
+                    if resp.status_code not in (404, 400):
+                        break
+    except httpx.TimeoutException:
+        logger.error(f"Gemini timeout after {timeout}s for model={model}")
     except Exception as e:
         logger.error(f"Gemini call error: {e}")
     return None
@@ -701,17 +723,17 @@ async def finalize_meeting(meeting_id: int, db: DB, user: CurrentUser):
             started = started.replace(tzinfo=timezone.utc)
         meeting.duration_seconds = int((now_utc - started).total_seconds())
 
-    # Commit basic data NOW — meeting is safe even if Gemini analysis fails/times out
+    # Flush basic data so it's staged (but NOT committed yet — single commit at end avoids session expiry)
     await db.flush()
-    await db.commit()
 
     # AI Analysis via Gemini — wrapped in try/except so it never blocks the response
     try:
         api_key = await get_service_config_value(db, "gemini", "api_key")
+        if not api_key:
+            logger.warning(f"Gemini analysis skipped for meeting {meeting_id}: no API key configured")
         if api_key and full_transcript.strip():
-            model = await get_service_config_value(db, "gemini", "model") or "gemini-1.5-flash"
-            if model in ("gemini-pro", "gemini-1.0-pro"):
-                model = "gemini-1.5-flash"
+            model = await get_service_config_value(db, "gemini", "model") or "gemini-2.0-flash"
+            logger.info(f"Starting Gemini analysis for meeting {meeting_id}: model={model}, transcript_len={len(full_transcript)}")
 
             analysis_prompt = f"""Analiza esta transcripción de reunión del equipo CAS de Vanti y responde en JSON válido:
 {{
@@ -727,9 +749,14 @@ async def finalize_meeting(meeting_id: int, db: DB, user: CurrentUser):
 Transcripción:
 {full_transcript}"""
 
-            ai_text = await _call_gemini(api_key, model, analysis_prompt, temperature=0.3, max_tokens=1500)
+            # Trim transcript to 6000 chars (~1500 tokens) — enough for any meeting, avoids huge bills
+            transcript_for_ai = full_transcript[:6000] + ("\n[...transcripción recortada]" if len(full_transcript) > 6000 else "")
+            analysis_prompt = analysis_prompt.replace(full_transcript, transcript_for_ai)
+
+            ai_text = await _call_gemini(api_key, model, analysis_prompt, temperature=0.3, max_tokens=900)
 
             if ai_text:
+                # Extract JSON from possible markdown fences
                 json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", ai_text, re.DOTALL)
                 if json_match:
                     ai_text = json_match.group(1)
@@ -744,8 +771,17 @@ Transcripción:
                     meeting.ai_decisions = analysis.get("decisions")
                     meeting.ai_key_topics = analysis.get("key_topics")
                     meeting.ai_participants_mentioned = analysis.get("participants_mentioned")
-                except json.JSONDecodeError:
+                    logger.info(
+                        f"Gemini analysis saved for meeting {meeting_id}: "
+                        f"summary={bool(meeting.ai_summary)}, "
+                        f"action_items={len(meeting.ai_action_items or [])}, "
+                        f"decisions={len(meeting.ai_decisions or [])}"
+                    )
+                except json.JSONDecodeError as jde:
+                    logger.warning(f"Gemini JSON parse failed for meeting {meeting_id}: {jde}. Raw: {ai_text[:300]}")
                     meeting.ai_summary = ai_text[:500] if ai_text else None
+            else:
+                logger.warning(f"Gemini returned no text for meeting {meeting_id}")
 
             # Auto-link to BP activity
             if meeting.bp_activity_id and meeting.ai_summary:
@@ -763,13 +799,18 @@ Transcripción:
                 meeting.auto_linked_actions = {"linked": True, "meeting_comment_added": True}
 
     except Exception as exc:
-        logger.warning(f"Gemini analysis failed for meeting {meeting_id}: {exc}")
-        # Meeting is already saved — just mark completed without AI analysis
+        logger.warning(f"Gemini analysis failed for meeting {meeting_id}: {exc}", exc_info=True)
+        # Continue — meeting will be saved as completed without AI analysis
 
+    # Single final commit: saves transcript + AI fields + COMPLETED status atomically
     meeting.status = MeetingStatus.COMPLETED
     await db.flush()
-    await db.refresh(meeting, ["created_by", "chunks", "business"])
     await db.commit()
+    # Reload scalar fields + relationships needed by _meeting_to_dict
+    await db.refresh(meeting, attribute_names=["ai_summary", "ai_action_items", "ai_decisions",
+                                               "ai_key_topics", "ai_participants_mentioned",
+                                               "full_transcript", "status", "ended_at",
+                                               "duration_seconds", "created_by", "chunks", "business"])
     return _meeting_to_dict(meeting)
 
 
@@ -886,9 +927,9 @@ async def aria_voice_chat(body: AriaChatBody, db: DB, user: CurrentUser):
     response_text = ""
 
     if gemini_api_key:
-        model = await get_service_config_value(db, "gemini", "model") or "gemini-1.5-flash"
-        if model in ("gemini-pro", "gemini-1.0-pro"):
-            model = "gemini-1.5-flash"
+        model = await get_service_config_value(db, "gemini", "model") or "gemini-2.0-flash"
+        if model in ("gemini-pro", "gemini-1.0-pro", "gemini-1.5-flash"):
+            model = "gemini-2.0-flash"
 
         full_prompt = (
             f"{ARIA_VOICE_PROMPT}\n\n"
@@ -898,7 +939,9 @@ async def aria_voice_chat(body: AriaChatBody, db: DB, user: CurrentUser):
             f"{history_block}\n\n"
             f"TURNO ACTUAL — {first_name} dice: {instruction}"
         )
-        response_text = await _call_gemini(gemini_api_key, model, full_prompt, temperature=0.7) or ""
+        # Cap ARIA context to 3000 chars to keep token cost low (~750 tokens context + ~250 response)
+        full_prompt_capped = full_prompt[:5000]
+        response_text = await _call_gemini(gemini_api_key, model, full_prompt_capped, temperature=0.7, max_tokens=350) or ""
 
     if not response_text:
         # Fallback: never repeat the intro, never say "Soy ARIA"
