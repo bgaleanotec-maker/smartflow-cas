@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     # Free key: https://ai.google.dev → Get API key
     GEMINI_API_KEY: Optional[str] = None
 
+    # OpenAI Whisper (primary STT, $0.006/min)
+    OPENAI_API_KEY: Optional[str] = None
+
     # Whisper transcription (local fallback when Groq not configured)
     WHISPER_MODEL: str = "base"  # base / medium / large-v3 (depends on server RAM)
 
@@ -84,6 +87,7 @@ _ENV_FALLBACK_MAP = {
     ("deepgram", "model"): None,
     ("groq", "api_key"): "GROQ_API_KEY",
     ("groq", "model"): "GROQ_MODEL",
+    ("openai", "api_key"): "OPENAI_API_KEY",
     ("gemini", "api_key"): "GEMINI_API_KEY",
     ("gemini", "model"): None,
     ("whisper", "model"): "WHISPER_MODEL",

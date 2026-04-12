@@ -32,6 +32,7 @@ from app.models.business_plan import (
 from app.models.bp_financial_ai import BPAssumptions, BPScenario, BPAuditLog
 from app.models.voice_meeting import VoiceMeeting, TranscriptChunk, MeetingType, MeetingStatus
 from app.models.reminder import Reminder
+from app.models.voice_note import VoiceNote
 
 __all__ = [
     "User", "UserRole", "TeamType", "ContractType",
@@ -58,4 +59,5 @@ __all__ = [
     "BPAssumptions", "BPScenario", "BPAuditLog",
     "VoiceMeeting", "TranscriptChunk", "MeetingType", "MeetingStatus",
     "Reminder",
+    "VoiceNote",
 ]

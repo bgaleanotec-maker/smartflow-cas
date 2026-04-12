@@ -342,3 +342,12 @@ export const ariaAPI = {
   chat: (bpId, data) => api.post(`/bp/${bpId}/aria/chat`, data),
   history: (bpId) => api.get(`/bp/${bpId}/aria/history`),
 }
+
+// ─── Voice Notes ──────────────────────────────────────────────────────────────
+export const voiceNotesAPI = {
+  list: (params = {}) => api.get('/voice-notes', { params }),
+  create: (data) => api.post('/voice-notes', data),
+  update: (id, data) => api.patch(`/voice-notes/${id}`, data),
+  done: (id) => api.patch(`/voice-notes/${id}`, { is_done: true }),
+  delete: (id) => api.delete(`/voice-notes/${id}`),
+}

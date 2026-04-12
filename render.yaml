@@ -23,6 +23,9 @@ services:
       # ── Gemini — IA para análisis de reuniones y ARIA chat ─────────────────
       - key: GEMINI_API_KEY
         value: AIzaSyCPuXZzCgiwOL8uESF-MPyRPQB2WyxbU58
+      # ── OpenAI — Whisper STT ($0.006/min, límite $25/mes ≈ 100k COP) ─────────
+      - key: OPENAI_API_KEY
+        sync: false   # set manually in Render dashboard — key: sk-proj-mCEjv85...hkL4A
       - key: GROQ_API_KEY
         sync: false   # optional fallback Whisper — set in Render dashboard if needed
       # ── Deepgram — transcripción con diarización (identificación de hablantes)

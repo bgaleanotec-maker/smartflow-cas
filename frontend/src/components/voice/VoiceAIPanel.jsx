@@ -54,8 +54,16 @@ async function getAudioStream(source) {
       throw err
     }
   }
-  // Default: microphone only
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+  // Default: microphone only — optimized for speech quality
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      sampleRate: { ideal: 16000 },
+      channelCount: { ideal: 1 },
+    }
+  })
   return { stream, audioContext: null }
 }
 
@@ -761,7 +769,14 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
     vadChunksRef.current = []
 
     try {
-      const mr = new MediaRecorder(vadStreamRef.current, { mimeType: 'audio/webm' })
+      const vadMimeType =
+        MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' :
+        MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' :
+        MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : ''
+      const mr = new MediaRecorder(vadStreamRef.current, {
+        mimeType: vadMimeType || undefined,
+        audioBitsPerSecond: 128000,
+      })
       vadRecorderRef.current = mr
 
       mr.ondataavailable = (e) => { if (e.data.size > 0) vadChunksRef.current.push(e.data) }
@@ -822,7 +837,15 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
     const webSpeechOK = startWebSpeech()
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: { ideal: 16000 },
+          channelCount: { ideal: 1 },
+        }
+      })
       vadStreamRef.current = stream
 
       const ctx = new AudioContext()
@@ -1005,11 +1028,15 @@ export default function VoiceAIPanel({ currentUser, externalOpen, onExternalClos
       // ── Parallel audio recording → complete blob for Deepgram on finalize ─
       // MediaRecorder accumulates all audio; sent to Deepgram when finalized.
       // Web Speech API provides real-time preview below.
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
+      const mimeType =
+        MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' :
+        MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' :
+        MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : ''
       try {
-        const mr = new MediaRecorder(stream, { mimeType })
+        const mr = new MediaRecorder(stream, {
+          mimeType: mimeType || undefined,
+          audioBitsPerSecond: 128000,
+        })
         mediaRecorderRef.current = mr
         mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
         mr.start(5000)  // collect in 5s chunks — keeps memory manageable

@@ -2,19 +2,15 @@
 Transcription service — SmartFlow ARIA.
 
 Priority order:
-  1. Groq Whisper API  (cloud, free tier 28,800s/day, ~1-2s latency, 0 RAM on server)
-  2. Local faster-whisper (fallback — loads model into RAM, only if no Groq key)
+  1. OpenAI Whisper API   (cloud, whisper-1, $0.006/min, ~4000 min/$25)
+  2. Groq Whisper API     (cloud, free tier 28,800s/day, ~1-2s latency, 0 RAM on server)
+  3. Local faster-whisper (fallback — loads model into RAM, only if no cloud key)
 
-WHY GROQ FIRST:
-  Render free tier has 512MB RAM. Loading even the 'base' Whisper model uses
-  ~350MB which triggers OOM restarts. Groq runs transcription in their cloud
-  at no cost (generous free tier) with much lower latency than local cold start.
-
-Groq Whisper API:
-  - Endpoint: https://api.groq.com/openai/v1/audio/transcriptions
-  - Models: whisper-large-v3-turbo (fastest), whisper-large-v3 (best quality)
-  - Free tier: 28,800 audio seconds/day
-  - Key: console.groq.com → API Keys (free account)
+WHY OPENAI FIRST:
+  OpenAI whisper-1 is the most reliable cloud STT option. At $0.006/min,
+  100k COP (~$25 USD) covers ~4,000 minutes/month — far more than typical usage.
+  Groq is kept as a free fallback (28,800 audio seconds/day free tier).
+  Local is last resort — Render free tier has 512MB RAM which triggers OOM.
 """
 import logging
 import os
@@ -26,13 +22,51 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# ── Local model cache (only used when Groq not configured) ─────────────────────
-# Deliberately NOT warmed up at startup — load only on first actual request
+# ── Local model cache (only used when cloud not configured) ────────────────────
 _whisper_model = None
 _loaded_model_size = None
 
 
-# ─── 1. GROQ WHISPER (cloud, recommended) ────────────────────────────────────
+# ─── 1. OPENAI WHISPER (primary: reliable, $0.006/min) ───────────────────────
+
+async def _transcribe_openai_whisper(audio_bytes: bytes, api_key: str, language: str = "es") -> dict:
+    """
+    Transcribe via OpenAI Whisper API (whisper-1).
+    Accepts webm/mp4/wav/mp3 up to 25MB.
+    Cost: $0.006/min — ~4000 min for $25 USD/month.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                files={"file": ("audio.webm", audio_bytes, "audio/webm")},
+                data={
+                    "model": "whisper-1",
+                    "language": language,
+                    "response_format": "verbose_json",
+                    "temperature": "0",
+                },
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return {
+                    "text": data.get("text", "").strip(),
+                    "language": data.get("language", language),
+                    "confidence": 0.95,
+                    "duration": round(float(data.get("duration", 0.0)), 2),
+                    "words": [],
+                    "error": None,
+                    "source": "openai_whisper",
+                }
+            else:
+                return _error_result(language, f"OpenAI {resp.status_code}: {resp.text[:200]}", source="openai_whisper")
+    except Exception as e:
+        logger.error(f"OpenAI Whisper exception: {e}")
+        return _error_result(language, str(e), source="openai_whisper")
+
+
+# ─── 2. GROQ WHISPER (fallback: free, 28800s/day) ────────────────────────────
 
 async def _transcribe_groq(
     audio_bytes: bytes,
@@ -81,18 +115,18 @@ async def _transcribe_groq(
         return _error_result(language, str(e), source="groq")
 
 
-# ─── 2. LOCAL FASTER-WHISPER (fallback) ──────────────────────────────────────
+# ─── 3. LOCAL FASTER-WHISPER (last resort fallback) ──────────────────────────
 
 def _get_local_model(model_size: str = "base"):
     """
     Load local Whisper model on demand.
-    NOTE: uses ~350MB RAM for 'base'. Only used when Groq key not configured.
+    NOTE: uses ~350MB RAM for 'base'. Only used when cloud keys not configured.
     """
     global _whisper_model, _loaded_model_size
     if _whisper_model is None or _loaded_model_size != model_size:
         try:
             from faster_whisper import WhisperModel
-            logger.info(f"Loading local Whisper model: {model_size} (Groq not configured)")
+            logger.info(f"Loading local Whisper model: {model_size} (no cloud key configured)")
             _whisper_model = WhisperModel(model_size, device="cpu", compute_type="int8")
             _loaded_model_size = model_size
             logger.info(f"Local Whisper '{model_size}' ready")
@@ -172,28 +206,37 @@ async def transcribe_audio(
     language: Optional[str] = None,
     mode: str = "meeting",
     word_timestamps: bool = False,
+    openai_api_key: Optional[str] = None,
     groq_api_key: Optional[str] = None,
 ) -> dict:
     """
-    Transcribe audio bytes. Tries Groq API first (no RAM, fast, free).
-    Falls back to local faster-whisper if Groq key not provided.
+    Transcribe audio bytes.
+    Priority: 1) OpenAI Whisper ($0.006/min) → 2) Groq (free) → 3) local faster-whisper.
 
     Args:
-        audio_bytes:   raw audio (webm/mp4/wav)
-        model_size:    local model size (only used if Groq unavailable)
-        language:      ISO 639-1 code, defaults to 'es'
-        groq_api_key:  Groq API key — pass to use cloud transcription
+        audio_bytes:     raw audio (webm/mp4/wav)
+        model_size:      local model size (only used if cloud unavailable)
+        language:        ISO 639-1 code, defaults to 'es'
+        openai_api_key:  OpenAI API key — primary cloud STT
+        groq_api_key:    Groq API key — free fallback cloud STT
     """
     lang = language or "es"
 
-    # ── Groq path (preferred: cloud, 0 RAM) ─────────────────────────────────
+    # ── 1. OpenAI Whisper (primary: reliable, $0.006/min) ───────────────────
+    if openai_api_key:
+        result = await _transcribe_openai_whisper(audio_bytes, openai_api_key, language=lang)
+        if not result.get("error"):
+            return result
+        logger.warning(f"OpenAI Whisper failed ({result.get('error')}), falling back to Groq")
+
+    # ── 2. Groq Whisper (free fallback) ─────────────────────────────────────
     if groq_api_key:
         result = await _transcribe_groq(audio_bytes, groq_api_key, language=lang)
         if not result.get("error"):
             return result
-        logger.warning("Groq transcription failed, falling back to local Whisper")
+        logger.warning(f"Groq transcription failed ({result.get('error')}), falling back to local Whisper")
 
-    # ── Local path (fallback: needs RAM) ─────────────────────────────────────
+    # ── 3. Local faster-whisper (last resort) ────────────────────────────────
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
         None, _run_local_transcription, audio_bytes, model_size, lang

@@ -10,6 +10,7 @@ from app.core.database import engine, Base
 import app.models  # noqa: F401
 
 from app.routers import auth, users, projects, tasks, incidents, admin, pomodoro, demands, demand_admin, hechos, premisas, ai_assistant, activities, dashboard_builder, lean_pro, ai_chat, business_plan, bp_financial_ai, executive, voice, reminders
+from app.routers.voice_notes import router as voice_notes_router
 
 
 @asynccontextmanager
@@ -62,6 +63,29 @@ async def _run_column_migrations():
             ("activity_instances", "escalation_sent_at", "DATETIME"),
             ("activity_instances", "reminder_sent_at", "DATETIME"),
         ]
+        # SQLite: CREATE TABLE IF NOT EXISTS for new tables
+        async with AsyncSessionLocal() as db:
+            await db.execute(text("""
+                CREATE TABLE IF NOT EXISTS voice_notes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    transcript TEXT NOT NULL,
+                    title VARCHAR(200),
+                    status VARCHAR(20) DEFAULT 'pendiente',
+                    assigned_to_id INTEGER REFERENCES users(id),
+                    project_id INTEGER,
+                    due_date TIMESTAMP,
+                    priority VARCHAR(10) DEFAULT 'media',
+                    meeting_id INTEGER REFERENCES meetings(id),
+                    chunk_id INTEGER REFERENCES transcript_chunks(id),
+                    audio_duration_s REAL,
+                    is_done BOOLEAN DEFAULT FALSE,
+                    done_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            await db.commit()
         async with AsyncSessionLocal() as db:
             for table, column, col_def in migrations:
                 try:
@@ -110,6 +134,35 @@ async def _run_column_migrations():
             "ALTER TABLE activity_instances ADD COLUMN IF NOT EXISTS escalation_sent_at TIMESTAMP WITH TIME ZONE",
             "ALTER TABLE activity_instances ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMP WITH TIME ZONE",
         ]
+        # PostgreSQL: create voice_notes table if not exists
+        pg_create_tables = [
+            """CREATE TABLE IF NOT EXISTS voice_notes (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                transcript TEXT NOT NULL,
+                title VARCHAR(200),
+                status VARCHAR(20) DEFAULT 'pendiente',
+                assigned_to_id INTEGER REFERENCES users(id),
+                project_id INTEGER,
+                due_date TIMESTAMP WITH TIME ZONE,
+                priority VARCHAR(10) DEFAULT 'media',
+                meeting_id INTEGER,
+                chunk_id INTEGER,
+                audio_duration_s FLOAT,
+                is_done BOOLEAN DEFAULT FALSE,
+                done_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            )"""
+        ]
+        async with AsyncSessionLocal() as db:
+            for stmt in pg_create_tables:
+                try:
+                    await db.execute(text(stmt))
+                    await db.commit()
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"PG create table warning: {e}")
         async with AsyncSessionLocal() as db:
             for stmt in pg_migrations:
                 try:
@@ -254,6 +307,7 @@ async def _seed_service_configs():
         ("elevenlabs", "api_key",  "ELEVENLABS_API_KEY"),
         ("elevenlabs", "voice_id", "ELEVENLABS_VOICE_ID"),
         ("groq",       "api_key",  "GROQ_API_KEY"),
+        ("openai",     "api_key",  "OPENAI_API_KEY"),
     ]
 
     async with AsyncSessionLocal() as db:
@@ -346,6 +400,7 @@ app.include_router(bp_financial_ai.router, prefix=API_PREFIX)
 app.include_router(executive.router, prefix=API_PREFIX)
 app.include_router(voice.router, prefix=API_PREFIX)
 app.include_router(reminders.router, prefix=API_PREFIX)
+app.include_router(voice_notes_router, prefix=API_PREFIX)
 
 
 # force redeploy 2026-04-11

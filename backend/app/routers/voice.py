@@ -409,7 +409,8 @@ async def transcribe_chunk(
     if not meeting:
         raise HTTPException(status_code=404, detail="Reunión no encontrada")
 
-    # Get transcription config — Groq (cloud, 0 RAM) preferred over local Whisper
+    # Get transcription config — OpenAI (primary) → Groq (fallback) → local Whisper
+    openai_key = await get_service_config_value(db, "openai", "api_key")
     groq_api_key = await get_service_config_value(db, "groq", "api_key")
     groq_model = await get_service_config_value(db, "groq", "model") or "whisper-large-v3-turbo"
     model_size = await get_service_config_value(db, "whisper", "model") or "base"
@@ -417,11 +418,12 @@ async def transcribe_chunk(
     # Read audio bytes
     audio_bytes = await file.read()
 
-    # Transcribe (Groq if key available → no RAM usage; else local faster-whisper)
+    # Transcribe: OpenAI whisper-1 ($0.006/min) → Groq (free) → local faster-whisper
     from app.services.whisper_service import transcribe_audio
     result = await transcribe_audio(
         audio_bytes,
         model_size=model_size,
+        openai_api_key=openai_key,
         groq_api_key=groq_api_key,
     )
 
@@ -585,14 +587,16 @@ async def transcribe_complete(
             logger.warning(f"Deepgram failed, falling back: {result['error']}")
             result = None
 
-    # ── 2. Groq Whisper (fallback: fast, no diarization) ────────────────────
+    # ── 2. OpenAI / Groq Whisper (fallback: fast, no diarization) ──────────
     if not result:
+        openai_key = await get_service_config_value(db, "openai", "api_key")
         groq_api_key = await get_service_config_value(db, "groq", "api_key")
         model_size = await get_service_config_value(db, "whisper", "model") or "base"
         from app.services.whisper_service import transcribe_audio
         whisper_result = await transcribe_audio(
             audio_bytes,
             model_size=model_size,
+            openai_api_key=openai_key,
             groq_api_key=groq_api_key,
         )
         if not whisper_result.get("error") and whisper_result.get("text"):
@@ -1081,3 +1085,39 @@ async def team_meetings(
         results.append(d)
 
     return results
+
+
+# ─── Convert transcription to task ───────────────────────────────────────────
+
+
+@router.post("/transcriptions/{chunk_id}/to-task")
+async def transcription_to_task(
+    chunk_id: int,
+    payload: dict,
+    db: DB,
+    current_user: CurrentUser,
+):
+    """
+    Convierte una transcripción de voz en una tarea/acción asignable.
+    payload: { title, assigned_to_id (opcional), project_id (opcional), due_date (opcional), priority }
+    """
+    # Buscar el chunk
+    chunk = await db.get(TranscriptChunk, chunk_id)
+    if not chunk:
+        raise HTTPException(status_code=404, detail="Transcripción no encontrada")
+
+    title = payload.get("title") or chunk.text[:100]
+
+    # Crear como acción/tarea — guardar en una tabla genérica o retornar para el frontend
+    return {
+        "ok": True,
+        "task": {
+            "title": title,
+            "source_transcript": chunk.text,
+            "assigned_to_id": payload.get("assigned_to_id"),
+            "project_id": payload.get("project_id"),
+            "due_date": payload.get("due_date"),
+            "priority": payload.get("priority", "media"),
+            "created_by_id": current_user.id,
+        }
+    }
