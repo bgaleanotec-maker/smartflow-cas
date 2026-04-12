@@ -3,201 +3,299 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Manual de Usuario - SmartFlow CAS BO</title>
+<title>Manual de Usuario — SmartFlow CAS BO v2.0</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Segoe UI', system-ui, sans-serif; color: #1e293b; line-height: 1.7; background: #fff; }
-  .container { max-width: 900px; margin: 0 auto; padding: 40px 30px; }
-  h1 { font-size: 32px; color: #4f46e5; margin-bottom: 8px; }
-  h2 { font-size: 22px; color: #1e293b; margin: 40px 0 12px; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0; }
-  h3 { font-size: 16px; color: #4f46e5; margin: 24px 0 8px; }
-  p { margin-bottom: 12px; font-size: 14px; }
-  .subtitle { color: #64748b; font-size: 14px; margin-bottom: 4px; }
-  .author { color: #4f46e5; font-weight: 600; font-size: 15px; margin-bottom: 30px; display: block; }
-  .badge { display: inline-block; background: #4f46e5; color: white; padding: 3px 10px; border-radius: 12px; font-size: 11px; margin-right: 6px; }
-  .module { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 16px 0; }
-  .module-title { font-size: 16px; font-weight: 700; color: #1e293b; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
-  .module-icon { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; font-weight: bold; }
-  .url { font-family: monospace; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; font-size: 13px; color: #4f46e5; }
-  ul { padding-left: 20px; margin-bottom: 12px; }
-  li { font-size: 14px; margin-bottom: 4px; }
-  .table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
-  .table th { background: #4f46e5; color: white; padding: 10px 14px; text-align: left; }
-  .table td { padding: 8px 14px; border-bottom: 1px solid #e2e8f0; }
-  .table tr:nth-child(even) { background: #f8fafc; }
-  .tip { background: #eff6ff; border-left: 4px solid #3b82f6; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 13px; }
-  .warning { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 13px; }
-  .footer { margin-top: 60px; padding-top: 20px; border-top: 2px solid #e2e8f0; text-align: center; color: #94a3b8; font-size: 12px; }
-  @media print { .container { padding: 20px; } h1 { font-size: 28px; } h2 { page-break-before: auto; } .module { page-break-inside: avoid; } }
-  .logo { width: 48px; height: 48px; background: #4f46e5; border-radius: 14px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 20px; margin-bottom: 16px; }
-  .version { background: #f1f5f9; padding: 12px 20px; border-radius: 8px; margin: 20px 0; font-size: 13px; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Segoe UI',system-ui,sans-serif;color:#1e293b;line-height:1.7;background:#fff}
+  .container{max-width:960px;margin:0 auto;padding:48px 32px}
+  h1{font-size:34px;color:#4f46e5;margin-bottom:4px}
+  h2{font-size:20px;color:#1e293b;margin:44px 0 14px;padding-bottom:10px;border-bottom:2.5px solid #e2e8f0;display:flex;align-items:center;gap:8px}
+  h3{font-size:15px;color:#4f46e5;margin:22px 0 8px;font-weight:700}
+  h4{font-size:13px;color:#334155;margin:14px 0 6px;font-weight:600}
+  p{margin-bottom:10px;font-size:14px;color:#334155}
+  .subtitle{color:#64748b;font-size:14px;margin-bottom:4px}
+  .author{color:#4f46e5;font-weight:600;font-size:15px;margin-bottom:28px;display:block}
+  .badge{display:inline-block;background:#4f46e5;color:#fff;padding:3px 10px;border-radius:12px;font-size:11px;margin-right:5px;margin-bottom:4px}
+  .module{background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:22px;margin:18px 0}
+  .module-title{font-size:16px;font-weight:700;color:#1e293b;margin-bottom:10px;display:flex;align-items:center;gap:10px}
+  .icon-box{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;font-weight:800;flex-shrink:0}
+  .url{font-family:monospace;background:#f1f5f9;padding:2px 8px;border-radius:5px;font-size:13px;color:#4f46e5}
+  ul{padding-left:22px;margin-bottom:12px}
+  ol{padding-left:22px;margin-bottom:12px}
+  li{font-size:14px;margin-bottom:5px;color:#334155}
+  .table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13px;border-radius:8px;overflow:hidden}
+  .table th{background:#4f46e5;color:#fff;padding:10px 14px;text-align:left;font-weight:600}
+  .table td{padding:9px 14px;border-bottom:1px solid #e2e8f0;vertical-align:top}
+  .table tr:nth-child(even) td{background:#f8fafc}
+  .tip{background:#eff6ff;border-left:4px solid #3b82f6;padding:13px 16px;border-radius:0 10px 10px 0;margin:16px 0;font-size:13px}
+  .warning{background:#fef3c7;border-left:4px solid #f59e0b;padding:13px 16px;border-radius:0 10px 10px 0;margin:16px 0;font-size:13px}
+  .success{background:#f0fdf4;border-left:4px solid #16a34a;padding:13px 16px;border-radius:0 10px 10px 0;margin:16px 0;font-size:13px}
+  .footer{margin-top:64px;padding-top:20px;border-top:2px solid #e2e8f0;text-align:center;color:#94a3b8;font-size:12px}
+  @media print{.container{padding:20px}h1{font-size:28px}h2{page-break-before:auto}.module{page-break-inside:avoid}}
+  .logo{width:52px;height:52px;background:#4f46e5;border-radius:16px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:22px;margin-bottom:18px}
+  .version{background:#f1f5f9;padding:14px 20px;border-radius:10px;margin:20px 0;font-size:13px;display:flex;flex-wrap:wrap;gap:16px}
+  .toc{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;margin:24px 0}
+  .toc h3{color:#1e293b;margin-top:0;margin-bottom:12px;font-size:15px}
+  .toc a{color:#4f46e5;text-decoration:none;font-size:13px}
+  .toc a:hover{text-decoration:underline}
+  .toc ol{list-style:decimal}
+  .toc li{margin-bottom:4px}
+  .step{display:flex;gap:14px;margin-bottom:14px;align-items:flex-start}
+  .step-num{width:28px;height:28px;background:#4f46e5;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;margin-top:1px}
+  .step-body{flex:1}
+  .kbd{background:#e2e8f0;border:1px solid #cbd5e1;border-radius:4px;padding:1px 7px;font-family:monospace;font-size:12px;color:#1e293b}
+  .role-chip{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;margin-right:4px}
+  .role-admin{background:#fef3c7;color:#92400e}
+  .role-leader{background:#eff6ff;color:#1d4ed8}
+  .role-member{background:#f0fdf4;color:#166534}
+  .separator{height:1px;background:#e2e8f0;margin:32px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0}
+  @media(max-width:600px){.grid2{grid-template-columns:1fr}}
+  .feature-box{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;font-size:13px}
+  .feature-box h4{color:#4f46e5;margin-top:0;font-size:13px}
 </style>
 </head>
 <body>
 <div class="container">
   <div class="logo">SF</div>
   <h1>SmartFlow CAS BO</h1>
-  <p class="subtitle">Manual de Usuario - Sistema Integrado de Gestion</p>
-  <span class="author">Elaborado por: Brayan Galeano Tobon | Jefe Sr CAS BO & Lean Expert</span>
-
+  <p class="subtitle">Manual de Usuario — Sistema Integrado de Gestion con IA</p>
+  <span class="author">Elaborado por: Brayan Galeano Tobon · Jefe Sr CAS BO &amp; Lean Expert</span>
   <div class="version">
-    <strong>Version:</strong> 2.0 | <strong>Fecha:</strong> Abril 2026 | <strong>URL:</strong> <span class="url">https://smartflow-casbo.onrender.com</span>
+    <span><strong>Version:</strong> 2.0</span>
+    <span><strong>Fecha:</strong> Abril 2026</span>
+    <span><strong>URL:</strong> <span class="url">https://smartflow-casbo.onrender.com</span></span>
+    <span><strong>API:</strong> <span class="url">https://smartflow-api-0ric.onrender.com</span></span>
   </div>
 
-  <h2>1. Introduccion</h2>
-  <p>SmartFlow es el sistema integrado de gestion para CAS BO (Centro de Atencion y Servicios - Back Office). Centraliza la gestion de demandas TI, proyectos, incidentes, actividades recurrentes, premisas de negocio y la metodologia Lean/Agil en una sola plataforma.</p>
+  <div class="toc">
+    <h3>Contenido</h3>
+    <ol>
+      <li><a href="#intro">Introduccion y acceso</a></li>
+      <li><a href="#roles">Roles y permisos</a></li>
+      <li><a href="#dashboard">Dashboard y metricas</a></li>
+      <li><a href="#aria">ARIA — Asistente de IA por voz</a></li>
+      <li><a href="#voice-notes">Notas de Voz como Tareas</a></li>
+      <li><a href="#meetings">Reuniones con IA</a></li>
+      <li><a href="#torre">Torre de Control (actividades recurrentes)</a></li>
+      <li><a href="#demandas">Gestion de Demandas TI</a></li>
+      <li><a href="#proyectos">Proyectos</a></li>
+      <li><a href="#incidentes">Incidentes</a></li>
+      <li><a href="#bp">Plan de Negocio (BP)</a></li>
+      <li><a href="#lean">Lean Pro</a></li>
+      <li><a href="#mobile">Version Movil (PWA)</a></li>
+      <li><a href="#ia">Costos y limites de IA</a></li>
+      <li><a href="#admin">Administracion del sistema</a></li>
+      <li><a href="#tips">Tips de productividad</a></li>
+    </ol>
+  </div>
 
-  <h2>2. Acceso al Sistema</h2>
-  <p>Ingresa a <span class="url">https://smartflow-casbo.onrender.com</span> y usa las credenciales proporcionadas por el administrador.</p>
-  <div class="tip">El primer inicio de sesion requiere cambio de contrasena obligatorio por seguridad.</div>
+  <h2 id="intro">1. Introduccion y Acceso</h2>
+  <p>SmartFlow es el sistema central de gestion del equipo CAS BO. Integra demandas TI, proyectos, incidentes, actividades recurrentes, reuniones con transcripcion automatica, notas de voz y un asistente de IA (ARIA) en una sola plataforma.</p>
+  <div class="module">
+    <div class="module-title"><div class="icon-box" style="background:#4f46e5">🔐</div> Como ingresar</div>
+    <div class="step"><div class="step-num">1</div><div class="step-body">Ir a <span class="url">https://smartflow-casbo.onrender.com</span></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-body">Ingresar correo y contrasena (tu cuenta es creada por el administrador)</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-body">Al ingresar por primera vez se pedira cambiar la contrasena</div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-body">Seras redirigido al Dashboard principal</div></div>
+    <div class="warning"><strong>Importante:</strong> Las cuentas no se auto-registran. Pide al administrador que cree tu usuario con el rol correcto.</div>
+  </div>
 
-  <h3>Roles del Sistema</h3>
+  <h2 id="roles">2. Roles y Permisos</h2>
   <table class="table">
-    <tr><th>Rol</th><th>Descripcion</th><th>Acceso</th></tr>
-    <tr><td><span class="badge">Admin</span></td><td>Administrador del sistema</td><td>Acceso total, configuracion, catalogos, usuarios</td></tr>
-    <tr><td><span class="badge">Leader</span></td><td>Lider de equipo / Coordinador</td><td>Gestion de proyectos, equipos, dashboards gerenciales</td></tr>
-    <tr><td><span class="badge">Herramientas</span></td><td>Gestion de herramientas TI</td><td>Demandas, radicados, torre de control</td></tr>
-    <tr><td><span class="badge">Negocio</span></td><td>Usuario de area de negocio</td><td>Crear demandas, ver estado, hechos relevantes</td></tr>
-    <tr><td><span class="badge">Member</span></td><td>Miembro del equipo</td><td>Tareas, proyectos, pomodoro, standup diario</td></tr>
+    <tr><th>Rol</th><th>Acceso</th><th>Capacidades clave</th></tr>
+    <tr><td><span class="role-chip role-admin">admin</span></td><td>Todo el sistema</td><td>Crear usuarios, configurar servicios de IA, ver todos los datos</td></tr>
+    <tr><td><span class="role-chip role-leader">leader</span></td><td>Gestion completa</td><td>Crear/cerrar demandas, ver dashboard ejecutivo, asignar tareas, gestionar BP</td></tr>
+    <tr><td><span class="role-chip role-member">member</span></td><td>Operativo</td><td>Crear incidentes, actualizar tareas propias, participar en reuniones, notas de voz</td></tr>
+    <tr><td><span class="role-chip" style="background:#f3e8ff;color:#7e22ce">directivo</span></td><td>Vista ejecutiva</td><td>Dashboard ejecutivo, KPIs globales, solo lectura</td></tr>
+    <tr><td><span class="role-chip" style="background:#fce7f3;color:#9d174d">herramientas</span></td><td>Herramientas</td><td>Similar a leader en modulos operativos</td></tr>
   </table>
 
-  <h2>3. Modulos del Sistema</h2>
-
-  <div class="module">
-    <div class="module-title"><div class="module-icon" style="background:#6366f1">D</div> Dashboard Principal</div>
-    <p><span class="url">/dashboard</span></p>
-    <p>Vista general con KPIs: tareas asignadas, proyectos activos, incidentes abiertos, sesiones pomodoro. Muestra un resumen rapido del estado de gestion.</p>
+  <h2 id="dashboard">3. Dashboard y Metricas</h2>
+  <p>El dashboard centraliza los KPIs mas importantes del equipo en tiempo real.</p>
+  <div class="grid2">
+    <div class="feature-box"><h4>Metricas visibles</h4><ul><li>Demandas abiertas / en proceso / cerradas</li><li>Incidentes activos por severidad</li><li>Proyectos en curso</li><li>Actividades vencidas (Torre de Control)</li><li>Cumplimiento % de actividades recurrentes</li></ul></div>
+    <div class="feature-box"><h4>Accesos rapidos</h4><ul><li>Ultima reunion con resumen de IA</li><li>Notas de voz pendientes</li><li>Pomodoro (sesion de trabajo)</li><li>ARIA chat (boton central en movil)</li></ul></div>
   </div>
 
+  <h2 id="aria">4. ARIA — Asistente de IA por Voz</h2>
+  <p>ARIA es tu asistente inteligente. Responde preguntas sobre el sistema, redacta textos y maneja comandos de voz.</p>
   <div class="module">
-    <div class="module-title"><div class="module-icon" style="background:#8b5cf6">TC</div> Torre de Control</div>
-    <p><span class="url">/torre-control</span></p>
-    <p>Centro de gestion de actividades recurrentes. Permite crear actividades con frecuencia diaria, semanal, mensual, etc. Muestra:</p>
+    <div class="module-title"><div class="icon-box" style="background:#7c3aed">🤖</div> Como activar ARIA</div>
     <ul>
-      <li><strong>KPIs:</strong> Pendientes, Vencidas, Completadas, % Cumplimiento</li>
-      <li><strong>Alertas rojas:</strong> Actividades vencidas con accion directa</li>
-      <li><strong>Alertas naranja:</strong> Proximas a vencer esta semana</li>
-      <li><strong>Filtro por equipo:</strong> CAS / BO / Todos</li>
-      <li><strong>IA:</strong> Recomendaciones de priorizacion</li>
+      <li><strong>Escritorio:</strong> clic en el boton del microfono en la barra superior o en el menu lateral</li>
+      <li><strong>Movil:</strong> boton ARIA naranja en la barra de navegacion inferior</li>
     </ul>
-  </div>
-
-  <div class="module">
-    <div class="module-title"><div class="module-icon" style="background:#f59e0b">LP</div> Lean Pro</div>
-    <p><span class="url">/lean-pro</span></p>
-    <p>Modulo de gestion agil basado en principios Lean, Scrum y gerenciamiento diario:</p>
+    <h4>Comandos de voz utiles:</h4>
     <ul>
-      <li><strong>Standup Diario:</strong> Cada miembro reporta que hizo, que hara y bloqueantes. Incluye mood y nivel de energia del equipo.</li>
-      <li><strong>Kaizen Board:</strong> Tablero de mejora continua. Cualquiera puede proponer mejoras clasificadas por impacto/esfuerzo.</li>
-      <li><strong>Retrospectivas:</strong> Que salio bien, que mejorar, acciones concretas y kudos.</li>
-      <li><strong>Velocity:</strong> Tracking de puntos completados por sprint.</li>
+      <li>"ARIA, cuantas demandas tenemos abiertas?"</li>
+      <li>"ARIA, que incidentes hay activos esta semana?"</li>
+      <li>"ARIA, redacta un resumen del proyecto X"</li>
+      <li>"ARIA, cuales actividades estan vencidas hoy?"</li>
     </ul>
-    <div class="tip">El boton "Mi Standup" parpadea si aun no has registrado tu gerenciamiento diario.</div>
+    <div class="tip"><strong>Motor de IA:</strong> Gemini 2.0-flash. Costo estimado: $0.001 por consulta.</div>
   </div>
 
+  <h2 id="voice-notes">5. Notas de Voz como Tareas</h2>
+  <p>Graba instrucciones o ideas. El sistema transcribe con OpenAI Whisper y convierte la nota en una tarea asignable a tu equipo.</p>
   <div class="module">
-    <div class="module-title"><div class="module-icon" style="background:#10b981">CI</div> Centro de Informacion</div>
-    <p><span class="url">/centro-info</span></p>
-    <p>Dashboard interactivo configurable. Los coordinadores crean widgets personalizados:</p>
-    <ul>
-      <li><strong>KPI:</strong> Numero grande con etiqueta</li>
-      <li><strong>Graficos:</strong> Barras, torta, lineas</li>
-      <li><strong>Texto:</strong> Informacion libre</li>
-      <li><strong>Progreso:</strong> Barra de avance</li>
-    </ul>
-    <p>Fuentes de datos: Actividades, Demandas, Incidentes, Proyectos o datos personalizados.</p>
+    <div class="module-title"><div class="icon-box" style="background:#0891b2">🎙️</div> Flujo: de voz a tarea en 4 pasos</div>
+    <div class="step"><div class="step-num">1</div><div class="step-body"><strong>Grabar:</strong> Notas de Voz en el menu → "Nueva nota" → presionar microfono</div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-body"><strong>Transcripcion automatica:</strong> OpenAI Whisper transcribe el audio en segundos</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-body"><strong>Ajustar:</strong> editar titulo y texto si es necesario</div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-body"><strong>Asignar:</strong> seleccionar a quien, prioridad y fecha limite</div></div>
   </div>
-
-  <div class="module">
-    <div class="module-title"><div class="module-icon" style="background:#3b82f6">GD</div> Gestion de Demanda</div>
-    <p><span class="url">/demands</span></p>
-    <p>Formulario wizard de 9 pasos para registrar demandas TI. Incluye:</p>
-    <ul>
-      <li>Vicepresidencia solicitante, enfoque, situacion actual</li>
-      <li>Impacto en pilares estrategicos, procesos, usuarios</li>
-      <li>Riesgo operacional, SOX, regulatorio</li>
-      <li>Beneficio economico (ahorro/ingreso)</li>
-      <li>Requerimientos funcionales detallados</li>
-      <li>Timeline, notas de reunion, estados</li>
-    </ul>
-    <p><strong>Dashboard de Demandas</strong> (<span class="url">/demands/dashboard</span>): KPIs gerenciales, embudo de estados, impacto economico, alertas de retraso.</p>
-  </div>
-
-  <div class="module">
-    <div class="module-title"><div class="module-icon" style="background:#22c55e">HR</div> Hechos Relevantes</div>
-    <p><span class="url">/hechos</span></p>
-    <p>Registro semanal de hitos comerciales importantes. Categorias: comercial, operativo, estrategico, regulatorio. Niveles de impacto: alto, medio, bajo.</p>
-  </div>
-
-  <div class="module">
-    <div class="module-title"><div class="module-icon" style="background:#eab308">P</div> Premisas del Negocio</div>
-    <p><span class="url">/premisas</span></p>
-    <p>Seguimiento de premisas presupuestarias. Compara monto estimado vs real con varianza automatica. Categorias: presupuesto, ingresos, costos, mercado, regulatorio.</p>
-  </div>
-
-  <div class="module">
-    <div class="module-title"><div class="module-icon" style="background:#6366f1">P</div> Proyectos</div>
-    <p><span class="url">/projects</span></p>
-    <p>Gestion de proyectos con epicos, sprints, tareas, kanban board. Asignacion de equipos y seguimiento de progreso.</p>
-  </div>
-
-  <div class="module">
-    <div class="module-title"><div class="module-icon" style="background:#ef4444">I</div> Incidentes</div>
-    <p><span class="url">/incidents</span></p>
-    <p>Gestion de incidentes con severidad (critico/alto/medio/bajo), impacto economico, causa raiz, timeline. Posibilidad de escalar a Demanda TI.</p>
-  </div>
-
-  <div class="module">
-    <div class="module-title"><div class="module-icon" style="background:#f97316">T</div> Pomodoro</div>
-    <p><span class="url">/pomodoro</span></p>
-    <p>Timer Pomodoro integrado con tareas. Sesiones de 25 min de trabajo + descansos. Registra tiempo automaticamente en las tareas asociadas.</p>
-  </div>
-
-  <h2>4. Administracion</h2>
-  <p><span class="url">/admin</span> - Solo accesible para rol Admin.</p>
-  <ul>
-    <li><strong>Catalogos de Demanda:</strong> Vicepresidencias, enfoques, pilares, procesos, riesgos</li>
-    <li><strong>Form Builder:</strong> Campos personalizados para formularios</li>
-    <li><strong>Integraciones:</strong> API keys de Resend, SendGrid, Ultra MSG, Gemini IA, Lite</li>
-    <li><strong>Usuarios:</strong> Crear, editar, desactivar usuarios con roles y equipos</li>
-    <li><strong>Negocios:</strong> Gestionar unidades de negocio</li>
-  </ul>
-
-  <h2>5. Asistente IA</h2>
-  <p>SmartFlow integra inteligencia artificial (Google Gemini) para:</p>
-  <ul>
-    <li>Recomendaciones de priorizacion de demandas</li>
-    <li>Analisis de premisas presupuestarias</li>
-    <li>Insights sobre hechos relevantes</li>
-    <li>Asesoria en la torre de control</li>
-  </ul>
-  <div class="tip">Configura la API Key de Gemini en Administracion > Integraciones para activar la IA.</div>
-
-  <h2>6. Equipos</h2>
   <table class="table">
-    <tr><th>Equipo</th><th>Descripcion</th></tr>
-    <tr><td><strong>CAS</strong></td><td>Centro de Atencion y Servicios - Soporte al cliente</td></tr>
-    <tr><td><strong>BO</strong></td><td>Back Office - Operaciones internas</td></tr>
+    <tr><th>Vista</th><th>Que muestra</th></tr>
+    <tr><td>Mis tareas</td><td>Notas asignadas a ti</td></tr>
+    <tr><td>Deleguee</td><td>Notas que creaste y asignaste a otros</td></tr>
+    <tr><td>Todas</td><td>Vista global (utiles para lideres)</td></tr>
   </table>
-  <p>Cada modulo permite filtrar por equipo para ver informacion segmentada o de todos.</p>
+  <div class="tip"><strong>Truco de lider:</strong> Grava la instruccion completa, asignala en 10 segundos. El equipo recibe la tarea con el texto exacto de lo que dijiste.</div>
 
-  <h2>7. Flujo de Trabajo Recomendado</h2>
-  <ol style="padding-left: 20px; margin-bottom: 12px;">
-    <li>Iniciar el dia con <strong>Standup Diario</strong> en Lean Pro</li>
-    <li>Revisar la <strong>Torre de Control</strong> para actividades vencidas/proximas</li>
-    <li>Consultar el <strong>Centro de Informacion</strong> para KPIs transversales</li>
-    <li>Gestionar <strong>Demandas</strong> e <strong>Incidentes</strong> segun prioridad</li>
-    <li>Usar <strong>Pomodoro</strong> para sesiones de trabajo enfocado</li>
-    <li>Registrar <strong>Hechos Relevantes</strong> de la semana</li>
-    <li>Al cierre de sprint: <strong>Retrospectiva</strong> en Lean Pro</li>
-  </ol>
+  <h2 id="meetings">6. Reuniones con IA</h2>
+  <p>SmartFlow graba, transcribe y analiza tus reuniones automaticamente.</p>
+  <div class="module">
+    <div class="module-title"><div class="icon-box" style="background:#059669">🎤</div> Como iniciar una reunion</div>
+    <div class="step"><div class="step-num">1</div><div class="step-body">Reuniones en el menu → "Nueva reunion"</div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-body">Elegir tipo: Personal, Equipo, Cliente, o Mixta</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-body">Presionar "Iniciar grabacion" — microfono activo con cancelacion de ruido</div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-body">Hablar normalmente. Transcripciones en tiempo real</div></div>
+    <div class="step"><div class="step-num">5</div><div class="step-body">Al terminar: "Finalizar" — Gemini genera resumen, acciones, decisiones y temas clave</div></div>
+  </div>
+  <table class="table">
+    <tr><th>Campo IA</th><th>Descripcion</th></tr>
+    <tr><td>Resumen ejecutivo</td><td>Parrafo con lo mas importante de la reunion</td></tr>
+    <tr><td>Acciones acordadas</td><td>Lista de compromisos con responsables y fechas</td></tr>
+    <tr><td>Decisiones tomadas</td><td>Puntos de decision que no deben olvidarse</td></tr>
+    <tr><td>Temas clave</td><td>Tags tematicos para busqueda posterior</td></tr>
+    <tr><td>Transcripcion completa</td><td>Texto por turnos con timestamps</td></tr>
+  </table>
 
-  <div class="warning"><strong>Nota:</strong> El servidor free de Render se duerme tras 15 min de inactividad. La primera carga puede tardar ~50 segundos. Esto es normal.</div>
+  <h2 id="torre">7. Torre de Control — Actividades Recurrentes</h2>
+  <p>Gestiona actividades que se repiten en el tiempo con seguimiento automatico de cumplimiento.</p>
+  <div class="module">
+    <div class="module-title"><div class="icon-box" style="background:#dc2626">✈️</div> Logica de la Torre de Control</div>
+    <p>Cada actividad aparece <strong>una sola vez</strong>. El sistema calcula automaticamente el estado segun la frecuencia configurada.</p>
+    <p><strong>Frecuencias:</strong> Diaria / Semanal / Quincenal / Mensual / Bimestral / Trimestral / Semestral / Anual</p>
+  </div>
+  <table class="table">
+    <tr><th>Estado</th><th>Significado</th></tr>
+    <tr><td>Vencida (rojo)</td><td>El periodo paso sin completar</td></tr>
+    <tr><td>Proxima a vencer (ambar)</td><td>Vence en las proximas 24h</td></tr>
+    <tr><td>En proceso (azul)</td><td>Marcada como iniciada pero no terminada</td></tr>
+    <tr><td>Completada (verde)</td><td>El periodo actual esta completo</td></tr>
+    <tr><td>Sin iniciar (gris)</td><td>Todavia hay tiempo para empezar</td></tr>
+  </table>
+  <h3>Recordatorios y escalacion</h3>
+  <ul>
+    <li><strong>Canal:</strong> Sistema, Email, WhatsApp, o Todos</li>
+    <li><strong>Cuando avisar:</strong> X minutos/horas/dias antes del vencimiento</li>
+    <li><strong>Escalacion:</strong> Si no se completa en X horas, notificar a otro usuario</li>
+  </ul>
 
+  <h2 id="demandas">8. Gestion de Demandas TI</h2>
+  <table class="table">
+    <tr><th>Accion</th><th>Como hacerlo</th></tr>
+    <tr><td>Nueva demanda</td><td>Demandas → "Nueva demanda" → formulario con descripcion, urgencia y area</td></tr>
+    <tr><td>Ver mis demandas</td><td>Demandas → filtrar por "Solicitante: Yo"</td></tr>
+    <tr><td>Actualizar estado</td><td>Abrir demanda → cambiar estado</td></tr>
+    <tr><td>Dashboard lider</td><td>Demandas → Dashboard → KPIs por estado, area y responsable</td></tr>
+  </table>
+
+  <h2 id="proyectos">9. Proyectos</h2>
+  <ul>
+    <li>Crear proyecto con nombre, descripcion, fecha inicio/fin y responsable</li>
+    <li>Agregar tareas y asignarlas a miembros del equipo</li>
+    <li>Mover tareas entre columnas: Backlog → En proceso → Revision → Listo</li>
+    <li>Vincular proyectos a demandas TI</li>
+    <li>Ver timeline de actividades del proyecto</li>
+  </ul>
+
+  <h2 id="incidentes">10. Incidentes</h2>
+  <table class="table">
+    <tr><th>Severidad</th><th>Tiempo de respuesta</th></tr>
+    <tr><td>Critico</td><td>Inmediato — afecta la operacion</td></tr>
+    <tr><td>Alto</td><td>Menos de 4 horas</td></tr>
+    <tr><td>Medio</td><td>Mismo dia</td></tr>
+    <tr><td>Bajo</td><td>Proxima jornada</td></tr>
+  </table>
+
+  <h2 id="bp">11. Plan de Negocio (BP)</h2>
+  <ul>
+    <li>Registrar iniciativas vinculadas a objetivos del plan</li>
+    <li>Asociar grabaciones de voz y notas a actividades BP</li>
+    <li>Ver el avance del plan por objetivo y periodo</li>
+    <li>Exportar resumen ejecutivo para presentaciones</li>
+  </ul>
+
+  <h2 id="lean">12. Lean Pro</h2>
+  <ul>
+    <li><strong>Hechos Relevantes:</strong> registro de eventos significativos del equipo</li>
+    <li><strong>Premisas:</strong> supuestos y condiciones del negocio</li>
+    <li><strong>Centro de Informacion:</strong> repositorio de documentos y recursos</li>
+    <li><strong>Pomodoro:</strong> tecnica de gestion del tiempo (25 min trabajo / 5 min descanso)</li>
+  </ul>
+
+  <h2 id="mobile">13. Version Movil (PWA)</h2>
+  <div class="module">
+    <div class="module-title"><div class="icon-box" style="background:#0ea5e9">📱</div> Instalar en el celular</div>
+    <div class="step"><div class="step-num">1</div><div class="step-body">Abrir Chrome y navegar a <span class="url">https://smartflow-casbo.onrender.com</span></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-body">Tocar los 3 puntos → "Agregar a pantalla de inicio"</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-body">Confirmar → SmartFlow aparecera como app en tu pantalla</div></div>
+  </div>
+  <ul>
+    <li>Inicio rapido con accesos directos a incidentes, notas de voz, reunion, demandas</li>
+    <li>Recordatorios personales con prioridad</li>
+    <li>Chat rapido con ARIA</li>
+    <li>Grabacion de voz optimizada para celular</li>
+  </ul>
+  <div class="tip"><strong>URL movil directa:</strong> <span class="url">https://smartflow-casbo.onrender.com/mobile</span></div>
+
+  <h2 id="ia">14. Servicios de IA y Costos</h2>
+  <table class="table">
+    <tr><th>Servicio</th><th>Uso</th><th>Costo</th><th>Limite mensual</th></tr>
+    <tr><td>OpenAI Whisper</td><td>Transcripcion de reuniones y notas de voz</td><td>$0.006/min</td><td>$25 USD (~100k COP)</td></tr>
+    <tr><td>Gemini 2.0-flash</td><td>Analisis de reuniones, ARIA chat</td><td>~$0.001/consulta</td><td>Sin limite fijo</td></tr>
+    <tr><td>ElevenLabs</td><td>Voz de ARIA (respuestas habladas)</td><td>Plan contratado</td><td>Segun plan</td></tr>
+  </table>
+  <div class="success"><strong>Estimado normal:</strong> 20 reuniones × 45 min + uso de ARIA = aprox <strong>$6-8 USD/mes</strong>. Muy por debajo del limite de $25.</div>
+  <div class="warning"><strong>Si el balance OpenAI se acaba:</strong> cae automaticamente a Groq (gratis, 28,800s/dia) y luego a transcripcion local. El servicio no se interrumpe.</div>
+
+  <h2 id="admin">15. Administracion del Sistema</h2>
+  <p>Solo para roles <span class="role-chip role-admin">admin</span> y <span class="role-chip role-leader">leader</span>.</p>
+  <h3>Gestion de usuarios</h3>
+  <ul>
+    <li>Admin → Usuarios → "Nuevo usuario"</li>
+    <li>Nombre completo, email, rol, contrasena temporal</li>
+    <li>El usuario cambia la contrasena en el primer login</li>
+  </ul>
+  <h3>Configuracion de IA</h3>
+  <ul>
+    <li>Las API keys se guardan cifradas en la base de datos</li>
+    <li>Al iniciar el servidor se auto-cargan desde variables de entorno</li>
+    <li>Para cambiar una key: actualizar en Render dashboard → redeploy</li>
+  </ul>
+
+  <h2 id="tips">16. Tips de Productividad</h2>
+  <div class="grid2">
+    <div class="feature-box"><h4>Notas de voz al instante</h4><p>En el celular, cuando tenes una idea: SmartFlow → "Nueva nota" → graba → asignala. En menos de 30 segundos la tarea esta creada y asignada.</p></div>
+    <div class="feature-box"><h4>Torre de Control en la manana</h4><p>Empieza el dia revisando la Torre. Las actividades vencidas (rojo) son tu primera prioridad. Marca las completadas para mantener el streak.</p></div>
+    <div class="feature-box"><h4>Preguntale a ARIA</h4><p>En lugar de buscar en listas: "ARIA, que esta pendiente hoy?" es mas rapido que navegar a cada modulo.</p></div>
+    <div class="feature-box"><h4>Graba toda reunion importante</h4><p>La transcripcion de IA captura detalles que se pierden. El resumen de Gemini te dara las acciones sin necesidad de escribir.</p></div>
+    <div class="feature-box"><h4>Instala la app</h4><p>Como PWA en el celular, SmartFlow carga mas rapido y funciona casi como app nativa.</p></div>
+    <div class="feature-box"><h4>Pomodoro para concentracion</h4><p>25 minutos de foco + 5 de descanso = maxima productividad para tareas que requieren atencion profunda.</p></div>
+  </div>
+
+  <div class="separator"></div>
+  <div class="tip">
+    <strong>Soporte:</strong> Brayan Galeano Tobon · <span class="url">bgaleanotec@gmail.com</span><br>
+    Issues: <span class="url">https://github.com/bgaleanotec-maker/smartflow-cas</span>
+  </div>
   <div class="footer">
-    <p><strong>SmartFlow CAS BO v2.0</strong></p>
-    <p>Elaborado por Brayan Galeano Tobon | Jefe Sr CAS BO & Lean Expert</p>
-    <p>Abril 2026 | Todos los derechos reservados</p>
+    SmartFlow CAS BO v2.0 · FastAPI + React + PostgreSQL + IA<br>
+    © 2026 Brayan Galeano Tobon · Todos los derechos reservados<br>
+    Imprimible con Ctrl+P o guardar como PDF desde el navegador.
   </div>
 </div>
 </body>

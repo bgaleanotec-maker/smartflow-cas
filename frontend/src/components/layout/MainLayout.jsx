@@ -6,7 +6,7 @@ import {
   Users, Settings, LogOut, ChevronLeft, ChevronRight,
   Bell, Search, Menu, X, FileText, BarChart3, Newspaper, Landmark,
   Plane, LayoutGrid, Zap, TrendingUp, Crown, Mic2, MoreHorizontal,
-  Mic, Home, MessageSquareMore,
+  Mic, Home, MessageSquareMore, Volume2,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { usePomodoroStore } from '../../stores/pomodoroStore'
@@ -29,6 +29,7 @@ const navItems = [
   { to: '/incidents', icon: AlertTriangle, label: 'Incidentes' },
   { to: '/pomodoro', icon: Timer, label: 'Pomodoro' },
   { to: '/meetings', icon: Mic2, label: 'Reuniones' },
+  { to: '/voice-notes', icon: Volume2, label: 'Notas de Voz' },
 ]
 
 const adminItems = [

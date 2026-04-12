@@ -1087,6 +1087,43 @@ async def team_meetings(
     return results
 
 
+# ─── Quick transcription (no meeting required — for voice notes) ─────────────
+
+@router.post("/transcribe-quick")
+async def transcribe_quick(
+    file: UploadFile = File(...),
+    language: str = "es",
+    db: DB = None,
+    current_user: CurrentUser = None,
+):
+    """
+    Transcribe an audio blob without creating a meeting.
+    Used by voice notes quick-record flow.
+    Returns { text, language, duration, source }
+    """
+    audio_bytes = await file.read()
+    if len(audio_bytes) < 500:
+        return {"text": "", "language": language, "duration": 0.0, "source": "empty"}
+
+    openai_key = await get_service_config_value(db, "openai", "api_key")
+    groq_key   = await get_service_config_value(db, "groq",   "api_key")
+
+    from app.services.whisper_service import transcribe_audio
+    result = await transcribe_audio(
+        audio_bytes,
+        language=language,
+        openai_api_key=openai_key,
+        groq_api_key=groq_key,
+    )
+    return {
+        "text":     result.get("text", ""),
+        "language": result.get("language", language),
+        "duration": result.get("duration", 0.0),
+        "source":   result.get("source", "unknown"),
+        "error":    result.get("error"),
+    }
+
+
 # ─── Convert transcription to task ───────────────────────────────────────────
 
 
