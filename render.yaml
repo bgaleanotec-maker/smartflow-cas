@@ -12,9 +12,6 @@ services:
         fromDatabase:
           name: smartflow-db
           property: connectionString
-      # IMPORTANTE: genera un valor una vez y NO lo cambies — cambiar SECRET_KEY
-      # invalida todos los tokens activos (todos los usuarios quedan deslogueados).
-      # Genera con: python -c "import secrets; print(secrets.token_urlsafe(32))"
       - key: SECRET_KEY
         generateValue: true
       - key: ENVIRONMENT
@@ -23,16 +20,19 @@ services:
         value: "false"
       - key: FRONTEND_URL
         value: https://smartflow-casbo.onrender.com
-      # ── IA / Voice keys — obtener gratis ──────────────────────────────────
-      # GEMINI: https://ai.google.dev → "Get API key" (free tier, requerido para ARIA)
+      # ── Gemini — IA para análisis de reuniones y ARIA chat ─────────────────
       - key: GEMINI_API_KEY
-        sync: false    # set manually in Render dashboard → Environment
-      # GROQ:  https://console.groq.com → API Keys (free 28,800s/día de Whisper)
+        value: AIzaSyCPuXZzCgiwOL8uESF-MPyRPQB2WyxbU58
       - key: GROQ_API_KEY
-        sync: false    # set manually in Render dashboard → Environment
-      # ELEVENLABS: ya configurado — mover aquí si quieres centralizar
-      # - key: ELEVENLABS_API_KEY
-      #   sync: false
+        sync: false   # optional fallback Whisper — set in Render dashboard if needed
+      # ── Deepgram — transcripción con diarización (identificación de hablantes)
+      - key: DEEPGRAM_API_KEY
+        value: 40204577f80c7e940347048f6252b8c6d7af3ab7
+      # ── ElevenLabs — TTS para voz de ARIA ─────────────────────────────────
+      - key: ELEVENLABS_API_KEY
+        value: sk_aa36d75923b50befd36af6e05463c64b80de246963fac35b
+      - key: ELEVENLABS_VOICE_ID
+        value: UgBBYS2sOqTuMpoF3BR0
 
   # ─── FRONTEND ─────────────────────────────────────────────────────────────
   - type: web
@@ -42,12 +42,9 @@ services:
     staticPublishPath: ./frontend/dist
     plan: free
     envVars:
-      # URL absoluta del backend — debe coincidir con el nombre del servicio backend
-      # arriba (smartflow-api → https://smartflow-api-0ric.onrender.com)
       - key: VITE_API_URL
         value: https://smartflow-api-0ric.onrender.com/api/v1
     routes:
-      # Fallback rewrite para requests /api/* (también sirve si VITE_API_URL no está seteado)
       - type: rewrite
         source: /api/*
         destination: https://smartflow-api-0ric.onrender.com/api/*

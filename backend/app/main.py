@@ -212,6 +212,58 @@ async def seed_defaults():
 
         await db.commit()
 
+    # Auto-seed service configs from env vars (only if not already in DB)
+    # This ensures Gemini/Deepgram/ElevenLabs work on first deploy without manual admin setup
+    await _seed_service_configs()
+
+
+async def _seed_service_configs():
+    """On startup, if API keys are in environment but NOT in service_configs DB, insert them.
+    This runs on every start but only inserts if missing — never overwrites existing DB values."""
+    import os
+    import logging
+    from sqlalchemy import select
+    from app.core.database import AsyncSessionLocal
+    from app.models.service_config import ServiceConfig
+
+    _log = logging.getLogger(__name__)
+
+    # Map: (service_name, key_name) -> env var name
+    env_map = [
+        ("gemini",     "api_key",  "GEMINI_API_KEY"),
+        ("gemini",     "model",    None),          # default is set in code
+        ("deepgram",   "api_key",  "DEEPGRAM_API_KEY"),
+        ("deepgram",   "model",    None),          # default nova-3 in code
+        ("elevenlabs", "api_key",  "ELEVENLABS_API_KEY"),
+        ("elevenlabs", "voice_id", "ELEVENLABS_VOICE_ID"),
+        ("groq",       "api_key",  "GROQ_API_KEY"),
+    ]
+
+    async with AsyncSessionLocal() as db:
+        for service, key_name, env_var in env_map:
+            if not env_var:
+                continue
+            env_val = os.getenv(env_var)
+            if not env_val:
+                continue
+            # Check if already in DB
+            result = await db.execute(
+                select(ServiceConfig).where(
+                    ServiceConfig.service_name == service,
+                    ServiceConfig.key_name == key_name,
+                )
+            )
+            existing = result.scalar_one_or_none()
+            if existing is None:
+                db.add(ServiceConfig(
+                    service_name=service,
+                    key_name=key_name,
+                    key_value=env_val,
+                    is_active=True,
+                ))
+                _log.info(f"Auto-seeded service config: {service}.{key_name} from {env_var}")
+        await db.commit()
+
 
 app = FastAPI(
     title=settings.APP_NAME,
