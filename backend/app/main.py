@@ -52,7 +52,15 @@ async def _run_column_migrations():
             ("bp_activities", "reminder_sent_at", "DATETIME"),
             ("bp_activities", "tags", "JSON"),
             ("bp_activities", "grupo", "VARCHAR(100)"),
-            # reminders table is auto-created; no extra columns needed
+            # recurring_activities new notification/escalation columns (2026-04-12)
+            ("recurring_activities", "notify_before_value", "INTEGER DEFAULT 1"),
+            ("recurring_activities", "notify_before_unit", "VARCHAR(10) DEFAULT 'dias'"),
+            ("recurring_activities", "notify_channel", "VARCHAR(20) DEFAULT 'sistema'"),
+            ("recurring_activities", "escalate_to_id", "INTEGER REFERENCES users(id)"),
+            ("recurring_activities", "escalate_after_hours", "INTEGER DEFAULT 24"),
+            # activity_instances escalation tracking columns (2026-04-12)
+            ("activity_instances", "escalation_sent_at", "DATETIME"),
+            ("activity_instances", "reminder_sent_at", "DATETIME"),
         ]
         async with AsyncSessionLocal() as db:
             for table, column, col_def in migrations:
@@ -92,6 +100,15 @@ async def _run_column_migrations():
             "ALTER TABLE bp_excel_analyses ADD COLUMN IF NOT EXISTS file_type VARCHAR(20)",
             "ALTER TABLE bp_excel_analyses ADD COLUMN IF NOT EXISTS structured_extraction JSON",
             "ALTER TABLE bp_excel_analyses ADD COLUMN IF NOT EXISTS applied_at TIMESTAMP WITH TIME ZONE",
+            # recurring_activities notification/escalation columns
+            "ALTER TABLE recurring_activities ADD COLUMN IF NOT EXISTS notify_before_value INTEGER DEFAULT 1",
+            "ALTER TABLE recurring_activities ADD COLUMN IF NOT EXISTS notify_before_unit VARCHAR(10) DEFAULT 'dias'",
+            "ALTER TABLE recurring_activities ADD COLUMN IF NOT EXISTS notify_channel VARCHAR(20) DEFAULT 'sistema'",
+            "ALTER TABLE recurring_activities ADD COLUMN IF NOT EXISTS escalate_to_id INTEGER REFERENCES users(id)",
+            "ALTER TABLE recurring_activities ADD COLUMN IF NOT EXISTS escalate_after_hours INTEGER DEFAULT 24",
+            # activity_instances tracking
+            "ALTER TABLE activity_instances ADD COLUMN IF NOT EXISTS escalation_sent_at TIMESTAMP WITH TIME ZONE",
+            "ALTER TABLE activity_instances ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMP WITH TIME ZONE",
         ]
         async with AsyncSessionLocal() as db:
             for stmt in pg_migrations:

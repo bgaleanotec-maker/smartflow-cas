@@ -53,7 +53,16 @@ class RecurringActivity(Base):
     due_time: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)  # HH:MM
     day_of_week: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 0=lun, 6=dom (para semanal)
     day_of_month: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 1-31 (para mensual)
-    reminder_days_before: Mapped[int] = mapped_column(Integer, default=1)  # dias antes para recordatorio
+
+    # Reminder / notification config
+    notify_before_value: Mapped[int] = mapped_column(Integer, default=1)       # número: 1, 2, 30...
+    notify_before_unit: Mapped[str] = mapped_column(String(10), default="dias") # minutos / horas / dias
+    notify_channel: Mapped[str] = mapped_column(String(20), default="sistema")  # sistema / email / whatsapp / todos
+    reminder_days_before: Mapped[int] = mapped_column(Integer, default=1)       # legacy alias kept for compat
+
+    # Escalation: si no se completa, escalar a este usuario después de X horas
+    escalate_to_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    escalate_after_hours: Mapped[int] = mapped_column(Integer, default=24)
 
     # Assignment
     assigned_to_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
@@ -70,6 +79,7 @@ class RecurringActivity(Base):
     # Relationships
     assigned_to: Mapped[Optional["User"]] = relationship("User", foreign_keys=[assigned_to_id], lazy="select")
     created_by: Mapped["User"] = relationship("User", foreign_keys=[created_by_id], lazy="select")
+    escalate_to: Mapped[Optional["User"]] = relationship("User", foreign_keys=[escalate_to_id], lazy="select")
     business: Mapped[Optional["Business"]] = relationship("Business", lazy="select")
     instances: Mapped[List["ActivityInstance"]] = relationship(back_populates="activity", order_by="ActivityInstance.due_date.desc()", lazy="select")
 
@@ -93,6 +103,8 @@ class ActivityInstance(Base):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     evidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON attachments
     assigned_to_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    escalation_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    reminder_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

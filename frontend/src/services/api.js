@@ -165,9 +165,14 @@ export const activitiesAPI = {
   create: (data) => api.post('/activities', data),
   update: (id, data) => api.patch(`/activities/${id}`, data),
   delete: (id) => api.delete(`/activities/${id}`),
+  // New compliance endpoints
+  complete: (id, data) => api.post(`/activities/${id}/complete`, data || {}),
+  start: (id) => api.post(`/activities/${id}/start`),
+  log: (id, limit) => api.get(`/activities/${id}/log`, { params: { limit } }),
+  torreControl: (params) => api.get('/activities/torre-control', { params }),
+  // Legacy compat
   instances: (params) => api.get('/activities/instances', { params }),
   updateInstance: (id, data) => api.patch(`/activities/instances/${id}`, data),
-  torreControl: (params) => api.get('/activities/torre-control', { params }),
 }
 
 // ─── Lean Pro ────────────────────────────────────────────────────────────
