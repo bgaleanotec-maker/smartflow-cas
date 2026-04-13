@@ -85,13 +85,21 @@ function CreateIncidentModal({ onClose }) {
       ...data,
       has_economic_impact: data.has_economic_impact === 'true' || data.has_economic_impact === true,
       affected_users_count: parseInt(data.affected_users_count) || 0,
+      category_id: data.category_id ? parseInt(data.category_id) : null,
+      business_id: data.business_id ? parseInt(data.business_id) : null,
     }),
     onSuccess: () => {
       qc.invalidateQueries(['incidents'])
       toast.success('Incidente creado')
       onClose()
     },
-    onError: (err) => toast.error(err.response?.data?.detail || 'Error al crear incidente'),
+    onError: (err) => {
+      const detail = err.response?.data?.detail
+      const msg = Array.isArray(detail)
+        ? detail.map(d => d.msg).join(', ')
+        : (typeof detail === 'string' ? detail : 'Error al crear incidente')
+      toast.error(msg)
+    },
   })
 
   return (
