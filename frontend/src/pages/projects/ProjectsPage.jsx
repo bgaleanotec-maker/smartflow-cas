@@ -84,7 +84,10 @@ function CreateProjectModal({ onClose }) {
   const { register, handleSubmit, formState: { isSubmitting } } = useForm()
 
   const mutation = useMutation({
-    mutationFn: (data) => projectsAPI.create(data),
+    mutationFn: (data) => projectsAPI.create({
+      ...data,
+      leader_id: data.leader_id ? parseInt(data.leader_id) : null,
+    }),
     onSuccess: () => {
       qc.invalidateQueries(['projects'])
       toast.success('Proyecto creado')
