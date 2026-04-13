@@ -1,7 +1,7 @@
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
-from app.core.deps import DB, AdminUser
+from app.core.deps import DB, AdminUser, CurrentUser
 from app.models.demand_catalog import DemandCatalog
 from app.models.demand_custom_field import DemandCustomField
 from app.schemas.demand import (
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/admin/demand", tags=["Admin - Gestion Demanda"])
 # ─── Catalogs ────────────────────────────────────────────────────────────────
 
 @router.get("/catalogs", response_model=List[DemandCatalogResponse])
-async def list_catalogs(db: DB, admin: AdminUser, catalog_type: Optional[str] = None):
+async def list_catalogs(db: DB, current_user: CurrentUser, catalog_type: Optional[str] = None):
     query = select(DemandCatalog).order_by(DemandCatalog.catalog_type, DemandCatalog.order_index)
     if catalog_type:
         query = query.where(DemandCatalog.catalog_type == catalog_type)
@@ -68,7 +68,7 @@ async def delete_catalog(cat_id: int, db: DB, admin: AdminUser):
 # ─── Custom Fields ───────────────────────────────────────────────────────────
 
 @router.get("/custom-fields", response_model=List[DemandCustomFieldResponse])
-async def list_custom_fields(db: DB, admin: AdminUser):
+async def list_custom_fields(db: DB, current_user: CurrentUser):
     result = await db.execute(
         select(DemandCustomField).order_by(DemandCustomField.section, DemandCustomField.order_index)
     )
