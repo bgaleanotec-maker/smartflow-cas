@@ -1,14 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import {
   FolderKanban, AlertTriangle, CheckSquare, Timer,
-  TrendingUp, Users, Clock, Flame
+  TrendingUp, Users, Clock, Flame, BookOpen
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts'
 import { useAuthStore } from '../../stores/authStore'
-import { tasksAPI, incidentsAPI, adminAPI, pomodoroAPI } from '../../services/api'
+import { tasksAPI, incidentsAPI, adminAPI, pomodoroAPI, dashboardAPI } from '../../services/api'
 import { usePomodoroStore } from '../../stores/pomodoroStore'
 import clsx from 'clsx'
 
@@ -78,6 +78,14 @@ export default function DashboardPage() {
     enabled: isAdmin,
   })
 
+  const { data: attentionItems } = useQuery({
+    queryKey: ['dashboard-attention'],
+    queryFn: () => dashboardAPI.attention().then(r => r.data),
+    staleTime: 60_000,
+  })
+
+  const allAttentionStories = attentionItems?.flatMap(g => g.stories) ?? []
+
   const severityColors = {
     critico: '#ef4444',
     alto: '#f97316',
@@ -136,6 +144,57 @@ export default function DashboardPage() {
           />
         )}
       </div>
+
+      {/* Attention section */}
+      {allAttentionStories.length > 0 && (
+        <div className="card border border-amber-800/40 bg-amber-950/10">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold text-white flex items-center gap-2">
+              <span>⚠️</span> Requieren atención
+            </h2>
+            <Link to="/epics" className="text-xs text-brand-400 hover:underline">Ver todas →</Link>
+          </div>
+          <div className="space-y-2">
+            {allAttentionStories.slice(0, 5).map(s => (
+              <div key={s.id} className="flex items-start gap-3 p-2.5 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+                    {s.is_blocking && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-900/60 text-red-300 border border-red-700/40">🚫 Bloqueante</span>
+                    )}
+                    {s.epic_title && (
+                      <span className="text-[10px] text-slate-500 flex items-center gap-0.5">
+                        <BookOpen size={9} /> {s.epic_title}
+                      </span>
+                    )}
+                    {s.due_date && (
+                      <span className="text-[10px] text-amber-400">📅 {s.due_date}</span>
+                    )}
+                  </div>
+                  <p className="text-sm text-slate-200 truncate">{s.title}</p>
+                  {s.last_update && (
+                    <p className="text-xs text-slate-500 truncate italic mt-0.5">{s.last_update}</p>
+                  )}
+                </div>
+                {s.assigned_to && (
+                  <span className="text-xs text-slate-400 flex-shrink-0 whitespace-nowrap">{s.assigned_to.split(' ')[0]}</span>
+                )}
+                <Link
+                  to={`/epics${s.project_id ? `?project_id=${s.project_id}` : ''}`}
+                  className="flex-shrink-0 text-xs text-brand-400 hover:underline whitespace-nowrap"
+                >
+                  Ver →
+                </Link>
+              </div>
+            ))}
+          </div>
+          {allAttentionStories.length > 5 && (
+            <Link to="/epics" className="block text-center text-xs text-brand-400 hover:underline mt-3">
+              + {allAttentionStories.length - 5} más — Ver todas
+            </Link>
+          )}
+        </div>
+      )}
 
       {/* Main content */}
       <div className="grid lg:grid-cols-3 gap-6">

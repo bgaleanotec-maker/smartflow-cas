@@ -6,7 +6,7 @@ import {
   Users, Settings, LogOut, ChevronLeft, ChevronRight,
   Bell, Search, Menu, X, FileText, BarChart3, Newspaper, Landmark,
   Plane, LayoutGrid, Zap, TrendingUp, Crown, Mic2, MoreHorizontal,
-  Mic, Home, MessageSquareMore, Volume2,
+  Mic, Home, MessageSquareMore, Volume2, BookOpen,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { usePomodoroStore } from '../../stores/pomodoroStore'
@@ -25,6 +25,7 @@ const navItems = [
   { to: '/hechos', icon: Newspaper, label: 'Hechos Relevantes' },
   { to: '/premisas', icon: Landmark, label: 'Premisas' },
   { to: '/bp', icon: TrendingUp, label: 'Plan de Negocio', cas: true },
+  { to: '/epics', icon: BookOpen, label: 'Épicas' },
   { to: '/projects', icon: FolderKanban, label: 'Proyectos' },
   { to: '/incidents', icon: AlertTriangle, label: 'Incidentes' },
   { to: '/pomodoro', icon: Timer, label: 'Pomodoro' },

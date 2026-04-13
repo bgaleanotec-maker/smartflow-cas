@@ -343,6 +343,28 @@ export const ariaAPI = {
   history: (bpId) => api.get(`/bp/${bpId}/aria/history`),
 }
 
+// ─── Épicas e Historias ───────────────────────────────────────────────────────
+export const epicsAPI = {
+  list: (params) => api.get('/epics', { params }),
+  create: (data) => api.post('/epics', data),
+  get: (id) => api.get(`/epics/${id}`),
+  update: (id, data) => api.patch(`/epics/${id}`, data),
+  delete: (id) => api.delete(`/epics/${id}`),
+  createStory: (epicId, data) => api.post(`/epics/${epicId}/stories`, data),
+}
+
+export const storiesAPI = {
+  list: (params) => api.get('/stories', { params }),
+  update: (id, data) => api.patch(`/stories/${id}`, data),
+  delete: (id) => api.delete(`/stories/${id}`),
+  addUpdate: (id, data) => api.post(`/stories/${id}/updates`, data),
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+export const dashboardAPI = {
+  attention: () => api.get('/dashboard/attention'),
+}
+
 // ─── Voice Notes ──────────────────────────────────────────────────────────────
 export const voiceNotesAPI = {
   list: (params = {}) => api.get('/voice-notes', { params }),

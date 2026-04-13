@@ -26,6 +26,7 @@ import ExecutiveDashboard from './pages/executive/ExecutiveDashboard'
 import MeetingsPage from './pages/voice/MeetingsPage'
 import MobileHomePage from './pages/mobile/MobileHomePage'
 import VoiceNotesPage from './pages/voice-notes/VoiceNotesPage'
+import EpicsPage from './pages/epics/EpicsPage'
 
 function ProtectedRoute({ children, requireAdmin = false, requireLeader = false, requireDirectivo = false }) {
   const { isAuthenticated, user } = useAuthStore()
@@ -87,6 +88,7 @@ export default function App() {
           <Route path="bp/:bpId" element={<BPDetailPage />} />
           <Route path="meetings" element={<MeetingsPage />} />
           <Route path="voice-notes" element={<VoiceNotesPage />} />
+          <Route path="epics" element={<EpicsPage />} />
           <Route path="mobile" element={<MobileHomePage />} />
           <Route
             path="executive"
