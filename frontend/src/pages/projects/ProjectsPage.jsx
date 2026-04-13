@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, FolderKanban, Calendar, Users, ChevronRight } from 'lucide-react'
+import { Plus, Search, FolderKanban, Calendar, Users, ChevronRight, X } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import { projectsAPI, usersAPI } from '../../services/api'
@@ -76,41 +76,74 @@ function ProjectCard({ project, onClick }) {
 
 function CreateProjectModal({ onClose }) {
   const qc = useQueryClient()
+  const [selectedMembers, setSelectedMembers] = useState([])
+
   const { data: users } = useQuery({
     queryKey: ['users-list'],
     queryFn: () => usersAPI.list({ is_active: true, limit: 100 }).then(r => r.data),
   })
 
-  const { register, handleSubmit, formState: { isSubmitting } } = useForm()
+  const { register, handleSubmit, formState: { isSubmitting } } = useForm({
+    defaultValues: { color: '#6366f1' },
+  })
 
   const mutation = useMutation({
-    mutationFn: (data) => projectsAPI.create({
-      ...data,
-      leader_id: data.leader_id ? parseInt(data.leader_id) : null,
-    }),
+    mutationFn: (data) => {
+      // Clean payload: convert empty strings to null, parse ints
+      const payload = {
+        name: data.name,
+        description: data.description || null,
+        start_date: data.start_date || null,
+        due_date: data.due_date || null,
+        leader_id: data.leader_id ? parseInt(data.leader_id) : null,
+        color: data.color || '#6366f1',
+        member_ids: selectedMembers,
+      }
+      return projectsAPI.create(payload)
+    },
     onSuccess: () => {
       qc.invalidateQueries(['projects'])
       toast.success('Proyecto creado')
       onClose()
     },
-    onError: (err) => toast.error(err.response?.data?.detail || 'Error al crear proyecto'),
+    onError: (err) => {
+      const detail = err.response?.data?.detail
+      const msg = Array.isArray(detail)
+        ? detail.map(d => d.msg).join(', ')
+        : detail || 'Error al crear proyecto'
+      toast.error(msg)
+    },
   })
+
+  const toggleMember = (uid) => {
+    setSelectedMembers(prev =>
+      prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
+    )
+  }
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 sticky top-0 bg-slate-900 z-10">
           <h2 className="font-semibold text-white">Nuevo proyecto</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-200">✕</button>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
         </div>
         <form onSubmit={handleSubmit(d => mutation.mutate(d))} className="p-6 space-y-4">
           <div>
             <label className="label">Nombre del proyecto *</label>
-            <input {...register('name', { required: true })} className="input" placeholder="Ej: Automatización de Liquidaciones" />
+            <input
+              {...register('name', { required: true })}
+              className="input"
+              placeholder="Ej: Automatización de Liquidaciones"
+            />
           </div>
           <div>
             <label className="label">Descripción</label>
-            <textarea {...register('description')} className="input h-20 resize-none" placeholder="Descripción del proyecto..." />
+            <textarea
+              {...register('description')}
+              className="input h-20 resize-none"
+              placeholder="Descripción del proyecto..."
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -131,13 +164,54 @@ function CreateProjectModal({ onClose }) {
               ))}
             </select>
           </div>
+
+          {/* Participantes */}
           <div>
-            <label className="label">Color</label>
-            <input {...register('color')} type="color" defaultValue="#6366f1" className="h-10 w-full rounded-lg bg-slate-800 border border-slate-700 cursor-pointer" />
+            <label className="label">Participantes del equipo</label>
+            <p className="text-xs text-slate-500 mb-2">Selecciona quiénes forman parte del proyecto (recibirán notificaciones)</p>
+            <div className="max-h-40 overflow-y-auto border border-slate-700 rounded-lg divide-y divide-slate-800">
+              {users?.map(u => {
+                const selected = selectedMembers.includes(u.id)
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => toggleMember(u.id)}
+                    className={clsx(
+                      'w-full flex items-center gap-3 px-3 py-2 text-left transition-colors',
+                      selected ? 'bg-brand-900/40' : 'hover:bg-slate-800'
+                    )}
+                  >
+                    <div className={clsx(
+                      'w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0',
+                      selected ? 'bg-brand-600 border-brand-600' : 'border-slate-600'
+                    )}>
+                      {selected && <span className="text-white text-[10px] font-bold">✓</span>}
+                    </div>
+                    <span className="text-sm text-slate-300">{u.full_name}</span>
+                    <span className="text-xs text-slate-500 ml-auto">{u.role}</span>
+                  </button>
+                )
+              })}
+            </div>
+            {selectedMembers.length > 0 && (
+              <p className="text-xs text-brand-400 mt-1">{selectedMembers.length} participante(s) seleccionado(s)</p>
+            )}
+          </div>
+
+          <div>
+            <label className="label">Color del proyecto</label>
+            <input
+              {...register('color')}
+              type="color"
+              className="h-10 w-full rounded-lg bg-slate-800 border border-slate-700 cursor-pointer"
+            />
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancelar</button>
-            <button type="submit" disabled={isSubmitting} className="btn-primary flex-1">Crear proyecto</button>
+            <button type="submit" disabled={isSubmitting} className="btn-primary flex-1">
+              {isSubmitting ? 'Creando...' : 'Crear proyecto'}
+            </button>
           </div>
         </form>
       </div>
