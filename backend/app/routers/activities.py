@@ -492,6 +492,7 @@ async def torre_control(db: DB, user: CurrentUser, scope: Optional[str] = None, 
     """
     query = select(RecurringActivity).options(
         selectinload(RecurringActivity.assigned_to),
+        selectinload(RecurringActivity.created_by),
         selectinload(RecurringActivity.escalate_to),
         selectinload(RecurringActivity.instances).selectinload(ActivityInstance.completed_by),
     ).where(RecurringActivity.is_active == True)
@@ -515,6 +516,15 @@ async def torre_control(db: DB, user: CurrentUser, scope: Optional[str] = None, 
     total = 0
     completed_total = 0
 
+    # Map singular status (from compute_activity_status) to plural group keys
+    STATUS_TO_GROUP = {
+        "vencida": "vencidas",
+        "proxima_a_vencer": "proximas_a_vencer",
+        "en_proceso": "en_proceso",
+        "sin_iniciar": "sin_iniciar",
+        "completada": "completadas",
+    }
+
     for a in activities:
         current_due = compute_current_due_date(a)
         current_inst = None
@@ -529,7 +539,8 @@ async def torre_control(db: DB, user: CurrentUser, scope: Optional[str] = None, 
         total += 1
         if status == "completada":
             completed_total += 1
-        groups.get(status, groups["sin_iniciar"]).append(data)
+        group_key = STATUS_TO_GROUP.get(status, "sin_iniciar")
+        groups[group_key].append(data)
 
     # Sort vencidas by days_overdue desc
     groups["vencidas"].sort(key=lambda x: x["days_overdue"], reverse=True)
