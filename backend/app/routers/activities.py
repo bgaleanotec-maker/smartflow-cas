@@ -37,7 +37,7 @@ def compute_current_due_date(a: RecurringActivity) -> Optional[date]:
     if a.end_date and today > a.end_date:
         return None  # expired
 
-    if a.frequency == ActivityFrequency.UNICA:
+    if a.frequency in (ActivityFrequency.UNICA, 'unica', 'inbox', 'once'):
         return a.start_date
 
     elif a.frequency == ActivityFrequency.DIARIA:
@@ -147,6 +147,12 @@ def compute_activity_status(a: RecurringActivity, current_instance: Optional[Act
 
     if current_instance and current_instance.status == ActivityStatus.EN_PROCESO:
         return "en_proceso"
+
+    # For single-occurrence activities (unica/inbox/once)
+    if a.frequency in (ActivityFrequency.UNICA, 'unica', 'inbox', 'once'):
+        if current_due < today:
+            return "vencida"
+        return "sin_iniciar"
 
     # Check if overdue
     due_datetime = datetime.combine(current_due, datetime.min.time()).replace(tzinfo=timezone.utc)

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -15,8 +15,33 @@ const schema = z.object({
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
+  const [installPrompt, setInstallPrompt] = useState(null)
+  const [isInstallable, setIsInstallable] = useState(false)
   const navigate = useNavigate()
   const { login } = useAuthStore()
+
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault()
+      setInstallPrompt(e)
+      setIsInstallable(true)
+    }
+    window.addEventListener('beforeinstallprompt', handler)
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstallable(false)
+    }
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
+
+  const handleInstall = async () => {
+    if (!installPrompt) return
+    installPrompt.prompt()
+    const { outcome } = await installPrompt.userChoice
+    if (outcome === 'accepted') {
+      setIsInstallable(false)
+      toast.success('¡App instalada! Búscala en tu pantalla de inicio.')
+    }
+  }
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
     resolver: zodResolver(schema),
@@ -110,6 +135,26 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+        </div>
+
+        {/* PWA Install Banner */}
+        {isInstallable && (
+          <div className="mt-4 bg-brand-900/30 border border-brand-700/50 rounded-xl p-4 text-center">
+            <p className="text-sm text-brand-300 font-medium mb-2">📱 Instalar SmartFlow como app</p>
+            <p className="text-xs text-slate-400 mb-3">Acceso rápido desde tu pantalla de inicio</p>
+            <button
+              onClick={handleInstall}
+              className="w-full bg-brand-600 hover:bg-brand-500 text-white py-2.5 px-4 rounded-lg text-sm font-semibold transition-colors"
+            >
+              ⬇️ Instalar app móvil
+            </button>
+          </div>
+        )}
+
+        {/* Siempre visible: link de instrucciones */}
+        <div className="mt-4 bg-slate-800/50 rounded-xl p-3 text-center">
+          <p className="text-xs text-slate-400 mb-1.5">📱 <strong className="text-slate-300">¿Quieres la app en tu celular?</strong></p>
+          <p className="text-xs text-slate-500">Chrome → menú (⋮) → "Agregar a pantalla de inicio"</p>
         </div>
 
         <div className="text-center mt-6 space-y-2">

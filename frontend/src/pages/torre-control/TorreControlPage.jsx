@@ -18,7 +18,7 @@ import {
   Plane, Shield, TrendingUp, Flame, BarChart3,
   Bell, Mail, MessageCircle, ArrowUpRight, Users,
   Calendar, Repeat, CheckCheck, Play, History,
-  Edit3, Trash2, TriangleAlert,
+  Edit3, Trash2, TriangleAlert, Timer,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { activitiesAPI, usersAPI } from '../../services/api'
@@ -156,6 +156,13 @@ function ActivityCard({ activity, onComplete, onStart, onViewLog, onEdit, onDele
               </button>
             </>
           )}
+          <button
+            onClick={() => window.location.href = `/pomodoro?activity_id=${activity.id}&activity_name=${encodeURIComponent(activity.title)}`}
+            title="Iniciar Pomodoro para esta actividad"
+            className="p-1.5 rounded-lg text-slate-500 hover:text-orange-400 hover:bg-orange-900/20 transition-colors"
+          >
+            <Timer size={14} />
+          </button>
           <button
             onClick={() => onViewLog(activity)}
             className="p-1.5 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-slate-700 transition-colors"
@@ -322,6 +329,7 @@ const EMPTY_FORM = {
   due_time: '', day_of_week: 1, day_of_month: 1,
   notify_before_value: 1, notify_before_unit: 'dias', notify_channel: 'sistema',
   escalate_to_id: '', escalate_after_hours: 24,
+  assigned_to_id: '',
   color: '#6366f1',
 }
 
@@ -453,6 +461,16 @@ function ActivityForm({ initial, onSave, onClose, isSaving, users }) {
             </div>
           </div>
 
+          {/* Responsable */}
+          <div className="bg-slate-800/50 rounded-xl p-4 space-y-3 border border-slate-700/50">
+            <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide flex items-center gap-2">👤 Responsable</p>
+            <select className="input w-full" value={form.assigned_to_id} onChange={e => set('assigned_to_id', e.target.value || '')}>
+              <option value="">Sin asignar (yo mismo)</option>
+              {users?.map(u => <option key={u.id} value={u.id}>{u.full_name} ({u.role})</option>)}
+            </select>
+            <p className="text-xs text-slate-500">Si no asignas a nadie, la actividad queda bajo tu cargo.</p>
+          </div>
+
           {/* Color */}
           <div className="flex items-center gap-3">
             <label className="label text-xs">Color identificador:</label>
@@ -518,8 +536,14 @@ export default function TorreControlPage() {
     queryFn: () => usersAPI.list({}).then(r => r.data?.items || r.data || []),
   })
 
+  const castIds = (data) => ({
+    ...data,
+    escalate_to_id: data.escalate_to_id ? parseInt(data.escalate_to_id) : null,
+    assigned_to_id: data.assigned_to_id ? parseInt(data.assigned_to_id) : null,
+  })
+
   const createMut = useMutation({
-    mutationFn: (data) => activitiesAPI.create(data),
+    mutationFn: (data) => activitiesAPI.create(castIds(data)),
     onSuccess: () => {
       qc.invalidateQueries(['torre-control'])
       setShowForm(false)
@@ -529,7 +553,7 @@ export default function TorreControlPage() {
   })
 
   const updateMut = useMutation({
-    mutationFn: ({ id, data }) => activitiesAPI.update(id, data),
+    mutationFn: ({ id, data }) => activitiesAPI.update(id, castIds(data)),
     onSuccess: () => {
       qc.invalidateQueries(['torre-control'])
       setEditActivity(null)

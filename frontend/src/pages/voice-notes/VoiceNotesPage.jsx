@@ -62,7 +62,7 @@ function useVoiceRecorder(onResult) {
 }
 
 // ─── NoteCard ─────────────────────────────────────────────────────────────────
-function NoteCard({ note, users, onDone, onDelete, onEdit, isMe }) {
+function NoteCard({ note, users, onDone, onDelete, onEdit, onToActivity, isMe }) {
   const [expanded, setExpanded] = useState(false)
   const assignee = users.find(u => u.id === note.assigned_to_id)
 
@@ -123,6 +123,10 @@ function NoteCard({ note, users, onDone, onDelete, onEdit, isMe }) {
               <Edit3 size={16}/>
             </button>
           )}
+          <button onClick={() => onToActivity(note)} title="Crear como actividad"
+            className="p-1.5 rounded-lg text-slate-500 hover:text-purple-400 hover:bg-purple-900/20 transition-colors">
+            <Zap size={16}/>
+          </button>
           <button onClick={() => onDelete(note.id)} title="Eliminar"
             className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-900/20 transition-colors">
             <Trash2 size={16}/>
@@ -407,6 +411,30 @@ export default function VoiceNotesPage() {
     load()
   }
 
+  const handleToActivity = async (note) => {
+    try {
+      await api.post('/activities', {
+        title: note.title || note.transcript.substring(0, 100),
+        description: note.transcript,
+        frequency: 'unica',
+        category: 'gestion',
+        priority: note.priority || 'media',
+        scope: 'TODOS',
+        start_date: new Date().toISOString().split('T')[0],
+        assigned_to_id: note.assigned_to_id || null,
+        notify_channel: 'sistema',
+        notify_before_value: 1,
+        notify_before_unit: 'dias',
+        escalate_after_hours: 24,
+      })
+      toast.success('Nota convertida en actividad ✓')
+      await voiceNotesAPI.update(note.id, { status: 'completada', is_done: true })
+      load()
+    } catch (e) {
+      toast.error('Error al crear actividad: ' + (e.response?.data?.detail || e.message))
+    }
+  }
+
   // Filter logic
   const filtered = notes.filter(n => {
     if (filterPriority && n.priority !== filterPriority) return false
@@ -500,6 +528,7 @@ export default function VoiceNotesPage() {
           {filtered.map(note => (
             <NoteCard key={note.id} note={note} users={users}
               onDone={handleDone} onDelete={handleDelete} onEdit={setEditNote}
+              onToActivity={handleToActivity}
               isMe={note.user_id === user?.id}/>
           ))}
         </div>

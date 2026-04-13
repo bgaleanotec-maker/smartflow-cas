@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Play, Pause, Square, SkipForward, Coffee, Brain } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { pomodoroAPI, tasksAPI } from '../../services/api'
+import api from '../../services/api'
 import { usePomodoroStore } from '../../stores/pomodoroStore'
 import clsx from 'clsx'
 
@@ -15,6 +17,9 @@ const SESSION_TYPES = [
 export default function PomodoroPage() {
   const [selectedType, setSelectedType] = useState('trabajo')
   const [selectedTaskId, setSelectedTaskId] = useState(null)
+  const [selectedProjectId, setSelectedProjectId] = useState(null)
+  const [selectedActivityId, setSelectedActivityId] = useState(null)
+  const [searchParams] = useSearchParams()
   const qc = useQueryClient()
 
   const {
@@ -27,6 +32,16 @@ export default function PomodoroPage() {
   const { data: myTasks } = useQuery({
     queryKey: ['my-tasks-pomodoro'],
     queryFn: () => tasksAPI.myTasks({ limit: 30 }).then(r => r.data),
+  })
+
+  const { data: projects } = useQuery({
+    queryKey: ['projects-pomodoro'],
+    queryFn: () => api.get('/projects').then(r => r.data),
+  })
+
+  const { data: myActivities } = useQuery({
+    queryKey: ['activities-pomodoro'],
+    queryFn: () => api.get('/activities').then(r => r.data),
   })
 
   const { data: stats } = useQuery({
@@ -61,10 +76,21 @@ export default function PomodoroPage() {
     },
   })
 
+  useEffect(() => {
+    const activityId = searchParams.get('activity_id')
+    const activityName = searchParams.get('activity_name')
+    if (activityId) {
+      setSelectedActivityId(activityId)
+      toast(`Pomodoro listo para: ${activityName || 'actividad'}`, { icon: '🍅' })
+    }
+  }, [searchParams])
+
   const handleStart = () => {
     const type = SESSION_TYPES.find(t => t.value === selectedType)
     startMutation.mutate({
       task_id: selectedTaskId || null,
+      project_id: selectedProjectId ? parseInt(selectedProjectId) : null,
+      activity_id: selectedActivityId ? parseInt(selectedActivityId) : null,
       duration_minutes: type.duration,
       session_type: selectedType,
     })
@@ -194,18 +220,50 @@ export default function PomodoroPage() {
       {(!isRunning && !isPaused) && (
         <div className="card">
           <h3 className="font-medium text-white mb-3">Trabajar en...</h3>
-          <select
-            value={selectedTaskId || ''}
-            onChange={(e) => setSelectedTaskId(e.target.value ? parseInt(e.target.value) : null)}
-            className="input"
-          >
-            <option value="">Sin tarea específica</option>
-            {myTasks?.map(task => (
-              <option key={task.id} value={task.id}>
-                [{task.task_number}] {task.title}
-              </option>
-            ))}
-          </select>
+          <div className="space-y-3">
+            {/* Selector: Proyecto */}
+            <div>
+              <label className="label text-xs">Proyecto (opcional)</label>
+              <select
+                value={selectedProjectId || ''}
+                onChange={e => { setSelectedProjectId(e.target.value || null); setSelectedTaskId(null); setSelectedActivityId(null); }}
+                className="input w-full text-sm"
+              >
+                <option value="">Sin proyecto específico</option>
+                {projects?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+
+            {/* Selector: Actividad recurrente */}
+            <div>
+              <label className="label text-xs">Actividad recurrente (opcional)</label>
+              <select
+                value={selectedActivityId || ''}
+                onChange={e => { setSelectedActivityId(e.target.value || null); setSelectedProjectId(null); }}
+                className="input w-full text-sm"
+              >
+                <option value="">Sin actividad específica</option>
+                {myActivities?.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
+              </select>
+            </div>
+
+            {/* Selector: Tarea */}
+            <div>
+              <label className="label text-xs">Tarea (opcional)</label>
+              <select
+                value={selectedTaskId || ''}
+                onChange={(e) => setSelectedTaskId(e.target.value ? parseInt(e.target.value) : null)}
+                className="input w-full text-sm"
+              >
+                <option value="">Sin tarea específica</option>
+                {myTasks?.map(task => (
+                  <option key={task.id} value={task.id}>
+                    [{task.task_number}] {task.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
       )}
 
