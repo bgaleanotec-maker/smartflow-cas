@@ -74,7 +74,8 @@ async def delete_epic(epic_id: int, db: DB, current_user: CurrentUser):
 
 @router.post("/{epic_id}/stories", response_model=StoryResponse, status_code=201)
 async def create_story(epic_id: int, payload: StoryCreate, db: DB, current_user: CurrentUser):
-    story = Story(**payload.model_dump(), epic_id=epic_id, created_by_id=current_user.id)
+    # exclude epic_id from dump — it's already provided explicitly to avoid duplicate kwarg
+    story = Story(**payload.model_dump(exclude={'epic_id'}), epic_id=epic_id, created_by_id=current_user.id)
     db.add(story)
     await db.flush()
     result = await db.execute(

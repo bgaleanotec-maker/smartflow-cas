@@ -7,6 +7,7 @@ import {
   MessageSquare, Flag, Layers
 } from 'lucide-react'
 import clsx from 'clsx'
+import toast from 'react-hot-toast'
 import { epicsAPI, storiesAPI, projectsAPI, usersAPI } from '../../services/api'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -82,7 +83,8 @@ function CreateEpicModal({ onClose, projects, users }) {
   })
   const mut = useMutation({
     mutationFn: (data) => epicsAPI.create(data),
-    onSuccess: () => { qc.invalidateQueries(['epics']); onClose() },
+    onSuccess: () => { qc.invalidateQueries(['epics']); toast.success('Épica creada ✓'); onClose() },
+    onError: (e) => toast.error(e.response?.data?.detail || 'Error al crear épica'),
   })
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -168,7 +170,8 @@ function CreateStoryModal({ epic, onClose, users }) {
   })
   const mut = useMutation({
     mutationFn: (data) => epicsAPI.createStory(epic.id, data),
-    onSuccess: () => { qc.invalidateQueries(['epics']); onClose() },
+    onSuccess: () => { qc.invalidateQueries(['epics']); toast.success('Historia creada ✓'); onClose() },
+    onError: (e) => toast.error(e.response?.data?.detail || 'Error al crear historia'),
   })
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -257,7 +260,8 @@ function AddUpdateForm({ storyId, onDone }) {
   const [updateType, setUpdateType] = useState('novedad')
   const mut = useMutation({
     mutationFn: () => storiesAPI.addUpdate(storyId, { content, update_type: updateType }),
-    onSuccess: () => { qc.invalidateQueries(['epics']); setContent(''); onDone?.() },
+    onSuccess: () => { qc.invalidateQueries(['epics']); toast.success('Novedad publicada ✓'); setContent(''); onDone?.() },
+    onError: (e) => toast.error(e.response?.data?.detail || 'Error al publicar novedad'),
   })
 
   return (
@@ -296,6 +300,7 @@ function StoryCard({ story, users }) {
   const completeMut = useMutation({
     mutationFn: () => storiesAPI.update(story.id, { status: story.status === 'completada' ? 'pendiente' : 'completada' }),
     onSuccess: () => qc.invalidateQueries(['epics']),
+    onError: (e) => toast.error(e.response?.data?.detail || 'Error al actualizar historia'),
   })
 
   return (
@@ -435,7 +440,8 @@ function EpicCard({ epic, users }) {
 
   const deleteMut = useMutation({
     mutationFn: () => epicsAPI.delete(epic.id),
-    onSuccess: () => qc.invalidateQueries(['epics']),
+    onSuccess: () => { qc.invalidateQueries(['epics']); toast.success('Épica eliminada'); },
+    onError: (e) => toast.error(e.response?.data?.detail || 'Error al eliminar épica'),
   })
 
   const completedStories = epic.stories?.filter(s => s.status === 'completada').length ?? 0
