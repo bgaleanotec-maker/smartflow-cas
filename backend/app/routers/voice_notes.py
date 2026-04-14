@@ -19,6 +19,7 @@ class VoiceNoteCreate(BaseModel):
     title: Optional[str] = None
     assigned_to_id: Optional[int] = None
     project_id: Optional[int] = None
+    task_id: Optional[int] = None
     due_date: Optional[datetime] = None
     priority: str = "media"
     meeting_id: Optional[int] = None
@@ -31,6 +32,7 @@ class VoiceNoteUpdate(BaseModel):
     status: Optional[str] = None
     assigned_to_id: Optional[int] = None
     project_id: Optional[int] = None
+    task_id: Optional[int] = None
     due_date: Optional[datetime] = None
     priority: Optional[str] = None
     is_done: Optional[bool] = None
@@ -66,6 +68,7 @@ async def create_voice_note(
         title=data.title or data.transcript[:80],
         assigned_to_id=data.assigned_to_id,
         project_id=data.project_id,
+        task_id=data.task_id,
         due_date=data.due_date,
         priority=data.priority,
         meeting_id=data.meeting_id,
@@ -116,11 +119,13 @@ async def delete_voice_note(
 def _note_to_dict(n: VoiceNote) -> dict:
     return {
         "id": n.id,
+        "user_id": n.user_id,
         "transcript": n.transcript,
         "title": n.title,
         "status": n.status,
         "assigned_to_id": n.assigned_to_id,
         "project_id": n.project_id,
+        "task_id": n.task_id,
         "due_date": n.due_date.isoformat() if n.due_date else None,
         "priority": n.priority,
         "meeting_id": n.meeting_id,

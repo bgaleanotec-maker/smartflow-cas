@@ -20,6 +20,7 @@ class VoiceNote(Base):
     # Asignación
     assigned_to_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     project_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    task_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     due_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     priority: Mapped[str] = mapped_column(String(10), default="media")  # baja / media / alta / urgente
 

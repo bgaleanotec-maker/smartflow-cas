@@ -155,6 +155,8 @@ async def _run_column_migrations():
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES users(id)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS contract_start_date DATE",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS contract_renewal_date DATE",
+            # voice_notes table — task association added after initial deploy
+            "ALTER TABLE voice_notes ADD COLUMN IF NOT EXISTS task_id INTEGER",
             # tasks table — PMO/Scrum columns added after initial deploy
             "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS epic_id INTEGER REFERENCES epics(id)",
             "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS sprint_id INTEGER REFERENCES sprints(id)",
