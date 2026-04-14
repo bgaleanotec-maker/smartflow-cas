@@ -85,7 +85,7 @@ export const incidentsAPI = {
   get: (id) => api.get(`/incidents/${id}`),
   update: (id, data) => api.patch(`/incidents/${id}`, data),
   addComment: (id, comment) =>
-    api.post(`/incidents/${id}/comment`, null, { params: { comment } }),
+    api.post(`/incidents/${id}/comment`, { comment }),
 }
 
 // ─── Admin ────────────────────────────────────────────────────────────────

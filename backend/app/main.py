@@ -138,6 +138,10 @@ async def _run_column_migrations():
             "ALTER TABLE recurring_activities ADD COLUMN IF NOT EXISTS notify_channel VARCHAR(20) DEFAULT 'sistema'",
             "ALTER TABLE recurring_activities ADD COLUMN IF NOT EXISTS escalate_to_id INTEGER REFERENCES users(id)",
             "ALTER TABLE recurring_activities ADD COLUMN IF NOT EXISTS escalate_after_hours INTEGER DEFAULT 24",
+            "ALTER TABLE recurring_activities ADD COLUMN IF NOT EXISTS reminder_days_before INTEGER DEFAULT 1",
+            "ALTER TABLE recurring_activities ADD COLUMN IF NOT EXISTS color VARCHAR(7) DEFAULT '#6366f1'",
+            "ALTER TABLE recurring_activities ADD COLUMN IF NOT EXISTS tags TEXT",
+            "ALTER TABLE recurring_activities ADD COLUMN IF NOT EXISTS business_id INTEGER REFERENCES businesses(id)",
             # activity_instances tracking
             "ALTER TABLE activity_instances ADD COLUMN IF NOT EXISTS escalation_sent_at TIMESTAMP WITH TIME ZONE",
             "ALTER TABLE activity_instances ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMP WITH TIME ZONE",
