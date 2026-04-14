@@ -7,7 +7,7 @@ import {
   ArrowLeft, Plus, Settings, Users, Calendar, ChevronDown,
   ChevronRight, X, CheckSquare, Square, AlertTriangle,
   Clock, Zap, Flag, Tag, MoreHorizontal, CheckCheck,
-  Layers, BookOpen, Play, StopCircle, Circle
+  Layers, BookOpen, Play, StopCircle, Circle, Archive, Trash2
 } from 'lucide-react'
 import {
   projectsAPI, tasksAPI, adminAPI,
@@ -675,6 +675,8 @@ export default function ProjectDetailPage() {
   const [createTaskSprintId, setCreateTaskSprintId] = useState(null)
   const [expandedEpics, setExpandedEpics] = useState({})
   const [quickAddSprint, setQuickAddSprint] = useState(null)
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(null) // 'delete' | 'archive' | null
 
   // ── Queries ────────────────────────────────────────────────────────────────
 
@@ -748,6 +750,28 @@ export default function ProjectDetailPage() {
     onError: () => toast.error('Error al completar sprint'),
   })
 
+  const deleteProjectMutation = useMutation({
+    mutationFn: () => projectsAPI.delete(id),
+    onSuccess: () => {
+      toast.success('Proyecto eliminado')
+      navigate('/projects')
+    },
+    onError: () => toast.error('Error al eliminar el proyecto'),
+  })
+
+  const archiveProjectMutation = useMutation({
+    mutationFn: () => projectsAPI.update(id, { status: 'cerrado' }),
+    onSuccess: () => {
+      qc.invalidateQueries(['project', id])
+      toast.success('Proyecto archivado')
+      setShowConfirm(null)
+    },
+    onError: () => toast.error('Error al archivar el proyecto'),
+  })
+
+  // Only THE project's leader (or admin) can delete/archive
+  const canManageProject = project && (user?.role === 'admin' || user?.id === project?.leader_id)
+
   // ── Handlers ───────────────────────────────────────────────────────────────
 
   const openTask = (task) => setSelectedTask(task)
@@ -817,9 +841,40 @@ export default function ProjectDetailPage() {
                 <Plus className="w-4 h-4" />
                 <span className="hidden sm:inline">Nueva tarea</span>
               </button>
-              <button className="btn-ghost p-2 rounded" onClick={() => toast('Configuración próximamente')}>
-                <Settings className="w-4 h-4" />
-              </button>
+              {canManageProject && (
+                <div className="relative">
+                  <button
+                    className="btn-ghost p-2 rounded"
+                    onClick={() => setShowSettingsMenu(v => !v)}
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
+                  {showSettingsMenu && (
+                    <>
+                      {/* Backdrop */}
+                      <div className="fixed inset-0 z-40" onClick={() => setShowSettingsMenu(false)} />
+                      <div className="absolute right-0 top-full mt-1 z-50 w-52 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden">
+                        <button
+                          className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-slate-200 hover:bg-slate-700 transition-colors"
+                          onClick={() => { setShowSettingsMenu(false); setShowConfirm('archive') }}
+                          disabled={project?.status === 'cerrado'}
+                        >
+                          <Archive className="w-4 h-4 text-amber-400" />
+                          <span>Archivar proyecto</span>
+                        </button>
+                        <div className="border-t border-slate-700" />
+                        <button
+                          className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-red-400 hover:bg-red-900/30 transition-colors"
+                          onClick={() => { setShowSettingsMenu(false); setShowConfirm('delete') }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span>Eliminar proyecto</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1346,6 +1401,80 @@ export default function ProjectDetailPage() {
           projectId={id}
           onClose={() => setSelectedTask(null)}
         />
+      )}
+
+      {/* ── Confirm Delete / Archive Modal ───────────────────────────────────── */}
+      {showConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            {showConfirm === 'delete' ? (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-red-900/40 flex items-center justify-center flex-shrink-0">
+                    <Trash2 className="w-5 h-5 text-red-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-100">Eliminar proyecto</h3>
+                    <p className="text-xs text-slate-400">Esta acción no se puede deshacer</p>
+                  </div>
+                </div>
+                <p className="text-sm text-slate-300 mb-2">
+                  ¿Estás seguro que deseas eliminar el proyecto <span className="font-semibold text-white">&ldquo;{project.name}&rdquo;</span>?
+                </p>
+                <p className="text-xs text-red-400 bg-red-900/20 rounded-lg px-3 py-2 mb-5">
+                  ⚠ Se eliminarán permanentemente todos los datos asociados (tareas, sprints, épicas).
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    className="flex-1 btn-secondary"
+                    onClick={() => setShowConfirm(null)}
+                    disabled={deleteProjectMutation.isPending}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+                    onClick={() => deleteProjectMutation.mutate()}
+                    disabled={deleteProjectMutation.isPending}
+                  >
+                    {deleteProjectMutation.isPending ? 'Eliminando…' : 'Sí, eliminar'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-amber-900/40 flex items-center justify-center flex-shrink-0">
+                    <Archive className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-100">Archivar proyecto</h3>
+                    <p className="text-xs text-slate-400">El proyecto quedará como cerrado</p>
+                  </div>
+                </div>
+                <p className="text-sm text-slate-300 mb-5">
+                  ¿Archivar el proyecto <span className="font-semibold text-white">&ldquo;{project.name}&rdquo;</span>? Se marcará como <span className="text-amber-400 font-medium">cerrado</span> y ya no aparecerá en los proyectos activos.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    className="flex-1 btn-secondary"
+                    onClick={() => setShowConfirm(null)}
+                    disabled={archiveProjectMutation.isPending}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    className="flex-1 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+                    onClick={() => archiveProjectMutation.mutate()}
+                    disabled={archiveProjectMutation.isPending}
+                  >
+                    {archiveProjectMutation.isPending ? 'Archivando…' : 'Sí, archivar'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )
