@@ -65,6 +65,11 @@ async def _run_column_migrations():
             # activity_instances escalation tracking columns (2026-04-12)
             ("activity_instances", "escalation_sent_at", "DATETIME"),
             ("activity_instances", "reminder_sent_at", "DATETIME"),
+            # users table — columns added after initial deploy
+            ("users", "last_login", "DATETIME"),
+            ("users", "must_change_password", "BOOLEAN DEFAULT 0"),
+            ("users", "main_business_id", "INTEGER REFERENCES businesses(id)"),
+            ("users", "secondary_business_id", "INTEGER REFERENCES businesses(id)"),
         ]
         # SQLite: CREATE TABLE IF NOT EXISTS for new tables
         async with AsyncSessionLocal() as db:
@@ -136,6 +141,16 @@ async def _run_column_migrations():
             # activity_instances tracking
             "ALTER TABLE activity_instances ADD COLUMN IF NOT EXISTS escalation_sent_at TIMESTAMP WITH TIME ZONE",
             "ALTER TABLE activity_instances ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMP WITH TIME ZONE",
+            # users table — columns added after initial deploy
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP WITH TIME ZONE",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS main_business_id INTEGER REFERENCES businesses(id)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS secondary_business_id INTEGER REFERENCES businesses(id)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES users(id)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS contract_start_date DATE",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS contract_renewal_date DATE",
         ]
         # PostgreSQL: create voice_notes table if not exists
         pg_create_tables = [
