@@ -36,6 +36,9 @@ async def list_tasks(
             selectinload(Task.assignee).selectinload(User.main_business),
             selectinload(Task.reporter).selectinload(User.main_business),
             selectinload(Task.subtasks),
+            selectinload(Task.status),
+            selectinload(Task.priority),
+            selectinload(Task.watchers).selectinload(User.main_business),
         )
         .where(Task.is_deleted == False)
         .order_by(Task.order_index)
@@ -87,6 +90,9 @@ async def create_task(payload: TaskCreate, db: DB, current_user: CurrentUser):
             selectinload(Task.assignee).selectinload(User.main_business),
             selectinload(Task.reporter).selectinload(User.main_business),
             selectinload(Task.subtasks),
+            selectinload(Task.status),
+            selectinload(Task.priority),
+            selectinload(Task.watchers).selectinload(User.main_business),
         )
         .where(Task.id == task.id)
     )
@@ -122,6 +128,8 @@ async def get_task(task_id: int, db: DB, current_user: CurrentUser):
             selectinload(Task.reporter).selectinload(User.main_business),
             selectinload(Task.subtasks).selectinload(SubTask.assignee).selectinload(User.main_business),
             selectinload(Task.watchers).selectinload(User.main_business),
+            selectinload(Task.status),
+            selectinload(Task.priority),
         )
         .where(Task.id == task_id, Task.is_deleted == False)
     )
@@ -163,6 +171,9 @@ async def update_task(task_id: int, payload: TaskUpdate, db: DB, current_user: C
             selectinload(Task.assignee).selectinload(User.main_business),
             selectinload(Task.reporter).selectinload(User.main_business),
             selectinload(Task.subtasks),
+            selectinload(Task.status),
+            selectinload(Task.priority),
+            selectinload(Task.watchers).selectinload(User.main_business),
         )
         .where(Task.id == task.id)
     )
@@ -235,3 +246,53 @@ async def add_subtask(task_id: int, payload: SubTaskCreate, db: DB, current_user
     )
     subtask = result2.scalar_one()
     return subtask
+
+
+@router.patch("/{task_id}/subtasks/{subtask_id}", response_model=SubTaskResponse)
+async def toggle_subtask(task_id: int, subtask_id: int, db: DB, current_user: CurrentUser):
+    result = await db.execute(
+        select(SubTask).where(SubTask.id == subtask_id, SubTask.task_id == task_id)
+    )
+    subtask = result.scalar_one_or_none()
+    if not subtask:
+        raise HTTPException(status_code=404, detail="Subtarea no encontrada")
+    subtask.is_completed = not subtask.is_completed
+    await db.flush()
+    result2 = await db.execute(
+        select(SubTask).options(selectinload(SubTask.assignee).selectinload(User.main_business))
+        .where(SubTask.id == subtask_id)
+    )
+    return result2.scalar_one()
+
+
+class WatcherBody(BaseModel):
+    user_id: int
+
+
+@router.post("/{task_id}/watchers", status_code=200)
+async def add_watcher(task_id: int, payload: WatcherBody, db: DB, current_user: CurrentUser):
+    from app.models.task import task_watchers_table
+    from sqlalchemy import insert as sa_insert
+    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted == False))
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+    try:
+        await db.execute(task_watchers_table.insert().values(task_id=task_id, user_id=payload.user_id))
+        await db.flush()
+    except Exception:
+        pass  # Already watching
+    return {"message": "Seguidor agregado"}
+
+
+@router.delete("/{task_id}/watchers/{user_id}", status_code=200)
+async def remove_watcher(task_id: int, user_id: int, db: DB, current_user: CurrentUser):
+    from app.models.task import task_watchers_table
+    await db.execute(
+        task_watchers_table.delete().where(
+            task_watchers_table.c.task_id == task_id,
+            task_watchers_table.c.user_id == user_id
+        )
+    )
+    await db.flush()
+    return {"message": "Seguidor eliminado"}

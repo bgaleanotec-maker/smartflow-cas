@@ -76,6 +76,18 @@ export const tasksAPI = {
   update: (id, data) => api.patch(`/tasks/${id}`, data),
   delete: (id) => api.delete(`/tasks/${id}`),
   addSubtask: (taskId, data) => api.post(`/tasks/${taskId}/subtasks`, data),
+  toggleSubtask: (taskId, subtaskId) => api.patch(`/tasks/${taskId}/subtasks/${subtaskId}`),
+  logTime: (taskId, data) => api.post(`/tasks/${taskId}/log-time`, data),
+  addWatcher: (taskId, userId) => api.post(`/tasks/${taskId}/watchers`, { user_id: userId }),
+  removeWatcher: (taskId, userId) => api.delete(`/tasks/${taskId}/watchers/${userId}`),
+}
+
+// ─── Sprints ──────────────────────────────────────────────────────────────
+export const sprintsAPI = {
+  list: (projectId) => api.get('/sprints', { params: { project_id: projectId } }),
+  create: (data) => api.post('/sprints', data),
+  update: (id, data) => api.patch(`/sprints/${id}`, data),
+  delete: (id) => api.delete(`/sprints/${id}`),
 }
 
 // ─── Incidents ────────────────────────────────────────────────────────────

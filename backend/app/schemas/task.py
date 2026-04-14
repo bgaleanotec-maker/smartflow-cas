@@ -4,6 +4,23 @@ from pydantic import BaseModel
 from app.schemas.user import UserListResponse
 
 
+class StatusInfo(BaseModel):
+    id: int
+    name: str
+    color: str
+    is_done_state: bool = False
+    class Config:
+        from_attributes = True
+
+
+class PriorityInfo(BaseModel):
+    id: int
+    name: str
+    color: str
+    class Config:
+        from_attributes = True
+
+
 class SubTaskCreate(BaseModel):
     title: str
     assignee_id: Optional[int] = None
@@ -71,6 +88,12 @@ class TaskResponse(BaseModel):
     assignee: Optional[UserListResponse] = None
     reporter: Optional[UserListResponse] = None
     subtasks: List[SubTaskResponse] = []
+    status_id: Optional[int] = None
+    priority_id: Optional[int] = None
+    status: Optional[StatusInfo] = None
+    priority: Optional[PriorityInfo] = None
+    watchers: List[UserListResponse] = []
+    completed_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
