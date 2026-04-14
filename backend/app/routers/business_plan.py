@@ -598,7 +598,11 @@ async def list_activities(
     query = (
         select(BPActivity)
         .where(BPActivity.bp_id == bp_id, BPActivity.is_deleted == False)
-        .options(selectinload(BPActivity.owner))
+        .options(
+            selectinload(BPActivity.owner),
+            selectinload(BPActivity.checklist),
+            selectinload(BPActivity.comments),
+        )
         .order_by(BPActivity.order_index, BPActivity.created_at)
     )
     if category:
@@ -626,7 +630,11 @@ async def create_activity(bp_id: int, payload: BPActivityCreate, db: DB, user: L
     db.add(act)
     await db.flush()
     result = await db.execute(
-        select(BPActivity).where(BPActivity.id == act.id).options(selectinload(BPActivity.owner))
+        select(BPActivity).where(BPActivity.id == act.id).options(
+            selectinload(BPActivity.owner),
+            selectinload(BPActivity.checklist),
+            selectinload(BPActivity.comments),
+        )
     )
     act = result.scalar_one()
     return _activity_to_dict(act)
@@ -650,7 +658,11 @@ async def update_activity(bp_id: int, activity_id: int, payload: BPActivityUpdat
             act.status = BPActivityStatus.VENCIDA
     await db.flush()
     result2 = await db.execute(
-        select(BPActivity).where(BPActivity.id == act.id).options(selectinload(BPActivity.owner))
+        select(BPActivity).where(BPActivity.id == act.id).options(
+            selectinload(BPActivity.owner),
+            selectinload(BPActivity.checklist),
+            selectinload(BPActivity.comments),
+        )
     )
     act = result2.scalar_one()
     return _activity_to_dict(act)
@@ -1402,6 +1414,7 @@ async def get_timeline(bp_id: int, db: DB, user: CurrentUser):
         .options(
             selectinload(BPActivity.owner),
             selectinload(BPActivity.checklist),
+            selectinload(BPActivity.comments),
         )
         .order_by(BPActivity.order_index, BPActivity.created_at)
     )
