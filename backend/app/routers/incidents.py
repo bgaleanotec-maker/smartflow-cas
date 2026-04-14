@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from app.core.deps import DB, CurrentUser
 from app.models.incident import Incident, IncidentTimeline, IncidentStatus
+from app.models.user import User
 from app.schemas.incident import IncidentCreate, IncidentUpdate, IncidentResponse
 
 router = APIRouter(prefix="/incidents", tags=["Incidentes"])
@@ -36,9 +37,9 @@ async def list_incidents(
     query = (
         select(Incident)
         .options(
-            selectinload(Incident.responsible),
-            selectinload(Incident.reporter),
-            selectinload(Incident.timeline).selectinload(IncidentTimeline.user),
+            selectinload(Incident.responsible).selectinload(User.main_business),
+            selectinload(Incident.reporter).selectinload(User.main_business),
+            selectinload(Incident.timeline).selectinload(IncidentTimeline.user).selectinload(User.main_business),
         )
         .where(Incident.is_deleted == False)
         .order_by(Incident.created_at.desc())
@@ -102,9 +103,9 @@ async def create_incident(payload: IncidentCreate, db: DB, current_user: Current
     result2 = await db.execute(
         select(Incident)
         .options(
-            selectinload(Incident.responsible),
-            selectinload(Incident.reporter),
-            selectinload(Incident.timeline).selectinload(IncidentTimeline.user),
+            selectinload(Incident.responsible).selectinload(User.main_business),
+            selectinload(Incident.reporter).selectinload(User.main_business),
+            selectinload(Incident.timeline).selectinload(IncidentTimeline.user).selectinload(User.main_business),
         )
         .where(Incident.id == incident.id)
     )
@@ -117,11 +118,11 @@ async def get_incident(incident_id: int, db: DB, current_user: CurrentUser):
     result = await db.execute(
         select(Incident)
         .options(
-            selectinload(Incident.responsible),
-            selectinload(Incident.reporter),
+            selectinload(Incident.responsible).selectinload(User.main_business),
+            selectinload(Incident.reporter).selectinload(User.main_business),
             selectinload(Incident.category),
             selectinload(Incident.business),
-            selectinload(Incident.timeline).selectinload(IncidentTimeline.user),
+            selectinload(Incident.timeline).selectinload(IncidentTimeline.user).selectinload(User.main_business),
         )
         .where(Incident.id == incident_id, Incident.is_deleted == False)
     )
@@ -173,9 +174,9 @@ async def update_incident(
     result2 = await db.execute(
         select(Incident)
         .options(
-            selectinload(Incident.responsible),
-            selectinload(Incident.reporter),
-            selectinload(Incident.timeline).selectinload(IncidentTimeline.user),
+            selectinload(Incident.responsible).selectinload(User.main_business),
+            selectinload(Incident.reporter).selectinload(User.main_business),
+            selectinload(Incident.timeline).selectinload(IncidentTimeline.user).selectinload(User.main_business),
         )
         .where(Incident.id == incident.id)
     )

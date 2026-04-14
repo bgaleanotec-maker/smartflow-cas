@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from app.core.deps import DB, CurrentUser
 from app.models.business_intel import PremisaNegocio, PremisaTimeline, PremisaStatus
+from app.models.user import User
 
 router = APIRouter(prefix="/premisas", tags=["Premisas de Negocio"])
 
@@ -91,7 +92,7 @@ async def list_premisas(
     query = (
         select(PremisaNegocio)
         .where(PremisaNegocio.is_deleted == False)
-        .options(selectinload(PremisaNegocio.created_by), selectinload(PremisaNegocio.business))
+        .options(selectinload(PremisaNegocio.created_by).selectinload(User.main_business), selectinload(PremisaNegocio.business))
     )
     if year:
         query = query.where(PremisaNegocio.budget_year == year)
@@ -134,9 +135,9 @@ async def get_premisa(premisa_id: int, db: DB, user: CurrentUser):
         select(PremisaNegocio)
         .where(PremisaNegocio.id == premisa_id, PremisaNegocio.is_deleted == False)
         .options(
-            selectinload(PremisaNegocio.created_by),
+            selectinload(PremisaNegocio.created_by).selectinload(User.main_business),
             selectinload(PremisaNegocio.business),
-            selectinload(PremisaNegocio.timeline).selectinload(PremisaTimeline.user),
+            selectinload(PremisaNegocio.timeline).selectinload(PremisaTimeline.user).selectinload(User.main_business),
         )
     )
     p = result.scalar_one_or_none()

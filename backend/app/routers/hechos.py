@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from app.core.deps import DB, CurrentUser
 from app.models.business_intel import HechoRelevante
+from app.models.user import User
 
 router = APIRouter(prefix="/hechos", tags=["Hechos Relevantes"])
 
@@ -55,7 +56,7 @@ async def list_hechos(
     query = (
         select(HechoRelevante)
         .where(HechoRelevante.is_deleted == False)
-        .options(selectinload(HechoRelevante.created_by), selectinload(HechoRelevante.business))
+        .options(selectinload(HechoRelevante.created_by).selectinload(User.main_business), selectinload(HechoRelevante.business))
     )
     if week:
         query = query.where(HechoRelevante.week_number == week)
@@ -90,7 +91,7 @@ async def get_hecho(hecho_id: int, db: DB, user: CurrentUser):
     result = await db.execute(
         select(HechoRelevante)
         .where(HechoRelevante.id == hecho_id, HechoRelevante.is_deleted == False)
-        .options(selectinload(HechoRelevante.created_by), selectinload(HechoRelevante.business))
+        .options(selectinload(HechoRelevante.created_by).selectinload(User.main_business), selectinload(HechoRelevante.business))
     )
     h = result.scalar_one_or_none()
     if not h:

@@ -9,7 +9,7 @@ from app.models.demand import (
     DemandMeetingNote, DemandRequirement, RequirementStatus,
 )
 from app.models.demand_catalog import DemandCatalog
-from app.models.user import UserRole
+from app.models.user import User, UserRole
 from app.schemas.demand import (
     DemandRequestCreate, DemandRequestUpdate, DemandRequestResponse,
     DemandRequestDetail, DemandTimelineCreate, DemandTimelineResponse,
@@ -120,8 +120,8 @@ async def list_demands(
         select(DemandRequest)
         .where(DemandRequest.is_deleted == False)
         .options(
-            selectinload(DemandRequest.created_by),
-            selectinload(DemandRequest.assigned_to),
+            selectinload(DemandRequest.created_by).selectinload(User.main_business),
+            selectinload(DemandRequest.assigned_to).selectinload(User.main_business),
             selectinload(DemandRequest.vicepresidencia),
             selectinload(DemandRequest.pilares_estrategicos),
             selectinload(DemandRequest.mejoras_procesos),
@@ -251,7 +251,7 @@ async def demand_dashboard(db: DB, user: HerramientasOrAbove):
             DemandRequest.fecha_deadline < date.today(),
             DemandRequest.status.notin_([DemandStatus.CERRADA, DemandStatus.RECHAZADA]),
         )
-        .options(selectinload(DemandRequest.assigned_to))
+        .options(selectinload(DemandRequest.assigned_to).selectinload(User.main_business))
         .limit(20)
     )
     delayed = delayed_result.scalars().all()
@@ -279,16 +279,16 @@ async def get_demand(demand_id: int, db: DB, user: CurrentUser):
         select(DemandRequest)
         .where(DemandRequest.id == demand_id, DemandRequest.is_deleted == False)
         .options(
-            selectinload(DemandRequest.created_by),
-            selectinload(DemandRequest.assigned_to),
+            selectinload(DemandRequest.created_by).selectinload(User.main_business),
+            selectinload(DemandRequest.assigned_to).selectinload(User.main_business),
             selectinload(DemandRequest.vicepresidencia),
             selectinload(DemandRequest.pilares_estrategicos),
             selectinload(DemandRequest.mejoras_procesos),
             selectinload(DemandRequest.usuarios_impactados),
             selectinload(DemandRequest.reduce_riesgo),
             selectinload(DemandRequest.children),
-            selectinload(DemandRequest.timeline).selectinload(DemandTimeline.user),
-            selectinload(DemandRequest.meeting_notes).selectinload(DemandMeetingNote.created_by),
+            selectinload(DemandRequest.timeline).selectinload(DemandTimeline.user).selectinload(User.main_business),
+            selectinload(DemandRequest.meeting_notes).selectinload(DemandMeetingNote.created_by).selectinload(User.main_business),
             selectinload(DemandRequest.requirements),
         )
     )
@@ -514,8 +514,8 @@ async def get_children(demand_id: int, db: DB, user: CurrentUser):
         select(DemandRequest)
         .where(DemandRequest.parent_demand_id == demand_id, DemandRequest.is_deleted == False)
         .options(
-            selectinload(DemandRequest.created_by),
-            selectinload(DemandRequest.assigned_to),
+            selectinload(DemandRequest.created_by).selectinload(User.main_business),
+            selectinload(DemandRequest.assigned_to).selectinload(User.main_business),
             selectinload(DemandRequest.vicepresidencia),
             selectinload(DemandRequest.children),
             selectinload(DemandRequest.requirements),

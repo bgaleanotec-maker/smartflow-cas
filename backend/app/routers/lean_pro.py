@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from app.core.deps import DB, CurrentUser
 from app.models.lean_pro import DailyStandup, Retrospective, SprintMetrics, KaizenItem
+from app.models.user import User
 from app.models.project import Sprint
 from app.models.task import Task
 
@@ -45,7 +46,7 @@ async def list_standups(
     standup_date: Optional[date] = None, scope: Optional[str] = None,
     skip: int = 0, limit: int = 50,
 ):
-    query = select(DailyStandup).options(selectinload(DailyStandup.user))
+    query = select(DailyStandup).options(selectinload(DailyStandup.user).selectinload(User.main_business))
     if standup_date:
         query = query.where(DailyStandup.standup_date == standup_date)
     else:
@@ -100,7 +101,7 @@ async def create_retro(payload: RetroCreate, db: DB, user: CurrentUser):
 
 @router.get("/retro")
 async def list_retros(db: DB, user: CurrentUser, scope: Optional[str] = None, limit: int = 20):
-    query = select(Retrospective).options(selectinload(Retrospective.facilitator))
+    query = select(Retrospective).options(selectinload(Retrospective.facilitator).selectinload(User.main_business))
     if scope:
         query = query.where(Retrospective.scope == scope)
     query = query.order_by(Retrospective.retro_date.desc()).limit(limit)
@@ -145,7 +146,8 @@ async def create_kaizen(payload: KaizenCreate, db: DB, user: CurrentUser):
 @router.get("/kaizen")
 async def list_kaizen(db: DB, user: CurrentUser, status: Optional[str] = None, scope: Optional[str] = None):
     query = select(KaizenItem).options(
-        selectinload(KaizenItem.proposed_by), selectinload(KaizenItem.assigned_to)
+        selectinload(KaizenItem.proposed_by).selectinload(User.main_business),
+        selectinload(KaizenItem.assigned_to).selectinload(User.main_business)
     )
     if status:
         query = query.where(KaizenItem.status == status)
@@ -199,7 +201,7 @@ async def lean_dashboard(db: DB, user: CurrentUser, scope: Optional[str] = None)
             DailyStandup.standup_date == today,
             DailyStandup.blockers != None,
             DailyStandup.blockers != '',
-        ).options(selectinload(DailyStandup.user))
+        ).options(selectinload(DailyStandup.user).selectinload(User.main_business))
     )
     blocker_list = [{
         "user": s.user.full_name if s.user else "?",

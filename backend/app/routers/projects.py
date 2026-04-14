@@ -23,8 +23,8 @@ async def list_projects(
     query = (
         select(Project)
         .options(
-            selectinload(Project.leader),
-            selectinload(Project.members),
+            selectinload(Project.leader).selectinload(User.main_business),
+            selectinload(Project.members).selectinload(User.main_business),
         )
         .where(Project.is_deleted == False)
         .offset(skip)
@@ -85,8 +85,8 @@ async def create_project(payload: ProjectCreate, db: DB, current_user: LeaderOrA
     result = await db.execute(
         select(Project)
         .options(
-            selectinload(Project.leader),
-            selectinload(Project.members),
+            selectinload(Project.leader).selectinload(User.main_business),
+            selectinload(Project.members).selectinload(User.main_business),
         )
         .where(Project.id == project.id)
     )
@@ -99,8 +99,8 @@ async def get_project(project_id: int, db: DB, current_user: CurrentUser):
     result = await db.execute(
         select(Project)
         .options(
-            selectinload(Project.leader),
-            selectinload(Project.members),
+            selectinload(Project.leader).selectinload(User.main_business),
+            selectinload(Project.members).selectinload(User.main_business),
             selectinload(Project.epics),
             selectinload(Project.sprints),
         )
@@ -150,8 +150,8 @@ async def update_project(
     result2 = await db.execute(
         select(Project)
         .options(
-            selectinload(Project.leader),
-            selectinload(Project.members),
+            selectinload(Project.leader).selectinload(User.main_business),
+            selectinload(Project.members).selectinload(User.main_business),
         )
         .where(Project.id == project_id)
     )

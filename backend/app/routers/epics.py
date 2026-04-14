@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from app.core.deps import DB, CurrentUser
 from app.models.epic import SmartEpic, Story, StoryUpdate
+from app.models.user import User
 from app.schemas.epic import (
     EpicCreate, EpicUpdate, EpicResponse,
     StoryCreate, StoryUpdateSchema, StoryResponse,
@@ -14,9 +15,9 @@ router = APIRouter(prefix="/epics", tags=["Épicas e Historias"])
 
 
 def epic_opts():
-    return [selectinload(SmartEpic.owner), selectinload(SmartEpic.stories).options(
-        selectinload(Story.assigned_to),
-        selectinload(Story.updates).selectinload(StoryUpdate.user)
+    return [selectinload(SmartEpic.owner).selectinload(User.main_business), selectinload(SmartEpic.stories).options(
+        selectinload(Story.assigned_to).selectinload(User.main_business),
+        selectinload(Story.updates).selectinload(StoryUpdate.user).selectinload(User.main_business)
     )]
 
 
@@ -79,7 +80,7 @@ async def create_story(epic_id: int, payload: StoryCreate, db: DB, current_user:
     db.add(story)
     await db.flush()
     result = await db.execute(
-        select(Story).options(selectinload(Story.assigned_to), selectinload(Story.updates).selectinload(StoryUpdate.user))
+        select(Story).options(selectinload(Story.assigned_to).selectinload(User.main_business), selectinload(Story.updates).selectinload(StoryUpdate.user).selectinload(User.main_business))
         .where(Story.id == story.id)
     )
     return result.scalar_one()
@@ -98,7 +99,7 @@ async def list_stories(
     status: Optional[str] = None,
     is_blocking: Optional[bool] = None,
 ):
-    opts = [selectinload(Story.assigned_to), selectinload(Story.updates).selectinload(StoryUpdate.user)]
+    opts = [selectinload(Story.assigned_to).selectinload(User.main_business), selectinload(Story.updates).selectinload(StoryUpdate.user).selectinload(User.main_business)]
     q = select(Story).options(*opts)
     if project_id: q = q.where(Story.project_id == project_id)
     if epic_id: q = q.where(Story.epic_id == epic_id)
@@ -116,7 +117,7 @@ async def update_story(story_id: int, payload: StoryUpdateSchema, db: DB, curren
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(story, k, v)
     await db.flush()
-    opts = [selectinload(Story.assigned_to), selectinload(Story.updates).selectinload(StoryUpdate.user)]
+    opts = [selectinload(Story.assigned_to).selectinload(User.main_business), selectinload(Story.updates).selectinload(StoryUpdate.user).selectinload(User.main_business)]
     result = await db.execute(select(Story).options(*opts).where(Story.id == story_id))
     return result.scalar_one()
 
@@ -152,6 +153,6 @@ async def add_story_update(story_id: int, payload: StoryUpdateCreate, db: DB, cu
         elif payload.update_type == "entrega":
             story.status = "completada"
     await db.flush()
-    opts = [selectinload(StoryUpdate.user)]
+    opts = [selectinload(StoryUpdate.user).selectinload(User.main_business)]
     result = await db.execute(select(StoryUpdate).options(*opts).where(StoryUpdate.id == update.id))
     return result.scalar_one()

@@ -20,6 +20,7 @@ from app.core.deps import DB, CurrentUser
 from app.models.activities import (
     RecurringActivity, ActivityInstance, ActivityFrequency, ActivityStatus, ActivityScope,
 )
+from app.models.user import User
 
 router = APIRouter(prefix="/activities", tags=["Torre de Control - Actividades"])
 
@@ -334,10 +335,10 @@ async def list_activities(
 ):
     """List activity templates with computed real-time status."""
     query = select(RecurringActivity).options(
-        selectinload(RecurringActivity.assigned_to),
-        selectinload(RecurringActivity.created_by),
-        selectinload(RecurringActivity.escalate_to),
-        selectinload(RecurringActivity.instances).selectinload(ActivityInstance.completed_by),
+        selectinload(RecurringActivity.assigned_to).selectinload(User.main_business),
+        selectinload(RecurringActivity.created_by).selectinload(User.main_business),
+        selectinload(RecurringActivity.escalate_to).selectinload(User.main_business),
+        selectinload(RecurringActivity.instances).selectinload(ActivityInstance.completed_by).selectinload(User.main_business),
     )
     if active_only:
         query = query.where(RecurringActivity.is_active == True)
@@ -397,7 +398,7 @@ async def complete_activity(activity_id: int, body: CompleteActivityBody, db: DB
     """
     result = await db.execute(
         select(RecurringActivity)
-        .options(selectinload(RecurringActivity.assigned_to))
+        .options(selectinload(RecurringActivity.assigned_to).selectinload(User.main_business))
         .where(RecurringActivity.id == activity_id, RecurringActivity.is_active == True)
     )
     a = result.scalar_one_or_none()
@@ -491,10 +492,10 @@ async def torre_control(db: DB, user: CurrentUser, scope: Optional[str] = None, 
     Groups by: vencidas | proximas_a_vencer | en_proceso | sin_iniciar | completadas.
     """
     query = select(RecurringActivity).options(
-        selectinload(RecurringActivity.assigned_to),
-        selectinload(RecurringActivity.created_by),
-        selectinload(RecurringActivity.escalate_to),
-        selectinload(RecurringActivity.instances).selectinload(ActivityInstance.completed_by),
+        selectinload(RecurringActivity.assigned_to).selectinload(User.main_business),
+        selectinload(RecurringActivity.created_by).selectinload(User.main_business),
+        selectinload(RecurringActivity.escalate_to).selectinload(User.main_business),
+        selectinload(RecurringActivity.instances).selectinload(ActivityInstance.completed_by).selectinload(User.main_business),
     ).where(RecurringActivity.is_active == True)
     if scope:
         query = query.where(RecurringActivity.scope == scope)
@@ -575,7 +576,10 @@ async def activity_log(activity_id: int, db: DB, user: CurrentUser, limit: int =
     """Full compliance log for an activity (most recent first)."""
     result = await db.execute(
         select(RecurringActivity)
-        .options(selectinload(RecurringActivity.assigned_to), selectinload(RecurringActivity.escalate_to))
+        .options(
+            selectinload(RecurringActivity.assigned_to).selectinload(User.main_business),
+            selectinload(RecurringActivity.escalate_to).selectinload(User.main_business),
+        )
         .where(RecurringActivity.id == activity_id)
     )
     a = result.scalar_one_or_none()
@@ -584,7 +588,7 @@ async def activity_log(activity_id: int, db: DB, user: CurrentUser, limit: int =
 
     instances_result = await db.execute(
         select(ActivityInstance)
-        .options(selectinload(ActivityInstance.completed_by))
+        .options(selectinload(ActivityInstance.completed_by).selectinload(User.main_business))
         .where(ActivityInstance.activity_id == activity_id)
         .order_by(desc(ActivityInstance.due_date))
         .limit(limit)

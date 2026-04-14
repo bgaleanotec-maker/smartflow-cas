@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from app.core.deps import DB, CurrentUser
 from app.models.task import Task, SubTask
+from app.models.user import User
 from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse, SubTaskCreate, SubTaskResponse
 
 router = APIRouter(prefix="/tasks", tags=["Tareas"])
@@ -32,8 +33,8 @@ async def list_tasks(
     query = (
         select(Task)
         .options(
-            selectinload(Task.assignee),
-            selectinload(Task.reporter),
+            selectinload(Task.assignee).selectinload(User.main_business),
+            selectinload(Task.reporter).selectinload(User.main_business),
             selectinload(Task.subtasks),
         )
         .where(Task.is_deleted == False)
@@ -83,8 +84,8 @@ async def create_task(payload: TaskCreate, db: DB, current_user: CurrentUser):
     result2 = await db.execute(
         select(Task)
         .options(
-            selectinload(Task.assignee),
-            selectinload(Task.reporter),
+            selectinload(Task.assignee).selectinload(User.main_business),
+            selectinload(Task.reporter).selectinload(User.main_business),
             selectinload(Task.subtasks),
         )
         .where(Task.id == task.id)
@@ -102,7 +103,7 @@ async def get_my_tasks(
 ):
     query = (
         select(Task)
-        .options(selectinload(Task.assignee), selectinload(Task.subtasks))
+        .options(selectinload(Task.assignee).selectinload(User.main_business), selectinload(Task.subtasks))
         .where(Task.assignee_id == current_user.id, Task.is_deleted == False)
         .order_by(Task.due_date.asc().nullslast())
         .offset(skip)
@@ -117,10 +118,10 @@ async def get_task(task_id: int, db: DB, current_user: CurrentUser):
     result = await db.execute(
         select(Task)
         .options(
-            selectinload(Task.assignee),
-            selectinload(Task.reporter),
-            selectinload(Task.subtasks).selectinload(SubTask.assignee),
-            selectinload(Task.watchers),
+            selectinload(Task.assignee).selectinload(User.main_business),
+            selectinload(Task.reporter).selectinload(User.main_business),
+            selectinload(Task.subtasks).selectinload(SubTask.assignee).selectinload(User.main_business),
+            selectinload(Task.watchers).selectinload(User.main_business),
         )
         .where(Task.id == task_id, Task.is_deleted == False)
     )
@@ -159,8 +160,8 @@ async def update_task(task_id: int, payload: TaskUpdate, db: DB, current_user: C
     result2 = await db.execute(
         select(Task)
         .options(
-            selectinload(Task.assignee),
-            selectinload(Task.reporter),
+            selectinload(Task.assignee).selectinload(User.main_business),
+            selectinload(Task.reporter).selectinload(User.main_business),
             selectinload(Task.subtasks),
         )
         .where(Task.id == task.id)
@@ -229,7 +230,7 @@ async def add_subtask(task_id: int, payload: SubTaskCreate, db: DB, current_user
     # Reload with eager-loaded relationships to avoid async lazy-load error
     result2 = await db.execute(
         select(SubTask)
-        .options(selectinload(SubTask.assignee))
+        .options(selectinload(SubTask.assignee).selectinload(User.main_business))
         .where(SubTask.id == subtask.id)
     )
     subtask = result2.scalar_one()
