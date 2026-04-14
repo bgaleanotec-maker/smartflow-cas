@@ -10,7 +10,7 @@ from app.core.database import engine, Base
 import app.models  # noqa: F401
 from app.models import epic  # noqa: F401
 
-from app.routers import auth, users, projects, tasks, incidents, admin, pomodoro, demands, demand_admin, hechos, premisas, ai_assistant, activities, dashboard_builder, lean_pro, ai_chat, business_plan, bp_financial_ai, executive, voice, reminders, sprints
+from app.routers import auth, users, projects, tasks, incidents, admin, pomodoro, demands, demand_admin, hechos, premisas, ai_assistant, activities, dashboard_builder, lean_pro, ai_chat, business_plan, bp_financial_ai, executive, voice, reminders, sprints, backup
 from app.routers.voice_notes import router as voice_notes_router
 from app.routers.epics import router as epics_router, router2 as stories_router
 from app.routers.dashboard import router as dashboard_router
@@ -462,6 +462,7 @@ app.include_router(voice_notes_router, prefix=API_PREFIX)
 app.include_router(epics_router, prefix=API_PREFIX)
 app.include_router(stories_router, prefix=API_PREFIX)
 app.include_router(dashboard_router, prefix=API_PREFIX)
+app.include_router(backup.router, prefix=API_PREFIX)
 
 
 # force redeploy 2026-04-11

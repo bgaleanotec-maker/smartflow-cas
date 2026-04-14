@@ -1,0 +1,106 @@
+name: Database Daily Backup
+
+on:
+  schedule:
+    - cron: '0 3 * * *'   # 3:00 AM UTC cada dia (23:00 Bolivia GMT-4)
+  workflow_dispatch:        # Permite lanzar manualmente desde GitHub UI
+
+permissions:
+  contents: write           # Necesario para hacer push a la rama backups
+
+jobs:
+  backup:
+    name: Backup PostgreSQL Database
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout full repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "SmartFlow Backup Bot"
+          git config user.email "backup@smartflow.app"
+
+      - name: Setup backups branch (create if missing)
+        run: |
+          if git ls-remote --exit-code --heads origin backups; then
+            echo "Branch 'backups' exists — checking out"
+            git checkout backups
+          else
+            echo "Branch 'backups' does not exist — creating orphan"
+            git checkout --orphan backups
+            git rm -rf . > /dev/null 2>&1 || true
+            echo "# SmartFlow — Backups de Base de Datos" > README.md
+            echo "" >> README.md
+            echo "Backups automaticos diarios. Se conservan los ultimos **5 dias**." >> README.md
+            echo "Generados por GitHub Actions a las 3:00 AM UTC." >> README.md
+            git add README.md
+            git commit -m "init: crear rama de backups"
+            git push origin backups
+          fi
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Create backup
+        env:
+          DATABASE_URL: ${{ secrets.RENDER_DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "ERROR: El secreto RENDER_DATABASE_URL no esta configurado."
+            echo "Ve a GitHub → Settings → Secrets → Actions → New secret"
+            echo "Nombre: RENDER_DATABASE_URL"
+            echo "Valor: la DATABASE_URL de tu servicio PostgreSQL en Render"
+            exit 1
+          fi
+          DATE=$(date +%Y-%m-%d_%H%M%S)
+          FILENAME="backup_${DATE}.sql.gz"
+          echo "Creando backup: $FILENAME ..."
+          pg_dump "$DATABASE_URL" --no-password --clean --if-exists | gzip > "$FILENAME"
+          SIZE=$(du -sh "$FILENAME" | cut -f1)
+          echo "BACKUP_FILE=$FILENAME" >> $GITHUB_ENV
+          echo "BACKUP_SIZE=$SIZE" >> $GITHUB_ENV
+          echo "Backup creado: $FILENAME ($SIZE)"
+
+      - name: Keep only last 5 backups
+        run: |
+          TOTAL=$(ls -t backup_*.sql.gz 2>/dev/null | wc -l)
+          echo "Total de backups: $TOTAL"
+          if [ "$TOTAL" -gt 5 ]; then
+            REMOVE=$((TOTAL - 5))
+            echo "Eliminando $REMOVE backup(s) antiguo(s)..."
+            ls -t backup_*.sql.gz | tail -n "$REMOVE" | xargs rm -fv
+          else
+            echo "Menos de 5 backups, no se elimina nada."
+          fi
+
+      - name: Commit and push
+        run: |
+          git add -A
+          CHANGES=$(git status --porcelain | wc -l)
+          if [ "$CHANGES" -gt 0 ]; then
+            git commit -m "backup: $(date '+%Y-%m-%d %H:%M UTC') — $BACKUP_FILE ($BACKUP_SIZE)"
+            git push origin backups
+            echo "Backup subido a la rama 'backups'"
+          else
+            echo "Sin cambios que commitear."
+          fi
+
+      - name: Summary
+        run: |
+          echo "======================================"
+          echo "  BACKUP COMPLETADO EXITOSAMENTE"
+          echo "======================================"
+          echo "  Archivo : $BACKUP_FILE"
+          echo "  Tamaño  : $BACKUP_SIZE"
+          echo "  Fecha   : $(date '+%Y-%m-%d %H:%M:%S UTC')"
+          echo ""
+          echo "  Backups disponibles:"
+          ls -lh backup_*.sql.gz 2>/dev/null | awk '{print "   " $9 " (" $5 ")"}'
+          echo "======================================"
