@@ -756,7 +756,10 @@ export default function ProjectDetailPage() {
       toast.success('Proyecto eliminado')
       navigate('/projects')
     },
-    onError: () => toast.error('Error al eliminar el proyecto'),
+    onError: (err) => {
+      const msg = err?.response?.data?.detail || err?.message || 'Error al eliminar el proyecto'
+      toast.error(`Error: ${msg}`)
+    },
   })
 
   const archiveProjectMutation = useMutation({
@@ -766,7 +769,10 @@ export default function ProjectDetailPage() {
       toast.success('Proyecto archivado')
       setShowConfirm(null)
     },
-    onError: () => toast.error('Error al archivar el proyecto'),
+    onError: (err) => {
+      const msg = err?.response?.data?.detail || err?.message || 'Error al archivar el proyecto'
+      toast.error(`Error: ${msg}`)
+    },
   })
 
   // Only THE project's leader (or admin) can delete/archive

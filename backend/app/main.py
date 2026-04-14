@@ -155,8 +155,17 @@ async def _run_column_migrations():
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES users(id)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS contract_start_date DATE",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS contract_renewal_date DATE",
+            # tasks table — PMO/Scrum columns added after initial deploy
+            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS epic_id INTEGER REFERENCES epics(id)",
+            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS sprint_id INTEGER REFERENCES sprints(id)",
+            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS story_points INTEGER",
+            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS estimated_hours FLOAT DEFAULT 0.0",
+            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS logged_hours FLOAT DEFAULT 0.0",
+            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS labels VARCHAR(500)",
+            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS attachments TEXT",
+            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE",
         ]
-        # PostgreSQL: create voice_notes table if not exists
+        # PostgreSQL: create tables that may not exist yet
         pg_create_tables = [
             """CREATE TABLE IF NOT EXISTS voice_notes (
                 id SERIAL PRIMARY KEY,
@@ -175,7 +184,33 @@ async def _run_column_migrations():
                 done_at TIMESTAMP WITH TIME ZONE,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-            )"""
+            )""",
+            """CREATE TABLE IF NOT EXISTS epics (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(200) NOT NULL,
+                description TEXT,
+                project_id INTEGER NOT NULL REFERENCES projects(id),
+                color VARCHAR(7) DEFAULT '#8b5cf6',
+                start_date DATE,
+                due_date DATE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            )""",
+            """CREATE TABLE IF NOT EXISTS sprints (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                goal TEXT,
+                project_id INTEGER NOT NULL REFERENCES projects(id),
+                start_date DATE,
+                end_date DATE,
+                is_active BOOLEAN DEFAULT FALSE,
+                is_completed BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            )""",
+            """CREATE TABLE IF NOT EXISTS task_watchers (
+                task_id INTEGER NOT NULL REFERENCES tasks(id),
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                PRIMARY KEY (task_id, user_id)
+            )""",
         ]
         async with AsyncSessionLocal() as db:
             for stmt in pg_create_tables:
