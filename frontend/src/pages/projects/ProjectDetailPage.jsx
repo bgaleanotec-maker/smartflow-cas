@@ -7,7 +7,7 @@ import {
   ArrowLeft, Plus, Settings, Users, Calendar, ChevronDown,
   ChevronRight, X, CheckSquare, Square, AlertTriangle,
   Clock, Zap, Flag, Tag, MoreHorizontal, CheckCheck,
-  Layers, BookOpen, Play, StopCircle, Circle, Archive, Trash2
+  Layers, BookOpen, Play, StopCircle, Circle, Archive, Trash2, Pencil
 } from 'lucide-react'
 import {
   projectsAPI, tasksAPI, adminAPI,
@@ -590,6 +590,102 @@ function CreateEpicModal({ projectId, onClose, users, priorities }) {
   )
 }
 
+// ─── EditEpicModal ─────────────────────────────────────────────────────────────
+
+function EditEpicModal({ epic, projectId, onClose, users }) {
+  const qc = useQueryClient()
+  const [form, setForm] = useState({
+    title: epic.title || '',
+    description: epic.description || '',
+    owner_id: epic.owner?.id || '',
+    due_date: epic.due_date || '',
+    status: epic.status || 'backlog',
+    priority: epic.priority || 'media',
+  })
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const mutation = useMutation({
+    mutationFn: (data) => epicsAPI.update(epic.id, data),
+    onSuccess: () => {
+      qc.invalidateQueries(['project-epics', projectId])
+      toast.success('Épica actualizada')
+      onClose()
+    },
+    onError: (err) => toast.error(err?.response?.data?.detail || 'Error al actualizar épica'),
+  })
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    if (!form.title.trim()) return toast.error('El título es requerido')
+    mutation.mutate({
+      title: form.title,
+      description: form.description || null,
+      owner_id: form.owner_id || null,
+      due_date: form.due_date || null,
+      status: form.status,
+      priority: form.priority,
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-md shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+          <h3 className="font-semibold text-slate-100 flex items-center gap-2"><Layers className="w-4 h-4 text-violet-400" /> Editar Épica</h3>
+          <button onClick={onClose} className="btn-ghost p-1 rounded"><X className="w-4 h-4" /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          <div>
+            <label className="label">Título *</label>
+            <input className="input w-full" value={form.title} onChange={e => set('title', e.target.value)} autoFocus />
+          </div>
+          <div>
+            <label className="label">Descripción</label>
+            <textarea className="input w-full h-20 resize-none" value={form.description} onChange={e => set('description', e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Estado</label>
+              <select className="input w-full" value={form.status} onChange={e => set('status', e.target.value)}>
+                <option value="backlog">Backlog</option>
+                <option value="en_progreso">En progreso</option>
+                <option value="completada">Completada</option>
+                <option value="cancelada">Cancelada</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Prioridad</label>
+              <select className="input w-full" value={form.priority} onChange={e => set('priority', e.target.value)}>
+                <option value="baja">Baja</option>
+                <option value="media">Media</option>
+                <option value="alta">Alta</option>
+                <option value="urgente">Urgente</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Responsable</label>
+              <select className="input w-full" value={form.owner_id} onChange={e => set('owner_id', e.target.value)}>
+                <option value="">Sin asignar</option>
+                {users?.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Fecha límite</label>
+              <input type="date" className="input w-full" value={form.due_date} onChange={e => set('due_date', e.target.value)} />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
+            <button type="submit" className="btn-primary" disabled={mutation.isPending}>
+              {mutation.isPending ? 'Guardando…' : 'Guardar cambios'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ─── CreateSprintModal ─────────────────────────────────────────────────────────
 
 function CreateSprintModal({ projectId, onClose }) {
@@ -677,6 +773,8 @@ export default function ProjectDetailPage() {
   const [quickAddSprint, setQuickAddSprint] = useState(null)
   const [showSettingsMenu, setShowSettingsMenu] = useState(false)
   const [showConfirm, setShowConfirm] = useState(null) // 'delete' | 'archive' | null
+  const [editingEpic, setEditingEpic] = useState(null)
+  const [deletingEpicId, setDeletingEpicId] = useState(null)
 
   // ── Queries ────────────────────────────────────────────────────────────────
 
@@ -773,6 +871,16 @@ export default function ProjectDetailPage() {
       const msg = err?.response?.data?.detail || err?.message || 'Error al archivar el proyecto'
       toast.error(`Error: ${msg}`)
     },
+  })
+
+  const deleteEpicMutation = useMutation({
+    mutationFn: (epicId) => epicsAPI.delete(epicId),
+    onSuccess: () => {
+      qc.invalidateQueries(['project-epics', id])
+      toast.success('Épica eliminada')
+      setDeletingEpicId(null)
+    },
+    onError: (err) => toast.error(err?.response?.data?.detail || 'Error al eliminar épica'),
   })
 
   // Only THE project's leader (or admin) can delete/archive
@@ -1188,16 +1296,18 @@ export default function ProjectDetailPage() {
                   return (
                     <div key={epic.id} className="card py-0 px-0 overflow-hidden">
                       {/* Epic header */}
-                      <div
-                        className="flex items-center gap-3 px-4 py-3.5 cursor-pointer hover:bg-slate-800/50 transition-colors"
-                        onClick={() => setExpandedEpics(e => ({ ...e, [epic.id]: !isExpanded }))}
-                      >
-                        {isExpanded
-                          ? <ChevronDown className="w-4 h-4 text-slate-500 flex-shrink-0" />
-                          : <ChevronRight className="w-4 h-4 text-slate-500 flex-shrink-0" />
-                        }
-                        <div className="w-2.5 h-2.5 rounded-full bg-violet-500 flex-shrink-0" />
-                        <span className="flex-1 font-semibold text-slate-100 truncate">{epic.title}</span>
+                      <div className="flex items-center gap-3 px-4 py-3.5 hover:bg-slate-800/50 transition-colors group/epic">
+                        <div
+                          className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+                          onClick={() => setExpandedEpics(e => ({ ...e, [epic.id]: !isExpanded }))}
+                        >
+                          {isExpanded
+                            ? <ChevronDown className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                            : <ChevronRight className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                          }
+                          <div className="w-2.5 h-2.5 rounded-full bg-violet-500 flex-shrink-0" />
+                          <span className="flex-1 font-semibold text-slate-100 truncate">{epic.title}</span>
+                        </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           {epic.status && (
                             <span className="badge bg-slate-700 text-slate-300 text-xs">{epic.status}</span>
@@ -1206,6 +1316,24 @@ export default function ProjectDetailPage() {
                             <AvatarCircle name={owner.full_name} size={6} className="ring-1 ring-slate-700" />
                           )}
                           <span className="text-xs text-slate-500">{epicStories.length} historias</span>
+                          {isLeaderOrAdmin && (
+                            <div className="flex items-center gap-1 opacity-0 group-hover/epic:opacity-100 transition-opacity">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setEditingEpic(epic) }}
+                                className="p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-violet-400 transition-colors"
+                                title="Editar épica"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setDeletingEpicId(epic.id) }}
+                                className="p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-red-400 transition-colors"
+                                title="Eliminar épica"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -1387,6 +1515,39 @@ export default function ProjectDetailPage() {
           users={users}
           priorities={priorities}
         />
+      )}
+
+      {editingEpic && (
+        <EditEpicModal
+          epic={editingEpic}
+          projectId={id}
+          onClose={() => setEditingEpic(null)}
+          users={users}
+        />
+      )}
+
+      {deletingEpicId && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-red-900/50 rounded-xl w-full max-w-sm shadow-2xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0" />
+              <h3 className="font-semibold text-slate-100">¿Eliminar épica?</h3>
+            </div>
+            <p className="text-sm text-slate-400 mb-6">
+              Se eliminarán también todas las historias asociadas a esta épica. Esta acción no se puede deshacer.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setDeletingEpicId(null)} className="btn-secondary">Cancelar</button>
+              <button
+                onClick={() => deleteEpicMutation.mutate(deletingEpicId)}
+                disabled={deleteEpicMutation.isPending}
+                className="bg-red-700 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {deleteEpicMutation.isPending ? 'Eliminando…' : 'Sí, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showCreateSprint && (
