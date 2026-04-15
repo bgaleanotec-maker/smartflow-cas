@@ -9,8 +9,9 @@ from app.core.database import engine, Base
 # Import all models to ensure they're registered before create_all
 import app.models  # noqa: F401
 from app.models import epic  # noqa: F401
+from app.models.quick_task import QuickTask  # noqa: F401
 
-from app.routers import auth, users, projects, tasks, incidents, admin, pomodoro, demands, demand_admin, hechos, premisas, ai_assistant, activities, dashboard_builder, lean_pro, ai_chat, business_plan, bp_financial_ai, executive, voice, reminders, sprints, backup
+from app.routers import auth, users, projects, tasks, incidents, admin, pomodoro, demands, demand_admin, hechos, premisas, ai_assistant, activities, dashboard_builder, lean_pro, ai_chat, business_plan, bp_financial_ai, executive, voice, reminders, sprints, backup, quick_tasks
 from app.routers.voice_notes import router as voice_notes_router
 from app.routers.epics import router as epics_router, router2 as stories_router
 from app.routers.dashboard import router as dashboard_router
@@ -212,6 +213,24 @@ async def _run_column_migrations():
                 task_id INTEGER NOT NULL REFERENCES tasks(id),
                 user_id INTEGER NOT NULL REFERENCES users(id),
                 PRIMARY KEY (task_id, user_id)
+            )""",
+            # quick_tasks table — new table for non-project tasks
+            """CREATE TABLE IF NOT EXISTS quick_tasks (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                title VARCHAR(300) NOT NULL,
+                description TEXT,
+                business_id INTEGER REFERENCES businesses(id),
+                assigned_to_id INTEGER REFERENCES users(id),
+                status VARCHAR(20) DEFAULT 'pendiente',
+                priority VARCHAR(10) DEFAULT 'media',
+                estimated_minutes INTEGER,
+                logged_minutes INTEGER DEFAULT 0,
+                due_date DATE,
+                is_done BOOLEAN DEFAULT FALSE,
+                done_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
             )""",
         ]
         async with AsyncSessionLocal() as db:
@@ -465,6 +484,7 @@ app.include_router(epics_router, prefix=API_PREFIX)
 app.include_router(stories_router, prefix=API_PREFIX)
 app.include_router(dashboard_router, prefix=API_PREFIX)
 app.include_router(backup.router, prefix=API_PREFIX)
+app.include_router(quick_tasks.router, prefix=API_PREFIX)
 
 
 # force redeploy 2026-04-11

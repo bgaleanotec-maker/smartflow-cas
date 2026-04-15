@@ -1,18 +1,300 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import ErrorBoundary from '../ErrorBoundary'
 import {
   LayoutDashboard, FolderKanban, AlertTriangle, Timer,
   Users, Settings, LogOut, ChevronLeft, ChevronRight,
   Bell, Search, Menu, X, FileText, BarChart3, Newspaper, Landmark,
   Plane, LayoutGrid, Zap, TrendingUp, Crown, Mic2, MoreHorizontal,
-  Mic, Home, MessageSquareMore, Volume2, BookOpen,
+  Mic, Home, MessageSquareMore, Volume2, BookOpen, ListTodo, Plus,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { usePomodoroStore } from '../../stores/pomodoroStore'
 import clsx from 'clsx'
 import VoiceAIPanel from '../voice/VoiceAIPanel'
 import QuickChatPanel from '../mobile/QuickChatPanel'
+import toast from 'react-hot-toast'
+import { quickTasksAPI, voiceNotesAPI, adminAPI, usersAPI } from '../../services/api'
+
+// ─── QuickTaskCreateModal ─────────────────────────────────────────────────────
+
+function QuickTaskCreateModal({ onClose }) {
+  const [form, setForm] = useState({
+    title: '', business_id: '', priority: 'media', due_date: '',
+    assigned_to_id: '', estimated_minutes: '',
+  })
+  const [businesses, setBusinesses] = useState([])
+  const [users, setUsers] = useState([])
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    adminAPI.businesses().then(r => {
+      const data = Array.isArray(r.data) ? r.data : r.data?.items || []
+      setBusinesses(data)
+    }).catch(() => {})
+    usersAPI.list({ is_active: true, limit: 100 }).then(r => {
+      setUsers(Array.isArray(r.data) ? r.data : r.data?.items || [])
+    }).catch(() => {})
+  }, [])
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.title.trim()) return toast.error('El título es obligatorio')
+    setSaving(true)
+    try {
+      await quickTasksAPI.create({
+        title: form.title.trim(),
+        business_id: form.business_id ? parseInt(form.business_id) : null,
+        assigned_to_id: form.assigned_to_id ? parseInt(form.assigned_to_id) : null,
+        priority: form.priority,
+        estimated_minutes: form.estimated_minutes ? parseInt(form.estimated_minutes) : null,
+        due_date: form.due_date || null,
+      })
+      toast.success('Tarea creada')
+      onClose()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al crear tarea')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+          <h2 className="font-semibold text-white flex items-center gap-2">
+            <ListTodo size={15} className="text-amber-400" /> Tarea rápida
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-200"><X size={16} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-5 space-y-3">
+          <div>
+            <label className="label">Título *</label>
+            <input
+              value={form.title}
+              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+              className="input"
+              placeholder="¿Qué hay que hacer?"
+              autoFocus
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Prioridad</label>
+              <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))} className="input">
+                <option value="baja">Baja</option>
+                <option value="media">Media</option>
+                <option value="alta">Alta</option>
+                <option value="urgente">Urgente</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Vencimiento</label>
+              <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} className="input" />
+            </div>
+          </div>
+          {businesses.length > 0 && (
+            <div>
+              <label className="label">Empresa</label>
+              <select value={form.business_id} onChange={e => setForm(f => ({ ...f, business_id: e.target.value }))} className="input">
+                <option value="">Sin empresa</option>
+                {businesses.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+          )}
+          {users.length > 0 && (
+            <div>
+              <label className="label">Asignar a</label>
+              <select value={form.assigned_to_id} onChange={e => setForm(f => ({ ...f, assigned_to_id: e.target.value }))} className="input">
+                <option value="">Sin asignar</option>
+                {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+              </select>
+            </div>
+          )}
+          <div>
+            <label className="label">Tiempo estimado (min)</label>
+            <input
+              type="number" min="1"
+              value={form.estimated_minutes}
+              onChange={e => setForm(f => ({ ...f, estimated_minutes: e.target.value }))}
+              className="input" placeholder="Ej: 30"
+            />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancelar</button>
+            <button type="submit" disabled={saving} className="btn-primary flex-1">
+              {saving ? 'Creando...' : 'Crear tarea'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── QuickVoiceNoteModal ──────────────────────────────────────────────────────
+
+function QuickVoiceNoteModal({ onClose }) {
+  const [recording, setRecording] = useState(false)
+  const [duration, setDuration] = useState(0)
+  const [transcript, setTranscript] = useState('')
+  const [title, setTitle] = useState('')
+  const [transcribing, setTranscribing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const mrRef = useRef(null)
+  const chunksRef = useRef([])
+  const timerRef = useRef(null)
+
+  useEffect(() => () => {
+    clearInterval(timerRef.current)
+    if (mrRef.current?.state === 'recording') mrRef.current.stop()
+  }, [])
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
+      chunksRef.current = []
+      mrRef.current = new MediaRecorder(stream, { mimeType: mimeType || undefined })
+      mrRef.current.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+      mrRef.current.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop())
+        clearInterval(timerRef.current)
+        const blob = new Blob(chunksRef.current, { type: mimeType || 'audio/webm' })
+        setTranscribing(true)
+        try {
+          const formData = new FormData()
+          formData.append('file', blob, 'note.webm')
+          const { default: api } = await import('../../services/api')
+          const res = await api.post('/voice/transcribe-quick', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 30000,
+          })
+          const text = res.data?.transcript || res.data?.text || ''
+          setTranscript(text)
+          if (!title && text) setTitle(text.slice(0, 60))
+        } catch {
+          toast.error('No se pudo transcribir el audio')
+        } finally {
+          setTranscribing(false)
+        }
+      }
+      mrRef.current.start(500)
+      setRecording(true)
+      setDuration(0)
+      timerRef.current = setInterval(() => setDuration(d => d + 1), 1000)
+    } catch {
+      toast.error('No se pudo acceder al micrófono')
+    }
+  }, [title])
+
+  const stopRecording = useCallback(() => {
+    if (mrRef.current?.state === 'recording') mrRef.current.stop()
+    setRecording(false)
+  }, [])
+
+  const handleSave = async () => {
+    if (!transcript.trim()) return toast.error('La transcripción está vacía')
+    setSaving(true)
+    try {
+      await voiceNotesAPI.create({
+        transcript: transcript.trim(),
+        title: title.trim() || transcript.slice(0, 60),
+        priority: 'media',
+        status: 'pendiente',
+      })
+      toast.success('Nota de voz guardada')
+      onClose()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al guardar nota')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+          <h2 className="font-semibold text-white flex items-center gap-2">
+            <Mic size={15} className="text-violet-400" /> Nota de voz rápida
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-200"><X size={16} /></button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Record button */}
+          <div className="flex flex-col items-center gap-3">
+            <button
+              onClick={recording ? stopRecording : startRecording}
+              disabled={transcribing}
+              className={clsx(
+                'w-16 h-16 rounded-full flex items-center justify-center transition-all active:scale-95',
+                recording
+                  ? 'bg-red-600 hover:bg-red-700 shadow-lg shadow-red-600/40 animate-pulse'
+                  : 'bg-gradient-to-br from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 shadow-lg shadow-violet-600/30'
+              )}
+            >
+              {recording ? <span className="w-5 h-5 bg-white rounded-sm" /> : <Mic size={24} className="text-white" />}
+            </button>
+            {recording && (
+              <div className="flex items-center gap-2 text-red-400 text-sm">
+                <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+                {fmt(duration)}
+              </div>
+            )}
+            {transcribing && (
+              <p className="text-violet-400 text-sm animate-pulse">Transcribiendo...</p>
+            )}
+            {!recording && !transcribing && !transcript && (
+              <p className="text-slate-500 text-sm">Toca para grabar</p>
+            )}
+          </div>
+
+          {/* Transcript */}
+          {transcript && (
+            <>
+              <div>
+                <label className="label">Título</label>
+                <input
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  className="input text-sm"
+                  placeholder="Título de la nota..."
+                />
+              </div>
+              <div>
+                <label className="label">Transcripción</label>
+                <textarea
+                  value={transcript}
+                  onChange={e => setTranscript(e.target.value)}
+                  className="input h-24 resize-none text-sm"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={onClose} className="btn-secondary flex-1">Cancelar</button>
+                <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">
+                  {saving ? 'Guardando...' : 'Guardar nota'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {!transcript && !recording && !transcribing && (
+            <button onClick={onClose} className="btn-secondary w-full">Cerrar</button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Nav items ────────────────────────────────────────────────────────────────
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -31,6 +313,7 @@ const navItems = [
   { to: '/pomodoro', icon: Timer, label: 'Pomodoro' },
   { to: '/meetings', icon: Mic2, label: 'Reuniones' },
   { to: '/voice-notes', icon: Volume2, label: 'Notas de Voz' },
+  { to: '/quick-tasks', icon: ListTodo, label: 'Tareas Rápidas' },
 ]
 
 const adminItems = [
@@ -44,6 +327,9 @@ export default function MainLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [voicePanelOpen, setVoicePanelOpen] = useState(false)
   const [quickChatOpen, setQuickChatOpen] = useState(false)
+  const [fabOpen, setFabOpen] = useState(false)
+  const [quickVoiceOpen, setQuickVoiceOpen] = useState(false)
+  const [quickTaskOpen, setQuickTaskOpen] = useState(false)
   const { user, logout } = useAuthStore()
   const { isRunning, formatTime, sessionType } = usePomodoroStore()
   const navigate = useNavigate()
@@ -426,6 +712,55 @@ export default function MainLayout() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Floating Action Button (Speed Dial) ── */}
+      <div className="fixed bottom-24 right-4 lg:bottom-8 lg:right-6 z-40 flex flex-col items-end gap-2">
+        {/* Sub-buttons (shown when fabOpen) */}
+        {fabOpen && (
+          <>
+            {/* Quick Voice Note */}
+            <button
+              onClick={() => { setFabOpen(false); setQuickVoiceOpen(true) }}
+              className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-3 py-2 rounded-full shadow-lg transition-all animate-fade-in"
+            >
+              <Mic size={15} /> Nota de voz
+            </button>
+            {/* Quick Task */}
+            <button
+              onClick={() => { setFabOpen(false); setQuickTaskOpen(true) }}
+              className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium px-3 py-2 rounded-full shadow-lg transition-all animate-fade-in"
+            >
+              <ListTodo size={15} /> Tarea rápida
+            </button>
+          </>
+        )}
+        {/* Main FAB button */}
+        <button
+          onClick={() => setFabOpen(!fabOpen)}
+          className={clsx(
+            'w-12 h-12 rounded-full shadow-xl flex items-center justify-center transition-all active:scale-95',
+            fabOpen
+              ? 'bg-slate-700 rotate-45'
+              : 'bg-gradient-to-br from-amber-400 to-orange-500 shadow-amber-500/30'
+          )}
+          aria-label="Acceso rápido"
+        >
+          <Plus size={22} className="text-white" />
+        </button>
+      </div>
+
+      {/* Backdrop for FAB */}
+      {fabOpen && (
+        <div className="fixed inset-0 z-30" onClick={() => setFabOpen(false)} />
+      )}
+
+      {/* Quick modals from FAB */}
+      {quickTaskOpen && (
+        <QuickTaskCreateModal onClose={() => setQuickTaskOpen(false)} />
+      )}
+      {quickVoiceOpen && (
+        <QuickVoiceNoteModal onClose={() => setQuickVoiceOpen(false)} />
       )}
 
       {/* ── Voice AI Panel (chat + voz + reuniones) ── */}

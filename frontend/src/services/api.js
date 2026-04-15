@@ -385,3 +385,14 @@ export const voiceNotesAPI = {
   done: (id) => api.patch(`/voice-notes/${id}`, { is_done: true }),
   delete: (id) => api.delete(`/voice-notes/${id}`),
 }
+
+// ─── Quick Tasks ──────────────────────────────────────────────────────────────
+export const quickTasksAPI = {
+  list: (params) => api.get('/quick-tasks', { params }),
+  create: (data) => api.post('/quick-tasks', data),
+  update: (id, data) => api.patch(`/quick-tasks/${id}`, data),
+  delete: (id) => api.delete(`/quick-tasks/${id}`),
+  done: (id) => api.patch(`/quick-tasks/${id}`, { is_done: true }),
+  logTime: (id, minutes) => api.post(`/quick-tasks/${id}/log-time?minutes=${minutes}`),
+  dashboard: () => api.get('/quick-tasks/dashboard'),
+}

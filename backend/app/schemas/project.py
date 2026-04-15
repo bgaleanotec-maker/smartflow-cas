@@ -79,6 +79,7 @@ class ProjectResponse(BaseModel):
     is_private: bool
     color: str
     tags: Optional[str] = None
+    business_id: Optional[int] = None
     created_at: datetime
     leader: Optional[UserListResponse] = None
     members: List[UserListResponse] = []

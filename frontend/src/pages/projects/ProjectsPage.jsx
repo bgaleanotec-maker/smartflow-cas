@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { Plus, Search, FolderKanban, Calendar, Users, ChevronRight, X } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
-import { projectsAPI, usersAPI } from '../../services/api'
+import { projectsAPI, usersAPI, adminAPI } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import clsx from 'clsx'
 
@@ -15,8 +15,9 @@ const STATUS_LABELS = {
   cerrado: { label: 'Cerrado', color: 'bg-slate-800 text-slate-500' },
 }
 
-function ProjectCard({ project, onClick }) {
+function ProjectCard({ project, onClick, businesses }) {
   const st = STATUS_LABELS[project.status] || STATUS_LABELS.planificacion
+  const business = businesses?.find(b => b.id === project.business_id)
   return (
     <div
       onClick={onClick}
@@ -41,6 +42,19 @@ function ProjectCard({ project, onClick }) {
 
       <div className="flex items-center gap-3 flex-wrap">
         <span className={clsx('badge', st.color)}>{st.label}</span>
+
+        {business && (
+          <span
+            className="text-[10px] font-semibold px-1.5 py-0.5 rounded border"
+            style={{
+              color: business.color || '#6366f1',
+              borderColor: (business.color || '#6366f1') + '55',
+              backgroundColor: (business.color || '#6366f1') + '18',
+            }}
+          >
+            {business.name}
+          </span>
+        )}
 
         {project.due_date && (
           <span className="flex items-center gap-1 text-xs text-slate-500">
@@ -222,6 +236,7 @@ function CreateProjectModal({ onClose }) {
 export default function ProjectsPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [businessFilter, setBusinessFilter] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const navigate = useNavigate()
   const { user } = useAuthStore()
@@ -232,12 +247,21 @@ export default function ProjectsPage() {
     queryFn: () => projectsAPI.list({ search, status: statusFilter || undefined }).then(r => r.data),
   })
 
+  const { data: businesses } = useQuery({
+    queryKey: ['businesses'],
+    queryFn: () => adminAPI.businesses().then(r => Array.isArray(r.data) ? r.data : r.data?.items || []),
+  })
+
+  const filteredProjects = projects?.filter(p =>
+    !businessFilter || p.business_id === parseInt(businessFilter)
+  )
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Proyectos</h1>
-          <p className="text-slate-400 text-sm mt-0.5">{projects?.length ?? 0} proyectos</p>
+          <p className="text-slate-400 text-sm mt-0.5">{filteredProjects?.length ?? 0} proyectos</p>
         </div>
         {canCreate && (
           <button onClick={() => setShowCreate(true)} className="btn-primary">
@@ -245,6 +269,40 @@ export default function ProjectsPage() {
           </button>
         )}
       </div>
+
+      {/* Business tabs */}
+      {businesses && businesses.length > 0 && (
+        <div className="flex items-center gap-1 overflow-x-auto pb-1">
+          <button
+            onClick={() => setBusinessFilter('')}
+            className={clsx(
+              'flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
+              !businessFilter
+                ? 'bg-brand-600 text-white'
+                : 'bg-slate-800 text-slate-400 hover:text-slate-100 hover:bg-slate-700'
+            )}
+          >
+            Todos
+          </button>
+          {businesses.map(biz => (
+            <button
+              key={biz.id}
+              onClick={() => setBusinessFilter(String(biz.id))}
+              className={clsx(
+                'flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
+                businessFilter === String(biz.id)
+                  ? 'text-white'
+                  : 'bg-slate-800 text-slate-400 hover:text-slate-100 hover:bg-slate-700'
+              )}
+              style={businessFilter === String(biz.id) ? {
+                backgroundColor: biz.color || '#6366f1',
+              } : {}}
+            >
+              {biz.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-3 flex-wrap">
@@ -276,7 +334,7 @@ export default function ProjectsPage() {
             <div key={i} className="card animate-pulse h-40 bg-slate-900" />
           ))}
         </div>
-      ) : projects?.length === 0 ? (
+      ) : filteredProjects?.length === 0 ? (
         <div className="text-center py-16">
           <FolderKanban size={48} className="mx-auto mb-3 text-slate-700" />
           <p className="text-slate-400">No hay proyectos aún</p>
@@ -288,10 +346,11 @@ export default function ProjectsPage() {
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {projects?.map(p => (
+          {filteredProjects?.map(p => (
             <ProjectCard
               key={p.id}
               project={p}
+              businesses={businesses}
               onClick={() => navigate(`/projects/${p.id}`)}
             />
           ))}
