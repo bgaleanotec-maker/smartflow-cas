@@ -206,4 +206,19 @@ SERVICE_REGISTRY = {
             },
         ],
     },
+    "openai": {
+        "display_name": "OpenAI Whisper (Transcripción Premium 🎙️)",
+        "description": "Whisper-1 de OpenAI. La opción más confiable: $0.006/min, ~4000 min con $25 USD. Prioridad 1 en la cadena de transcripción.",
+        "icon": "Mic",
+        "fields": [
+            {
+                "key_name": "api_key",
+                "label": "API Key de OpenAI",
+                "field_type": "password",
+                "required": True,
+                "placeholder": "sk-svcacct-xxxxxxxxxxxxxxxx",
+                "help": "Obtén tu key en platform.openai.com → API Keys. Formato: sk-svcacct-... o sk-proj-...",
+            },
+        ],
+    },
 }

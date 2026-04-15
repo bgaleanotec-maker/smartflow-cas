@@ -433,6 +433,20 @@ async def test_integration(service_name: str, db: DB, admin: AdminUser):
                     }
                 return {"success": False, "message": f"Groq {resp.status_code}: verifica la API key en console.groq.com"}
 
+            elif service_name == "openai":
+                # Test OpenAI by listing models — validates the key
+                resp = await client.get(
+                    "https://api.openai.com/v1/models",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    timeout=8.0,
+                )
+                if resp.status_code == 200:
+                    return {
+                        "success": True,
+                        "message": "OpenAI conectado ✓ · Whisper-1 listo · $0.006/min · ~4000 min con $25 USD"
+                    }
+                return {"success": False, "message": f"OpenAI {resp.status_code}: verifica la API key en platform.openai.com"}
+
             return {"success": False, "message": "Test no implementado para este servicio"}
 
     except httpx.TimeoutException:
