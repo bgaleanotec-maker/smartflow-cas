@@ -157,15 +157,26 @@ export default function LoginPage() {
           <p className="text-xs text-slate-500">Chrome → menú (⋮) → "Agregar a pantalla de inicio"</p>
         </div>
 
-        <div className="text-center mt-6 space-y-2">
-          <a
-            href="/manual-smartflow.html"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-brand-400 hover:text-brand-300 underline"
-          >
-            Descargar Manual de Usuario (PDF)
-          </a>
+        <div className="text-center mt-6 space-y-3">
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            <a
+              href="/manual-smartflow.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-brand-400 hover:text-brand-300 underline"
+            >
+              📄 Manual de Usuario
+            </a>
+            <span className="text-slate-700 text-xs">·</span>
+            <a
+              href="/bpmn-docs.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-violet-400 hover:text-violet-300 underline"
+            >
+              🔷 Documentación BPMN 2.0
+            </a>
+          </div>
           <p className="text-xs text-slate-600">
             SmartFlow v2.0 · Tu cuenta es gestionada por el administrador
           </p>

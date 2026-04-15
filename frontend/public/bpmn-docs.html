@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmartFlow — Documentación BPMN 2.0</title>
+  <script src="https://unpkg.com/bpmn-js@17/dist/bpmn-viewer.development.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+
+    header {
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo {
+      width: 40px; height: 40px;
+      background: #6366f1;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 14px; color: #fff; flex-shrink: 0;
+    }
+    header h1 { font-size: 18px; font-weight: 700; color: #f1f5f9; }
+    header p { font-size: 12px; color: #64748b; }
+    .back-link {
+      margin-left: auto;
+      color: #6366f1; font-size: 13px; text-decoration: none;
+      padding: 6px 14px; border: 1px solid #4f46e5; border-radius: 8px;
+      transition: background 0.2s;
+    }
+    .back-link:hover { background: #4f46e510; }
+
+    .tabs {
+      display: flex; gap: 4px;
+      padding: 16px 24px 0;
+      overflow-x: auto;
+      border-bottom: 1px solid #1e293b;
+      background: #0f172a;
+      flex-wrap: nowrap;
+    }
+    .tab-btn {
+      padding: 8px 16px;
+      background: transparent;
+      border: none;
+      border-bottom: 3px solid transparent;
+      color: #64748b;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: all 0.2s;
+      border-radius: 6px 6px 0 0;
+    }
+    .tab-btn:hover { color: #94a3b8; background: #1e293b40; }
+    .tab-btn.active { color: #818cf8; border-bottom-color: #6366f1; }
+
+    .content { padding: 24px; }
+    .process-panel { display: none; }
+    .process-panel.active { display: block; }
+
+    .process-header {
+      margin-bottom: 20px;
+      padding: 16px 20px;
+      background: #1e293b;
+      border-radius: 12px;
+      border-left: 4px solid #6366f1;
+    }
+    .process-header h2 { font-size: 20px; font-weight: 700; color: #f1f5f9; margin-bottom: 4px; }
+    .process-header p { font-size: 13px; color: #94a3b8; line-height: 1.5; }
+    .process-meta { display: flex; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+    .meta-badge {
+      font-size: 11px; padding: 3px 10px;
+      border-radius: 20px;
+      background: #0f172a; color: #818cf8;
+      border: 1px solid #334155;
+    }
+
+    .diagram-container {
+      background: #fff;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #334155;
+      margin-bottom: 24px;
+    }
+    .diagram-canvas { width: 100%; height: 420px; }
+
+    .steps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+    .step-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .step-card .step-num {
+      width: 24px; height: 24px;
+      background: #6366f1;
+      border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: #fff;
+      margin-bottom: 8px;
+    }
+    .step-card h4 { font-size: 13px; font-weight: 600; color: #e2e8f0; margin-bottom: 4px; }
+    .step-card p { font-size: 12px; color: #64748b; line-height: 1.4; }
+    .step-card.actor-lider .step-num { background: #7c3aed; }
+    .step-card.actor-equipo .step-num { background: #0891b2; }
+    .step-card.actor-sistema .step-num { background: #059669; }
+    .step-card.actor-ia .step-num { background: #d97706; }
+    section-title { font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; display: block; }
+
+    .legend {
+      display: flex; gap: 20px; flex-wrap: wrap;
+      margin-bottom: 14px;
+      padding: 10px 14px;
+      background: #1e293b80;
+      border-radius: 8px;
+      border: 1px solid #334155;
+    }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #94a3b8; }
+    .legend-dot { width: 12px; height: 12px; border-radius: 50%; }
+    .legend-rect { width: 18px; height: 12px; border-radius: 3px; }
+
+    .error-msg { color: #f87171; font-size: 12px; padding: 8px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">SF</div>
+  <div>
+    <h1>SmartFlow — Documentación de Procesos</h1>
+    <p>BPMN 2.0 · Sistema de Gestión CAS/BO</p>
+  </div>
+  <a href="/login" class="back-link">← Iniciar sesión</a>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="showTab('auth')">🔐 Autenticación</button>
+  <button class="tab-btn" onclick="showTab('proyectos')">📁 Proyectos</button>
+  <button class="tab-btn" onclick="showTab('incidentes')">🚨 Incidentes</button>
+  <button class="tab-btn" onclick="showTab('voz')">🎙️ Notas de Voz</button>
+  <button class="tab-btn" onclick="showTab('reuniones')">🤝 Reuniones IA</button>
+  <button class="tab-btn" onclick="showTab('tareas')">⚡ Tareas Rápidas</button>
+  <button class="tab-btn" onclick="showTab('demandas')">📋 Demandas</button>
+</div>
+
+<div class="content">
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- AUTENTICACIÓN                                                  -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div class="process-panel active" id="panel-auth">
+    <div class="process-header">
+      <h2>🔐 Proceso de Autenticación y Control de Acceso</h2>
+      <p>Gestión del inicio de sesión, validación de credenciales, cambio de contraseña obligatorio y acceso al sistema SmartFlow según el rol del usuario.</p>
+      <div class="process-meta">
+        <span class="meta-badge">Actor: Usuario</span>
+        <span class="meta-badge">Actor: Sistema</span>
+        <span class="meta-badge">Trigger: Manual</span>
+        <span class="meta-badge">BPMN 2.0</span>
+      </div>
+    </div>
+
+    <div class="diagram-container">
+      <div id="canvas-auth" class="diagram-canvas"></div>
+    </div>
+
+    <section-title>Pasos del proceso</section-title>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <h4>Acceso a la plataforma</h4>
+        <p>El usuario navega a la URL de SmartFlow y accede al formulario de inicio de sesión.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <h4>Ingresar credenciales</h4>
+        <p>Se ingresan correo electrónico y contraseña. El correo es el identificador único en el sistema.</p>
+      </div>
+      <div class="step-card actor-sistema">
+        <div class="step-num">3</div>
+        <h4>Validación en servidor</h4>
+        <p>El servidor valida las credenciales contra la base de datos PostgreSQL. Devuelve JWT + refresh token si son correctas.</p>
+      </div>
+      <div class="step-card actor-sistema">
+        <div class="step-num">4</div>
+        <h4>Verificar must_change_password</h4>
+        <p>Si el admin creó la cuenta con contraseña temporal, el flag <em>must_change_password</em> obliga a cambiarla antes de continuar.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">5</div>
+        <h4>Cambio de contraseña (si aplica)</h4>
+        <p>El usuario establece una contraseña personal. El sistema actualiza el flag y emite nuevos tokens.</p>
+      </div>
+      <div class="step-card actor-sistema">
+        <div class="step-num">6</div>
+        <h4>Cargar Dashboard</h4>
+        <p>Se carga el perfil completo del usuario (rol, negocio principal, permisos). Se redirige al Dashboard personalizado.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- PROYECTOS                                                      -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div class="process-panel" id="panel-proyectos">
+    <div class="process-header">
+      <h2>📁 Proceso de Gestión de Proyectos</h2>
+      <p>Ciclo de vida completo de un proyecto: creación, planificación con épicas y sprints, ejecución mediante tablero Kanban/Backlog, seguimiento y cierre.</p>
+      <div class="process-meta">
+        <span class="meta-badge">Actor: Líder de Proyecto</span>
+        <span class="meta-badge">Actor: Miembro del Equipo</span>
+        <span class="meta-badge">Actor: Admin</span>
+        <span class="meta-badge">Trigger: Manual</span>
+      </div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#7c3aed"></div> Líder/Admin</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#0891b2"></div> Miembro del equipo</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#059669"></div> Sistema automático</div>
+    </div>
+
+    <div class="diagram-container">
+      <div id="canvas-proyectos" class="diagram-canvas"></div>
+    </div>
+
+    <section-title>Pasos del proceso</section-title>
+    <div class="steps-grid">
+      <div class="step-card actor-lider">
+        <div class="step-num">1</div>
+        <h4>Crear Proyecto</h4>
+        <p>El líder/admin crea el proyecto definiendo nombre, negocio (CAS/BO), descripción y fecha objetivo.</p>
+      </div>
+      <div class="step-card actor-lider">
+        <div class="step-num">2</div>
+        <h4>Definir equipo</h4>
+        <p>Se asignan miembros al proyecto. Cada miembro puede tener tareas asignadas dentro del proyecto.</p>
+      </div>
+      <div class="step-card actor-lider">
+        <div class="step-num">3</div>
+        <h4>Crear Épicas</h4>
+        <p>Se definen épicas que agrupan funcionalidades o áreas de trabajo. Cada épica tiene estado, prioridad y responsable.</p>
+      </div>
+      <div class="step-card actor-lider">
+        <div class="step-num">4</div>
+        <h4>Planificar Sprint</h4>
+        <p>Se crea un sprint con fechas de inicio/fin y objetivo. Las tareas se asignan al sprint desde el backlog.</p>
+      </div>
+      <div class="step-card actor-lider">
+        <div class="step-num">5</div>
+        <h4>Crear y asignar tareas</h4>
+        <p>Las tareas se crean con prioridad, story points, fecha límite y se asignan a miembros del equipo.</p>
+      </div>
+      <div class="step-card actor-equipo">
+        <div class="step-num">6</div>
+        <h4>Ejecutar tareas</h4>
+        <p>El miembro mueve las tareas en el tablero Kanban: Pendiente → En Progreso → Revisión → Completada.</p>
+      </div>
+      <div class="step-card actor-lider">
+        <div class="step-num">7</div>
+        <h4>Monitorear avance</h4>
+        <p>El líder revisa el tablero, backlog y métricas. Puede reasignar tareas o ajustar prioridades.</p>
+      </div>
+      <div class="step-card actor-lider">
+        <div class="step-num">8</div>
+        <h4>Cerrar Sprint / Proyecto</h4>
+        <p>Al completar el sprint se revisan las tareas pendientes. Al completar el proyecto se archiva o elimina.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- INCIDENTES                                                     -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div class="process-panel" id="panel-incidentes">
+    <div class="process-header">
+      <h2>🚨 Proceso de Gestión de Incidentes</h2>
+      <p>Reporte, investigación, resolución y cierre de incidentes operativos. Incluye escalamiento a Gestión de Demanda cuando el incidente supera la capacidad de resolución normal.</p>
+      <div class="process-meta">
+        <span class="meta-badge">Actor: Reporter</span>
+        <span class="meta-badge">Actor: Responsable</span>
+        <span class="meta-badge">Actor: Líder</span>
+        <span class="meta-badge">Trigger: Incidente detectado</span>
+      </div>
+    </div>
+
+    <div class="diagram-container">
+      <div id="canvas-incidentes" class="diagram-canvas"></div>
+    </div>
+
+    <section-title>Pasos del proceso</section-title>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <h4>Detectar y reportar incidente</h4>
+        <p>Cualquier usuario reporta el incidente indicando título, descripción, severidad (Bajo/Medio/Alto/Crítico) y negocio afectado.</p>
+      </div>
+      <div class="step-card actor-sistema">
+        <div class="step-num">2</div>
+        <h4>Asignación automática de número</h4>
+        <p>El sistema genera un número único INC-XXXX y asigna estado "Abierto" automáticamente.</p>
+      </div>
+      <div class="step-card actor-lider">
+        <div class="step-num">3</div>
+        <h4>Asignar responsable</h4>
+        <p>El líder asigna un responsable para investigar el incidente y lo mueve a "En Investigación".</p>
+      </div>
+      <div class="step-card actor-equipo">
+        <div class="step-num">4</div>
+        <h4>Investigar y documentar</h4>
+        <p>El responsable investiga, documenta la causa raíz y agrega comentarios al timeline del incidente.</p>
+      </div>
+      <div class="step-card actor-equipo">
+        <div class="step-num">5</div>
+        <h4>Resolver incidente</h4>
+        <p>Se documenta la solución aplicada, notas de resolución y se cambia el estado a "Resuelto".</p>
+      </div>
+      <div class="step-card actor-lider">
+        <div class="step-num">6</div>
+        <h4>Escalar a Demanda (si aplica)</h4>
+        <p>Si el incidente requiere un cambio mayor, se escala creando una Gestión de Demanda vinculada al incidente.</p>
+      </div>
+      <div class="step-card actor-lider">
+        <div class="step-num">7</div>
+        <h4>Cerrar incidente</h4>
+        <p>El líder verifica la solución y cierra el incidente. Queda en el historial con toda la trazabilidad.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- NOTAS DE VOZ                                                   -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div class="process-panel" id="panel-voz">
+    <div class="process-header">
+      <h2>🎙️ Proceso de Notas de Voz y Transcripción</h2>
+      <p>Captura de audio, transcripción automática mediante IA (OpenAI Whisper → Groq → Web Speech), revisión y asignación de la nota a proyecto/tarea.</p>
+      <div class="process-meta">
+        <span class="meta-badge">Actor: Usuario</span>
+        <span class="meta-badge">Actor: IA (Whisper)</span>
+        <span class="meta-badge">Trigger: Acción usuario</span>
+      </div>
+    </div>
+
+    <div class="diagram-container">
+      <div id="canvas-voz" class="diagram-canvas"></div>
+    </div>
+
+    <section-title>Pasos del proceso</section-title>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <h4>Iniciar grabación</h4>
+        <p>El usuario presiona el botón de micrófono (FAB flotante o módulo Notas de Voz). El navegador solicita permiso de micrófono.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <h4>Grabar audio</h4>
+        <p>Se graba el audio usando la API MediaRecorder del navegador. El usuario puede ver la duración en tiempo real.</p>
+      </div>
+      <div class="step-card actor-ia">
+        <div class="step-num">3</div>
+        <h4>Transcripción OpenAI Whisper</h4>
+        <p>El audio se envía al servidor que llama a OpenAI whisper-1 ($0.006/min). Si falla, se usa Groq como fallback gratuito.</p>
+      </div>
+      <div class="step-card actor-ia">
+        <div class="step-num">4</div>
+        <h4>Fallback Web Speech API</h4>
+        <p>Si ambos servicios cloud fallan, se activa la Web Speech API del navegador para dictado en tiempo real (es-CO).</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">5</div>
+        <h4>Revisar transcripción</h4>
+        <p>El usuario revisa y edita el texto transcrito antes de guardar. Puede modificar el título generado automáticamente.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">6</div>
+        <h4>Asignar a proyecto/tarea</h4>
+        <p>Opcionalmente se asocia la nota a un proyecto y/o tarea existente. Si no se asigna, queda en el Inbox.</p>
+      </div>
+      <div class="step-card actor-sistema">
+        <div class="step-num">7</div>
+        <h4>Guardar nota</h4>
+        <p>La nota se guarda con prioridad, fecha de vencimiento y estado. Aparece en la pestaña correspondiente (Inbox / Mis tareas / Delegué).</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- REUNIONES                                                      -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div class="process-panel" id="panel-reuniones">
+    <div class="process-header">
+      <h2>🤝 Proceso de Reuniones con IA (ARIA)</h2>
+      <p>Creación de reunión, grabación con transcripción en tiempo real, generación de resumen con IA Gemini, actas de decisiones y acción items automáticos.</p>
+      <div class="process-meta">
+        <span class="meta-badge">Actor: Organizador</span>
+        <span class="meta-badge">Actor: Participantes</span>
+        <span class="meta-badge">Actor: ARIA (IA)</span>
+        <span class="meta-badge">Trigger: Reunión programada</span>
+      </div>
+    </div>
+
+    <div class="diagram-container">
+      <div id="canvas-reuniones" class="diagram-canvas"></div>
+    </div>
+
+    <section-title>Pasos del proceso</section-title>
+    <div class="steps-grid">
+      <div class="step-card actor-lider">
+        <div class="step-num">1</div>
+        <h4>Crear sesión de reunión</h4>
+        <p>El organizador crea una reunión indicando tipo (interna, cliente, revisión), negocio y opcionalmente vinculando a un BP.</p>
+      </div>
+      <div class="step-card actor-lider">
+        <div class="step-num">2</div>
+        <h4>Compartir código de sesión</h4>
+        <p>El sistema genera un código único (6 caracteres). Los participantes pueden unirse con ese código desde sus dispositivos.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <h4>Iniciar grabación</h4>
+        <p>El organizador inicia la grabación. El audio se captura en chunks de 5 segundos y se envía al servidor automáticamente.</p>
+      </div>
+      <div class="step-card actor-ia">
+        <div class="step-num">4</div>
+        <h4>Transcripción en tiempo real</h4>
+        <p>Cada chunk es transcrito por OpenAI Whisper → Groq → local. El texto aparece en pantalla en tiempo real con identificación de hablante.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">5</div>
+        <h4>Finalizar reunión</h4>
+        <p>El organizador detiene la grabación y presiona "Finalizar". Se consolida la transcripción completa.</p>
+      </div>
+      <div class="step-card actor-ia">
+        <div class="step-num">6</div>
+        <h4>Resumen IA con Gemini</h4>
+        <p>ARIA procesa la transcripción completa y genera: resumen ejecutivo, decisiones tomadas, action items y temas clave.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">7</div>
+        <h4>Revisar y usar actas</h4>
+        <p>El equipo revisa el resumen generado, puede crear tareas directamente desde los action items y compartir las actas.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- TAREAS RÁPIDAS                                                 -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div class="process-panel" id="panel-tareas">
+    <div class="process-header">
+      <h2>⚡ Proceso de Tareas Rápidas</h2>
+      <p>Gestión de tareas operativas no asociadas a proyectos. Vinculadas a negocios (CAS/BO), con seguimiento de tiempo mediante Pomodoro y visibilidad para el líder.</p>
+      <div class="process-meta">
+        <span class="meta-badge">Actor: Usuario</span>
+        <span class="meta-badge">Actor: Líder (vista)</span>
+        <span class="meta-badge">Trigger: Acción usuario / FAB</span>
+      </div>
+    </div>
+
+    <div class="diagram-container">
+      <div id="canvas-tareas" class="diagram-canvas"></div>
+    </div>
+
+    <section-title>Pasos del proceso</section-title>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <h4>Crear tarea rápida</h4>
+        <p>Desde el FAB flotante o el módulo de Tareas Rápidas. Se define título, negocio, prioridad, tiempo estimado y fecha límite.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <h4>Asignar o delegar</h4>
+        <p>La tarea puede ser propia o delegada a otro miembro del equipo. Si se delega, el destinatario es notificado.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <h4>Iniciar Pomodoro</h4>
+        <p>El usuario activa el temporizador Pomodoro (25 min trabajo / 5 min descanso) directamente desde la tarjeta de la tarea.</p>
+      </div>
+      <div class="step-card actor-sistema">
+        <div class="step-num">4</div>
+        <h4>Registrar tiempo</h4>
+        <p>El tiempo trabajado se acumula automáticamente. Se puede ver el progreso vs. tiempo estimado en la barra de progreso.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">5</div>
+        <h4>Actualizar estado</h4>
+        <p>El usuario puede cambiar el estado de la tarea (pendiente → en progreso → completada) en cualquier momento.</p>
+      </div>
+      <div class="step-card actor-lider">
+        <div class="step-num">6</div>
+        <h4>Vista del líder</h4>
+        <p>El líder/admin ve todas las tareas rápidas agrupadas por negocio, con indicadores de vencidas y urgentes.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- DEMANDAS                                                       -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div class="process-panel" id="panel-demandas">
+    <div class="process-header">
+      <h2>📋 Proceso de Gestión de Demandas</h2>
+      <p>Ciclo de vida de solicitudes de cambio, nuevas funcionalidades o iniciativas estratégicas. Incluye análisis de situación, aprobación, ejecución y cierre formal.</p>
+      <div class="process-meta">
+        <span class="meta-badge">Actor: Solicitante</span>
+        <span class="meta-badge">Actor: Líder / Directivo</span>
+        <span class="meta-badge">Actor: Equipo ejecutor</span>
+        <span class="meta-badge">Trigger: Necesidad identificada</span>
+      </div>
+    </div>
+
+    <div class="diagram-container">
+      <div id="canvas-demandas" class="diagram-canvas"></div>
+    </div>
+
+    <section-title>Pasos del proceso</section-title>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <h4>Crear demanda</h4>
+        <p>El solicitante documenta la situación actual, situación deseada y justificación. Opcionalmente vinculada a un incidente escalado.</p>
+      </div>
+      <div class="step-card actor-lider">
+        <div class="step-num">2</div>
+        <h4>Análisis y revisión</h4>
+        <p>El líder/directivo revisa la demanda, valida viabilidad, impacto y alineación estratégica.</p>
+      </div>
+      <div class="step-card actor-lider">
+        <div class="step-num">3</div>
+        <h4>Decisión: Aprobar / Rechazar</h4>
+        <p>Se aprueba con recursos asignados o se rechaza documentando el motivo. El solicitante es notificado.</p>
+      </div>
+      <div class="step-card actor-equipo">
+        <div class="step-num">4</div>
+        <h4>Planificación de ejecución</h4>
+        <p>Si se aprueba, se asignan responsables, se definen hitos y se vincula a un proyecto si corresponde.</p>
+      </div>
+      <div class="step-card actor-equipo">
+        <div class="step-num">5</div>
+        <h4>Ejecución y seguimiento</h4>
+        <p>El equipo ejecuta la demanda. Se documentan avances, cambios de estado y actualizaciones periódicas.</p>
+      </div>
+      <div class="step-card actor-lider">
+        <div class="step-num">6</div>
+        <h4>Cierre y validación</h4>
+        <p>El líder valida que la situación deseada fue alcanzada y cierra formalmente la demanda con acta de cierre.</p>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /content -->
+
+<script>
+// ─── Tab navigation ────────────────────────────────────────────────────────────
+function showTab(id) {
+  document.querySelectorAll('.process-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  event.target.classList.add('active');
+  // Lazy-render BPMN if not already done
+  if (!renderedDiagrams.has(id)) {
+    setTimeout(() => renderDiagram(id), 50);
+  }
+}
+
+const renderedDiagrams = new Set();
+
+// ─── BPMN XML Definitions ──────────────────────────────────────────────────────
+
+const BPMN = {};
+
+// ── 1. AUTENTICACIÓN ──────────────────────────────────────────────────────────
+BPMN['auth'] = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  id="auth_def" targetNamespace="http://smartflow.io/bpmn">
+  <bpmn:process id="auth_process" name="Autenticación" isExecutable="false">
+    <bpmn:startEvent id="start1" name="Usuario accede a SmartFlow">
+      <bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="t1" name="Ingresar credenciales (email + contraseña)">
+      <bpmn:incoming>f1</bpmn:incoming><bpmn:incoming>f_err</bpmn:incoming>
+      <bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="t2" name="Servidor valida credenciales (JWT)">
+      <bpmn:incoming>f2</bpmn:incoming>
+      <bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="gw1" name="¿Credenciales válidas?">
+      <bpmn:incoming>f3</bpmn:incoming>
+      <bpmn:outgoing>f4</bpmn:outgoing>
+      <bpmn:outgoing>f5</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="t3" name="Mostrar error de autenticación">
+      <bpmn:incoming>f5</bpmn:incoming>
+      <bpmn:outgoing>f_err</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="t4" name="Cargar perfil y permisos del usuario">
+      <bpmn:incoming>f4</bpmn:incoming>
+      <bpmn:outgoing>f6</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="gw2" name="¿Debe cambiar contraseña?">
+      <bpmn:incoming>f6</bpmn:incoming>
+      <bpmn:outgoing>f7</bpmn:outgoing>
+      <bpmn:outgoing>f8</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="t5" name="Cambiar contraseña obligatoria">
+      <bpmn:incoming>f7</bpmn:incoming>
+      <bpmn:outgoing>f9</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="end1" name="Acceso al Dashboard (contraseña cambiada)">
+      <bpmn:incoming>f9</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="end2" name="Acceso al Dashboard">
+      <bpmn:incoming>f8</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="f1" sourceRef="start1" targetRef="t1"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t1" targetRef="t2"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="t2" targetRef="gw1"/>
+    <bpmn:sequenceFlow id="f4" name="Sí" sourceRef="gw1" targetRef="t4"/>
+    <bpmn:sequenceFlow id="f5" name="No" sourceRef="gw1" targetRef="t3"/>
+    <bpmn:sequenceFlow id="f_err" sourceRef="t3" targetRef="t1"/>
+    <bpmn:sequenceFlow id="f6" sourceRef="t4" targetRef="gw2"/>
+    <bpmn:sequenceFlow id="f7" name="Sí" sourceRef="gw2" targetRef="t5"/>
+    <bpmn:sequenceFlow id="f8" name="No" sourceRef="gw2" targetRef="end2"/>
+    <bpmn:sequenceFlow id="f9" sourceRef="t5" targetRef="end1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="d1">
+    <bpmndi:BPMNPlane id="p1" bpmnElement="auth_process">
+      <bpmndi:BPMNShape id="s_start1" bpmnElement="start1"><dc:Bounds x="82" y="162" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="56" y="205" width="88" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_t1" bpmnElement="t1"><dc:Bounds x="170" y="140" width="140" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_t2" bpmnElement="t2"><dc:Bounds x="360" y="140" width="140" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_gw1" bpmnElement="gw1" isMarkerVisible="true"><dc:Bounds x="550" y="155" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="534" y="212" width="82" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_t3" bpmnElement="t3"><dc:Bounds x="530" y="290" width="140" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_t4" bpmnElement="t4"><dc:Bounds x="660" y="140" width="140" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_gw2" bpmnElement="gw2" isMarkerVisible="true"><dc:Bounds x="850" y="155" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="834" y="212" width="82" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_t5" bpmnElement="t5"><dc:Bounds x="960" y="70" width="140" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_end1" bpmnElement="end1"><dc:Bounds x="1160" y="88" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="1136" y="131" width="84" height="40"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_end2" bpmnElement="end2"><dc:Bounds x="1160" y="162" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="1143" y="205" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="e_f1" bpmnElement="f1"><di:waypoint x="118" y="180"/><di:waypoint x="170" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f2" bpmnElement="f2"><di:waypoint x="310" y="180"/><di:waypoint x="360" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f3" bpmnElement="f3"><di:waypoint x="500" y="180"/><di:waypoint x="550" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f4" bpmnElement="f4"><di:waypoint x="600" y="180"/><di:waypoint x="660" y="180"/><bpmndi:BPMNLabel><dc:Bounds x="617" y="162" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f5" bpmnElement="f5"><di:waypoint x="575" y="205"/><di:waypoint x="575" y="290"/><bpmndi:BPMNLabel><dc:Bounds x="581" y="244" width="18" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_ferr" bpmnElement="f_err"><di:waypoint x="530" y="330"/><di:waypoint x="240" y="330"/><di:waypoint x="240" y="220"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f6" bpmnElement="f6"><di:waypoint x="800" y="180"/><di:waypoint x="850" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f7" bpmnElement="f7"><di:waypoint x="875" y="155"/><di:waypoint x="875" y="110"/><di:waypoint x="960" y="110"/><bpmndi:BPMNLabel><dc:Bounds x="881" y="120" width="20" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f8" bpmnElement="f8"><di:waypoint x="900" y="180"/><di:waypoint x="1160" y="180"/><bpmndi:BPMNLabel><dc:Bounds x="1018" y="162" width="18" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f9" bpmnElement="f9"><di:waypoint x="1100" y="110"/><di:waypoint x="1160" y="106"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+// ── 2. PROYECTOS ──────────────────────────────────────────────────────────────
+BPMN['proyectos'] = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  id="proy_def" targetNamespace="http://smartflow.io/bpmn">
+  <bpmn:process id="proy_process" name="Gestión de Proyectos" isExecutable="false">
+    <bpmn:laneSet id="ls1">
+      <bpmn:lane id="lane_lider" name="Líder / Admin">
+        <bpmn:flowNodeRef>ps</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>p1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>p2</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>p3</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>p4</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>p5</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>pgw1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>pgw2</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>p8</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>pend</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="lane_equipo" name="Miembro del Equipo">
+        <bpmn:flowNodeRef>p6</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>p7</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="ps" name="Inicio del proyecto"><bpmn:outgoing>pf1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="p1" name="Crear proyecto (nombre, negocio, fechas)"><bpmn:incoming>pf1</bpmn:incoming><bpmn:outgoing>pf2</bpmn:outgoing></bpmn:userTask>
+    <bpmn:userTask id="p2" name="Definir equipo y roles"><bpmn:incoming>pf2</bpmn:incoming><bpmn:outgoing>pf3</bpmn:outgoing></bpmn:userTask>
+    <bpmn:userTask id="p3" name="Crear épicas y backlog"><bpmn:incoming>pf3</bpmn:incoming><bpmn:outgoing>pf4</bpmn:outgoing></bpmn:userTask>
+    <bpmn:userTask id="p4" name="Planificar sprint (fechas, objetivo)"><bpmn:incoming>pf4</bpmn:incoming><bpmn:incoming>pf_loop</bpmn:incoming><bpmn:outgoing>pf5</bpmn:outgoing></bpmn:userTask>
+    <bpmn:userTask id="p5" name="Crear y asignar tareas al sprint"><bpmn:incoming>pf5</bpmn:incoming><bpmn:outgoing>pf6</bpmn:outgoing></bpmn:userTask>
+    <bpmn:userTask id="p6" name="Ejecutar tareas (Kanban)"><bpmn:incoming>pf6</bpmn:incoming><bpmn:outgoing>pf7</bpmn:outgoing></bpmn:userTask>
+    <bpmn:userTask id="p7" name="Actualizar estado de tareas"><bpmn:incoming>pf7</bpmn:incoming><bpmn:outgoing>pf8</bpmn:outgoing></bpmn:userTask>
+    <bpmn:userTask id="p8" name="Monitorear avance del sprint"><bpmn:incoming>pf8</bpmn:incoming><bpmn:outgoing>pf9</bpmn:outgoing></bpmn:userTask>
+    <bpmn:exclusiveGateway id="pgw1" name="¿Sprint completo?"><bpmn:incoming>pf9</bpmn:incoming><bpmn:outgoing>pf10</bpmn:outgoing><bpmn:outgoing>pf_loop</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="pgw2" name="¿Proyecto completo?"><bpmn:incoming>pf10</bpmn:incoming><bpmn:outgoing>pf11</bpmn:outgoing><bpmn:outgoing>pf12</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:endEvent id="pend" name="Proyecto cerrado"><bpmn:incoming>pf11</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="pf1" sourceRef="ps" targetRef="p1"/>
+    <bpmn:sequenceFlow id="pf2" sourceRef="p1" targetRef="p2"/>
+    <bpmn:sequenceFlow id="pf3" sourceRef="p2" targetRef="p3"/>
+    <bpmn:sequenceFlow id="pf4" sourceRef="p3" targetRef="p4"/>
+    <bpmn:sequenceFlow id="pf5" sourceRef="p4" targetRef="p5"/>
+    <bpmn:sequenceFlow id="pf6" sourceRef="p5" targetRef="p6"/>
+    <bpmn:sequenceFlow id="pf7" sourceRef="p6" targetRef="p7"/>
+    <bpmn:sequenceFlow id="pf8" sourceRef="p7" targetRef="p8"/>
+    <bpmn:sequenceFlow id="pf9" sourceRef="p8" targetRef="pgw1"/>
+    <bpmn:sequenceFlow id="pf10" name="Sí" sourceRef="pgw1" targetRef="pgw2"/>
+    <bpmn:sequenceFlow id="pf_loop" name="No" sourceRef="pgw1" targetRef="p4"/>
+    <bpmn:sequenceFlow id="pf11" name="Sí" sourceRef="pgw2" targetRef="pend"/>
+    <bpmn:sequenceFlow id="pf12" name="Otro sprint" sourceRef="pgw2" targetRef="p4"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="pd1">
+    <bpmndi:BPMNPlane id="pp1" bpmnElement="proy_process">
+      <bpmndi:BPMNShape id="sh_ll" bpmnElement="lane_lider" isHorizontal="true"><dc:Bounds x="30" y="30" width="1260" height="190"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sh_le" bpmnElement="lane_equipo" isHorizontal="true"><dc:Bounds x="30" y="220" width="1260" height="160"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sh_ps" bpmnElement="ps"><dc:Bounds x="82" y="105" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sh_p1" bpmnElement="p1"><dc:Bounds x="170" y="83" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sh_p2" bpmnElement="p2"><dc:Bounds x="350" y="83" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sh_p3" bpmnElement="p3"><dc:Bounds x="530" y="83" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sh_p4" bpmnElement="p4"><dc:Bounds x="710" y="83" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sh_p5" bpmnElement="p5"><dc:Bounds x="710" y="260" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sh_p6" bpmnElement="p6"><dc:Bounds x="890" y="260" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sh_p7" bpmnElement="p7"><dc:Bounds x="1060" y="260" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sh_p8" bpmnElement="p8"><dc:Bounds x="890" y="83" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sh_pgw1" bpmnElement="pgw1" isMarkerVisible="true"><dc:Bounds x="1060" y="98" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sh_pgw2" bpmnElement="pgw2" isMarkerVisible="true"><dc:Bounds x="1170" y="98" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sh_pend" bpmnElement="pend"><dc:Bounds x="1264" y="105" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="ep_f1" bpmnElement="pf1"><di:waypoint x="118" y="123"/><di:waypoint x="170" y="123"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ep_f2" bpmnElement="pf2"><di:waypoint x="300" y="123"/><di:waypoint x="350" y="123"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ep_f3" bpmnElement="pf3"><di:waypoint x="480" y="123"/><di:waypoint x="530" y="123"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ep_f4" bpmnElement="pf4"><di:waypoint x="660" y="123"/><di:waypoint x="710" y="123"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ep_f5" bpmnElement="pf5"><di:waypoint x="775" y="163"/><di:waypoint x="775" y="260"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ep_f6" bpmnElement="pf6"><di:waypoint x="840" y="300"/><di:waypoint x="890" y="300"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ep_f7" bpmnElement="pf7"><di:waypoint x="1020" y="300"/><di:waypoint x="1060" y="300"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ep_f8" bpmnElement="pf8"><di:waypoint x="1125" y="260"/><di:waypoint x="1125" y="163"/><di:waypoint x="955" y="163"/><di:waypoint x="955" y="163"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ep_f9" bpmnElement="pf9"><di:waypoint x="1020" y="123"/><di:waypoint x="1060" y="123"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ep_f10" bpmnElement="pf10"><di:waypoint x="1110" y="123"/><di:waypoint x="1170" y="123"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ep_floop" bpmnElement="pf_loop"><di:waypoint x="1085" y="98"/><di:waypoint x="1085" y="55"/><di:waypoint x="775" y="55"/><di:waypoint x="775" y="83"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ep_f11" bpmnElement="pf11"><di:waypoint x="1220" y="123"/><di:waypoint x="1264" y="123"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ep_f12" bpmnElement="pf12"><di:waypoint x="1195" y="98"/><di:waypoint x="1195" y="40"/><di:waypoint x="775" y="40"/><di:waypoint x="775" y="83"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+// ── 3. INCIDENTES ────────────────────────────────────────────────────────────
+BPMN['incidentes'] = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  id="inc_def" targetNamespace="http://smartflow.io/bpmn">
+  <bpmn:process id="inc_process" name="Gestión de Incidentes" isExecutable="false">
+    <bpmn:startEvent id="is" name="Incidente detectado"><bpmn:outgoing>if1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="i1" name="Reportar incidente (título, severidad, negocio)"><bpmn:incoming>if1</bpmn:incoming><bpmn:outgoing>if2</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="i2" name="Sistema asigna INC-XXXX y estado Abierto"><bpmn:incoming>if2</bpmn:incoming><bpmn:outgoing>if3</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:userTask id="i3" name="Líder asigna responsable e inicia investigación"><bpmn:incoming>if3</bpmn:incoming><bpmn:outgoing>if4</bpmn:outgoing></bpmn:userTask>
+    <bpmn:userTask id="i4" name="Responsable investiga y documenta causa raíz"><bpmn:incoming>if4</bpmn:incoming><bpmn:incoming>if_no</bpmn:incoming><bpmn:outgoing>if5</bpmn:outgoing></bpmn:userTask>
+    <bpmn:exclusiveGateway id="igw1" name="¿Resuelto?"><bpmn:incoming>if5</bpmn:incoming><bpmn:outgoing>if6</bpmn:outgoing><bpmn:outgoing>if7</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="igw2" name="¿Escalar?"><bpmn:incoming>if7</bpmn:incoming><bpmn:outgoing>if8</bpmn:outgoing><bpmn:outgoing>if_no</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:userTask id="i5" name="Documentar solución y notas de resolución"><bpmn:incoming>if6</bpmn:incoming><bpmn:outgoing>if9</bpmn:outgoing></bpmn:userTask>
+    <bpmn:userTask id="i6" name="Crear Gestión de Demanda vinculada"><bpmn:incoming>if8</bpmn:incoming><bpmn:outgoing>if10</bpmn:outgoing></bpmn:userTask>
+    <bpmn:userTask id="i7" name="Líder valida y cierra el incidente"><bpmn:incoming>if9</bpmn:incoming><bpmn:outgoing>if11</bpmn:outgoing></bpmn:userTask>
+    <bpmn:endEvent id="iend1" name="Incidente cerrado"><bpmn:incoming>if11</bpmn:incoming></bpmn:endEvent>
+    <bpmn:endEvent id="iend2" name="Demanda creada"><bpmn:incoming>if10</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="if1" sourceRef="is" targetRef="i1"/>
+    <bpmn:sequenceFlow id="if2" sourceRef="i1" targetRef="i2"/>
+    <bpmn:sequenceFlow id="if3" sourceRef="i2" targetRef="i3"/>
+    <bpmn:sequenceFlow id="if4" sourceRef="i3" targetRef="i4"/>
+    <bpmn:sequenceFlow id="if5" sourceRef="i4" targetRef="igw1"/>
+    <bpmn:sequenceFlow id="if6" name="Sí" sourceRef="igw1" targetRef="i5"/>
+    <bpmn:sequenceFlow id="if7" name="No" sourceRef="igw1" targetRef="igw2"/>
+    <bpmn:sequenceFlow id="if8" name="Sí" sourceRef="igw2" targetRef="i6"/>
+    <bpmn:sequenceFlow id="if_no" name="No" sourceRef="igw2" targetRef="i4"/>
+    <bpmn:sequenceFlow id="if9" sourceRef="i5" targetRef="i7"/>
+    <bpmn:sequenceFlow id="if10" sourceRef="i6" targetRef="iend2"/>
+    <bpmn:sequenceFlow id="if11" sourceRef="i7" targetRef="iend1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="id1">
+    <bpmndi:BPMNPlane id="ip1" bpmnElement="inc_process">
+      <bpmndi:BPMNShape id="si_s" bpmnElement="is"><dc:Bounds x="62" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="si_1" bpmnElement="i1"><dc:Bounds x="150" y="160" width="140" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="si_2" bpmnElement="i2"><dc:Bounds x="340" y="160" width="140" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="si_3" bpmnElement="i3"><dc:Bounds x="530" y="160" width="140" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="si_4" bpmnElement="i4"><dc:Bounds x="720" y="160" width="140" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="si_gw1" bpmnElement="igw1" isMarkerVisible="true"><dc:Bounds x="910" y="175" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="si_gw2" bpmnElement="igw2" isMarkerVisible="true"><dc:Bounds x="910" y="310" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="si_5" bpmnElement="i5"><dc:Bounds x="1020" y="160" width="140" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="si_6" bpmnElement="i6"><dc:Bounds x="1020" y="310" width="140" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="si_7" bpmnElement="i7"><dc:Bounds x="1220" y="160" width="140" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="si_e1" bpmnElement="iend1"><dc:Bounds x="1414" y="178" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="si_e2" bpmnElement="iend2"><dc:Bounds x="1220" y="328" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="ei_1" bpmnElement="if1"><di:waypoint x="98" y="200"/><di:waypoint x="150" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ei_2" bpmnElement="if2"><di:waypoint x="290" y="200"/><di:waypoint x="340" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ei_3" bpmnElement="if3"><di:waypoint x="480" y="200"/><di:waypoint x="530" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ei_4" bpmnElement="if4"><di:waypoint x="670" y="200"/><di:waypoint x="720" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ei_5" bpmnElement="if5"><di:waypoint x="860" y="200"/><di:waypoint x="910" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ei_6" bpmnElement="if6"><di:waypoint x="960" y="200"/><di:waypoint x="1020" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ei_7" bpmnElement="if7"><di:waypoint x="935" y="225"/><di:waypoint x="935" y="310"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ei_8" bpmnElement="if8"><di:waypoint x="960" y="335"/><di:waypoint x="1020" y="350"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ei_no" bpmnElement="if_no"><di:waypoint x="910" y="335"/><di:waypoint x="790" y="335"/><di:waypoint x="790" y="240"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ei_9" bpmnElement="if9"><di:waypoint x="1160" y="200"/><di:waypoint x="1220" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ei_10" bpmnElement="if10"><di:waypoint x="1160" y="350"/><di:waypoint x="1220" y="346"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ei_11" bpmnElement="if11"><di:waypoint x="1360" y="200"/><di:waypoint x="1414" y="196"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+// ── 4. NOTAS DE VOZ ──────────────────────────────────────────────────────────
+BPMN['voz'] = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  id="voz_def" targetNamespace="http://smartflow.io/bpmn">
+  <bpmn:process id="voz_process" name="Notas de Voz" isExecutable="false">
+    <bpmn:startEvent id="vs" name="Usuario presiona micrófono"><bpmn:outgoing>vf1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="v1" name="Grabar audio (MediaRecorder)"><bpmn:incoming>vf1</bpmn:incoming><bpmn:outgoing>vf2</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="v2" name="Enviar audio a servidor (Whisper API)"><bpmn:incoming>vf2</bpmn:incoming><bpmn:outgoing>vf3</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="vgw1" name="¿OpenAI disponible?"><bpmn:incoming>vf3</bpmn:incoming><bpmn:outgoing>vf4</bpmn:outgoing><bpmn:outgoing>vf5</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="v3" name="Transcribir con OpenAI whisper-1"><bpmn:incoming>vf4</bpmn:incoming><bpmn:outgoing>vfok1</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="vgw2" name="¿Groq disponible?"><bpmn:incoming>vf5</bpmn:incoming><bpmn:outgoing>vf6</bpmn:outgoing><bpmn:outgoing>vf7</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="v4" name="Transcribir con Groq (gratuito)"><bpmn:incoming>vf6</bpmn:incoming><bpmn:outgoing>vfok2</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:serviceTask id="v5" name="Fallback: Web Speech API (navegador)"><bpmn:incoming>vf7</bpmn:incoming><bpmn:outgoing>vfok3</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="vgw3" name="Unir resultado"><bpmn:incoming>vfok1</bpmn:incoming><bpmn:incoming>vfok2</bpmn:incoming><bpmn:incoming>vfok3</bpmn:incoming><bpmn:outgoing>vf8</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:userTask id="v6" name="Revisar y editar transcripción"><bpmn:incoming>vf8</bpmn:incoming><bpmn:outgoing>vf9</bpmn:outgoing></bpmn:userTask>
+    <bpmn:userTask id="v7" name="Asignar a proyecto / tarea (opcional)"><bpmn:incoming>vf9</bpmn:incoming><bpmn:outgoing>vf10</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="v8" name="Guardar nota (estado: Inbox / Asignada)"><bpmn:incoming>vf10</bpmn:incoming><bpmn:outgoing>vf11</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:endEvent id="vend" name="Nota guardada"><bpmn:incoming>vf11</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="vf1" sourceRef="vs" targetRef="v1"/>
+    <bpmn:sequenceFlow id="vf2" sourceRef="v1" targetRef="v2"/>
+    <bpmn:sequenceFlow id="vf3" sourceRef="v2" targetRef="vgw1"/>
+    <bpmn:sequenceFlow id="vf4" name="Sí" sourceRef="vgw1" targetRef="v3"/>
+    <bpmn:sequenceFlow id="vf5" name="No" sourceRef="vgw1" targetRef="vgw2"/>
+    <bpmn:sequenceFlow id="vf6" name="Sí" sourceRef="vgw2" targetRef="v4"/>
+    <bpmn:sequenceFlow id="vf7" name="No" sourceRef="vgw2" targetRef="v5"/>
+    <bpmn:sequenceFlow id="vfok1" sourceRef="v3" targetRef="vgw3"/>
+    <bpmn:sequenceFlow id="vfok2" sourceRef="v4" targetRef="vgw3"/>
+    <bpmn:sequenceFlow id="vfok3" sourceRef="v5" targetRef="vgw3"/>
+    <bpmn:sequenceFlow id="vf8" sourceRef="vgw3" targetRef="v6"/>
+    <bpmn:sequenceFlow id="vf9" sourceRef="v6" targetRef="v7"/>
+    <bpmn:sequenceFlow id="vf10" sourceRef="v7" targetRef="v8"/>
+    <bpmn:sequenceFlow id="vf11" sourceRef="v8" targetRef="vend"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="vd1">
+    <bpmndi:BPMNPlane id="vp1" bpmnElement="voz_process">
+      <bpmndi:BPMNShape id="sv_s" bpmnElement="vs"><dc:Bounds x="42" y="192" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sv_1" bpmnElement="v1"><dc:Bounds x="130" y="170" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sv_2" bpmnElement="v2"><dc:Bounds x="310" y="170" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sv_gw1" bpmnElement="vgw1" isMarkerVisible="true"><dc:Bounds x="490" y="185" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sv_3" bpmnElement="v3"><dc:Bounds x="590" y="90" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sv_gw2" bpmnElement="vgw2" isMarkerVisible="true"><dc:Bounds x="590" y="260" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sv_4" bpmnElement="v4"><dc:Bounds x="700" y="240" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sv_5" bpmnElement="v5"><dc:Bounds x="700" y="350" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sv_gw3" bpmnElement="vgw3" isMarkerVisible="true"><dc:Bounds x="880" y="185" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sv_6" bpmnElement="v6"><dc:Bounds x="980" y="170" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sv_7" bpmnElement="v7"><dc:Bounds x="1160" y="170" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sv_8" bpmnElement="v8"><dc:Bounds x="1340" y="170" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sv_e" bpmnElement="vend"><dc:Bounds x="1520" y="192" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="ev_1" bpmnElement="vf1"><di:waypoint x="78" y="210"/><di:waypoint x="130" y="210"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ev_2" bpmnElement="vf2"><di:waypoint x="260" y="210"/><di:waypoint x="310" y="210"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ev_3" bpmnElement="vf3"><di:waypoint x="440" y="210"/><di:waypoint x="490" y="210"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ev_4" bpmnElement="vf4"><di:waypoint x="515" y="185"/><di:waypoint x="515" y="130"/><di:waypoint x="590" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ev_5" bpmnElement="vf5"><di:waypoint x="515" y="235"/><di:waypoint x="515" y="285"/><di:waypoint x="590" y="285"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ev_6" bpmnElement="vf6"><di:waypoint x="640" y="285"/><di:waypoint x="700" y="280"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ev_7" bpmnElement="vf7"><di:waypoint x="615" y="310"/><di:waypoint x="615" y="390"/><di:waypoint x="700" y="390"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ev_ok1" bpmnElement="vfok1"><di:waypoint x="720" y="130"/><di:waypoint x="905" y="130"/><di:waypoint x="905" y="185"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ev_ok2" bpmnElement="vfok2"><di:waypoint x="830" y="280"/><di:waypoint x="905" y="280"/><di:waypoint x="905" y="235"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ev_ok3" bpmnElement="vfok3"><di:waypoint x="830" y="390"/><di:waypoint x="905" y="390"/><di:waypoint x="905" y="235"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ev_8" bpmnElement="vf8"><di:waypoint x="930" y="210"/><di:waypoint x="980" y="210"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ev_9" bpmnElement="vf9"><di:waypoint x="1110" y="210"/><di:waypoint x="1160" y="210"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ev_10" bpmnElement="vf10"><di:waypoint x="1290" y="210"/><di:waypoint x="1340" y="210"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ev_11" bpmnElement="vf11"><di:waypoint x="1470" y="210"/><di:waypoint x="1520" y="210"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+// ── 5. REUNIONES ─────────────────────────────────────────────────────────────
+BPMN['reuniones'] = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  id="reu_def" targetNamespace="http://smartflow.io/bpmn">
+  <bpmn:process id="reu_process" name="Reuniones con IA" isExecutable="false">
+    <bpmn:startEvent id="rs" name="Inicio de reunión"><bpmn:outgoing>rf1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="r1" name="Crear sesión (tipo, negocio, BP)"><bpmn:incoming>rf1</bpmn:incoming><bpmn:outgoing>rf2</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="r2" name="Sistema genera código de sesión único"><bpmn:incoming>rf2</bpmn:incoming><bpmn:outgoing>rf3</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:userTask id="r3" name="Participantes se unen (código o link)"><bpmn:incoming>rf3</bpmn:incoming><bpmn:outgoing>rf4</bpmn:outgoing></bpmn:userTask>
+    <bpmn:userTask id="r4" name="Iniciar grabación de audio"><bpmn:incoming>rf4</bpmn:incoming><bpmn:outgoing>rf5</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="r5" name="Chunks de audio enviados cada 5s al servidor"><bpmn:incoming>rf5</bpmn:incoming><bpmn:outgoing>rf6</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:serviceTask id="r6" name="Transcripción en tiempo real (Whisper/Groq)"><bpmn:incoming>rf6</bpmn:incoming><bpmn:outgoing>rf7</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="rgw1" name="¿Reunión activa?"><bpmn:incoming>rf7</bpmn:incoming><bpmn:outgoing>rf8</bpmn:outgoing><bpmn:outgoing>rf9</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:userTask id="r7" name="Finalizar reunión"><bpmn:incoming>rf9</bpmn:incoming><bpmn:outgoing>rf10</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="r8" name="ARIA genera resumen, decisiones y action items (Gemini)"><bpmn:incoming>rf10</bpmn:incoming><bpmn:outgoing>rf11</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:userTask id="r9" name="Revisar actas y crear tareas desde action items"><bpmn:incoming>rf11</bpmn:incoming><bpmn:outgoing>rf12</bpmn:outgoing></bpmn:userTask>
+    <bpmn:endEvent id="rend" name="Reunión finalizada con actas"><bpmn:incoming>rf12</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="rf1" sourceRef="rs" targetRef="r1"/>
+    <bpmn:sequenceFlow id="rf2" sourceRef="r1" targetRef="r2"/>
+    <bpmn:sequenceFlow id="rf3" sourceRef="r2" targetRef="r3"/>
+    <bpmn:sequenceFlow id="rf4" sourceRef="r3" targetRef="r4"/>
+    <bpmn:sequenceFlow id="rf5" sourceRef="r4" targetRef="r5"/>
+    <bpmn:sequenceFlow id="rf6" sourceRef="r5" targetRef="r6"/>
+    <bpmn:sequenceFlow id="rf7" sourceRef="r6" targetRef="rgw1"/>
+    <bpmn:sequenceFlow id="rf8" name="Continúa" sourceRef="rgw1" targetRef="r5"/>
+    <bpmn:sequenceFlow id="rf9" name="Finaliza" sourceRef="rgw1" targetRef="r7"/>
+    <bpmn:sequenceFlow id="rf10" sourceRef="r7" targetRef="r8"/>
+    <bpmn:sequenceFlow id="rf11" sourceRef="r8" targetRef="r9"/>
+    <bpmn:sequenceFlow id="rf12" sourceRef="r9" targetRef="rend"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="rd1">
+    <bpmndi:BPMNPlane id="rp1" bpmnElement="reu_process">
+      <bpmndi:BPMNShape id="sr_s" bpmnElement="rs"><dc:Bounds x="42" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sr_1" bpmnElement="r1"><dc:Bounds x="130" y="160" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sr_2" bpmnElement="r2"><dc:Bounds x="310" y="160" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sr_3" bpmnElement="r3"><dc:Bounds x="490" y="160" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sr_4" bpmnElement="r4"><dc:Bounds x="670" y="160" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sr_5" bpmnElement="r5"><dc:Bounds x="850" y="160" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sr_6" bpmnElement="r6"><dc:Bounds x="1030" y="160" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sr_gw1" bpmnElement="rgw1" isMarkerVisible="true"><dc:Bounds x="1210" y="175" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sr_7" bpmnElement="r7"><dc:Bounds x="1310" y="160" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sr_8" bpmnElement="r8"><dc:Bounds x="1310" y="300" width="150" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sr_9" bpmnElement="r9"><dc:Bounds x="1310" y="440" width="150" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sr_e" bpmnElement="rend"><dc:Bounds x="1510" y="462" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="er_1" bpmnElement="rf1"><di:waypoint x="78" y="200"/><di:waypoint x="130" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="er_2" bpmnElement="rf2"><di:waypoint x="260" y="200"/><di:waypoint x="310" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="er_3" bpmnElement="rf3"><di:waypoint x="440" y="200"/><di:waypoint x="490" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="er_4" bpmnElement="rf4"><di:waypoint x="620" y="200"/><di:waypoint x="670" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="er_5" bpmnElement="rf5"><di:waypoint x="800" y="200"/><di:waypoint x="850" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="er_6" bpmnElement="rf6"><di:waypoint x="980" y="200"/><di:waypoint x="1030" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="er_7" bpmnElement="rf7"><di:waypoint x="1160" y="200"/><di:waypoint x="1210" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="er_8" bpmnElement="rf8"><di:waypoint x="1235" y="175"/><di:waypoint x="1235" y="110"/><di:waypoint x="915" y="110"/><di:waypoint x="915" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="er_9" bpmnElement="rf9"><di:waypoint x="1260" y="200"/><di:waypoint x="1310" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="er_10" bpmnElement="rf10"><di:waypoint x="1385" y="240"/><di:waypoint x="1385" y="300"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="er_11" bpmnElement="rf11"><di:waypoint x="1385" y="380"/><di:waypoint x="1385" y="440"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="er_12" bpmnElement="rf12"><di:waypoint x="1460" y="480"/><di:waypoint x="1510" y="480"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+// ── 6. TAREAS RÁPIDAS ────────────────────────────────────────────────────────
+BPMN['tareas'] = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  id="qt_def" targetNamespace="http://smartflow.io/bpmn">
+  <bpmn:process id="qt_process" name="Tareas Rápidas" isExecutable="false">
+    <bpmn:startEvent id="qs" name="Nueva tarea rápida"><bpmn:outgoing>qf1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="q1" name="Crear tarea (título, negocio, prioridad, tiempo estimado)"><bpmn:incoming>qf1</bpmn:incoming><bpmn:outgoing>qf2</bpmn:outgoing></bpmn:userTask>
+    <bpmn:exclusiveGateway id="qgw1" name="¿Delegar?"><bpmn:incoming>qf2</bpmn:incoming><bpmn:outgoing>qf3</bpmn:outgoing><bpmn:outgoing>qf4</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:userTask id="q2" name="Asignar a miembro del equipo"><bpmn:incoming>qf3</bpmn:incoming><bpmn:outgoing>qf5</bpmn:outgoing></bpmn:userTask>
+    <bpmn:exclusiveGateway id="qgw2" name="Unir"><bpmn:incoming>qf4</bpmn:incoming><bpmn:incoming>qf5</bpmn:incoming><bpmn:outgoing>qf6</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:userTask id="q3" name="Iniciar Pomodoro (25min trabajo / 5min descanso)"><bpmn:incoming>qf6</bpmn:incoming><bpmn:outgoing>qf7</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="q4" name="Registrar tiempo trabajado automáticamente"><bpmn:incoming>qf7</bpmn:incoming><bpmn:outgoing>qf8</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="qgw3" name="¿Tarea completada?"><bpmn:incoming>qf8</bpmn:incoming><bpmn:outgoing>qf9</bpmn:outgoing><bpmn:outgoing>qf10</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:userTask id="q5" name="Marcar tarea como completada"><bpmn:incoming>qf9</bpmn:incoming><bpmn:outgoing>qf11</bpmn:outgoing></bpmn:userTask>
+    <bpmn:endEvent id="qend" name="Tarea completada"><bpmn:incoming>qf11</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="qf1" sourceRef="qs" targetRef="q1"/>
+    <bpmn:sequenceFlow id="qf2" sourceRef="q1" targetRef="qgw1"/>
+    <bpmn:sequenceFlow id="qf3" name="Sí" sourceRef="qgw1" targetRef="q2"/>
+    <bpmn:sequenceFlow id="qf4" name="No" sourceRef="qgw1" targetRef="qgw2"/>
+    <bpmn:sequenceFlow id="qf5" sourceRef="q2" targetRef="qgw2"/>
+    <bpmn:sequenceFlow id="qf6" sourceRef="qgw2" targetRef="q3"/>
+    <bpmn:sequenceFlow id="qf7" sourceRef="q3" targetRef="q4"/>
+    <bpmn:sequenceFlow id="qf8" sourceRef="q4" targetRef="qgw3"/>
+    <bpmn:sequenceFlow id="qf9" name="Sí" sourceRef="qgw3" targetRef="q5"/>
+    <bpmn:sequenceFlow id="qf10" name="No" sourceRef="qgw3" targetRef="q3"/>
+    <bpmn:sequenceFlow id="qf11" sourceRef="q5" targetRef="qend"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="qd1">
+    <bpmndi:BPMNPlane id="qp1" bpmnElement="qt_process">
+      <bpmndi:BPMNShape id="sq_s" bpmnElement="qs"><dc:Bounds x="42" y="192" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sq_1" bpmnElement="q1"><dc:Bounds x="130" y="170" width="160" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sq_gw1" bpmnElement="qgw1" isMarkerVisible="true"><dc:Bounds x="340" y="185" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sq_2" bpmnElement="q2"><dc:Bounds x="440" y="100" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sq_gw2" bpmnElement="qgw2" isMarkerVisible="true"><dc:Bounds x="620" y="185" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sq_3" bpmnElement="q3"><dc:Bounds x="720" y="170" width="150" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sq_4" bpmnElement="q4"><dc:Bounds x="920" y="170" width="150" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sq_gw3" bpmnElement="qgw3" isMarkerVisible="true"><dc:Bounds x="1120" y="185" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sq_5" bpmnElement="q5"><dc:Bounds x="1220" y="170" width="130" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sq_e" bpmnElement="qend"><dc:Bounds x="1400" y="192" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="eq_1" bpmnElement="qf1"><di:waypoint x="78" y="210"/><di:waypoint x="130" y="210"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="eq_2" bpmnElement="qf2"><di:waypoint x="290" y="210"/><di:waypoint x="340" y="210"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="eq_3" bpmnElement="qf3"><di:waypoint x="365" y="185"/><di:waypoint x="365" y="140"/><di:waypoint x="440" y="140"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="eq_4" bpmnElement="qf4"><di:waypoint x="390" y="210"/><di:waypoint x="620" y="210"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="eq_5" bpmnElement="qf5"><di:waypoint x="570" y="140"/><di:waypoint x="645" y="140"/><di:waypoint x="645" y="185"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="eq_6" bpmnElement="qf6"><di:waypoint x="670" y="210"/><di:waypoint x="720" y="210"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="eq_7" bpmnElement="qf7"><di:waypoint x="870" y="210"/><di:waypoint x="920" y="210"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="eq_8" bpmnElement="qf8"><di:waypoint x="1070" y="210"/><di:waypoint x="1120" y="210"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="eq_9" bpmnElement="qf9"><di:waypoint x="1170" y="210"/><di:waypoint x="1220" y="210"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="eq_10" bpmnElement="qf10"><di:waypoint x="1145" y="235"/><di:waypoint x="1145" y="310"/><di:waypoint x="795" y="310"/><di:waypoint x="795" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="eq_11" bpmnElement="qf11"><di:waypoint x="1350" y="210"/><di:waypoint x="1400" y="210"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+// ── 7. DEMANDAS ──────────────────────────────────────────────────────────────
+BPMN['demandas'] = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  id="dem_def" targetNamespace="http://smartflow.io/bpmn">
+  <bpmn:process id="dem_process" name="Gestión de Demandas" isExecutable="false">
+    <bpmn:startEvent id="ds" name="Necesidad identificada"><bpmn:outgoing>df1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="d1" name="Crear demanda (situación actual, deseada, justificación)"><bpmn:incoming>df1</bpmn:incoming><bpmn:outgoing>df2</bpmn:outgoing></bpmn:userTask>
+    <bpmn:userTask id="d2" name="Análisis de viabilidad e impacto por el líder"><bpmn:incoming>df2</bpmn:incoming><bpmn:outgoing>df3</bpmn:outgoing></bpmn:userTask>
+    <bpmn:exclusiveGateway id="dgw1" name="¿Aprobada?"><bpmn:incoming>df3</bpmn:incoming><bpmn:outgoing>df4</bpmn:outgoing><bpmn:outgoing>df5</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:userTask id="d3" name="Documentar rechazo y notificar solicitante"><bpmn:incoming>df5</bpmn:incoming><bpmn:outgoing>df6</bpmn:outgoing></bpmn:userTask>
+    <bpmn:endEvent id="dend2" name="Demanda rechazada"><bpmn:incoming>df6</bpmn:incoming></bpmn:endEvent>
+    <bpmn:userTask id="d4" name="Planificar ejecución (recursos, hitos, responsables)"><bpmn:incoming>df4</bpmn:incoming><bpmn:outgoing>df7</bpmn:outgoing></bpmn:userTask>
+    <bpmn:userTask id="d5" name="Ejecutar demanda y documentar avances"><bpmn:incoming>df7</bpmn:incoming><bpmn:outgoing>df8</bpmn:outgoing></bpmn:userTask>
+    <bpmn:exclusiveGateway id="dgw2" name="¿Objetivo alcanzado?"><bpmn:incoming>df8</bpmn:incoming><bpmn:outgoing>df9</bpmn:outgoing><bpmn:outgoing>df10</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:userTask id="d6" name="Validar resultado y cerrar demanda formalmente"><bpmn:incoming>df9</bpmn:incoming><bpmn:outgoing>df11</bpmn:outgoing></bpmn:userTask>
+    <bpmn:endEvent id="dend1" name="Demanda cerrada con éxito"><bpmn:incoming>df11</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="df1" sourceRef="ds" targetRef="d1"/>
+    <bpmn:sequenceFlow id="df2" sourceRef="d1" targetRef="d2"/>
+    <bpmn:sequenceFlow id="df3" sourceRef="d2" targetRef="dgw1"/>
+    <bpmn:sequenceFlow id="df4" name="Sí" sourceRef="dgw1" targetRef="d4"/>
+    <bpmn:sequenceFlow id="df5" name="No" sourceRef="dgw1" targetRef="d3"/>
+    <bpmn:sequenceFlow id="df6" sourceRef="d3" targetRef="dend2"/>
+    <bpmn:sequenceFlow id="df7" sourceRef="d4" targetRef="d5"/>
+    <bpmn:sequenceFlow id="df8" sourceRef="d5" targetRef="dgw2"/>
+    <bpmn:sequenceFlow id="df9" name="Sí" sourceRef="dgw2" targetRef="d6"/>
+    <bpmn:sequenceFlow id="df10" name="No" sourceRef="dgw2" targetRef="d5"/>
+    <bpmn:sequenceFlow id="df11" sourceRef="d6" targetRef="dend1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="dd1">
+    <bpmndi:BPMNPlane id="dp1" bpmnElement="dem_process">
+      <bpmndi:BPMNShape id="sd_s" bpmnElement="ds"><dc:Bounds x="42" y="222" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_1" bpmnElement="d1"><dc:Bounds x="130" y="200" width="160" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_2" bpmnElement="d2"><dc:Bounds x="340" y="200" width="150" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_gw1" bpmnElement="dgw1" isMarkerVisible="true"><dc:Bounds x="540" y="215" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_3" bpmnElement="d3"><dc:Bounds x="640" y="330" width="150" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_e2" bpmnElement="dend2"><dc:Bounds x="840" y="348" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_4" bpmnElement="d4"><dc:Bounds x="640" y="200" width="150" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_5" bpmnElement="d5"><dc:Bounds x="840" y="200" width="150" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_gw2" bpmnElement="dgw2" isMarkerVisible="true"><dc:Bounds x="1040" y="215" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_6" bpmnElement="d6"><dc:Bounds x="1140" y="200" width="150" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_e1" bpmnElement="dend1"><dc:Bounds x="1340" y="222" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="ed_1" bpmnElement="df1"><di:waypoint x="78" y="240"/><di:waypoint x="130" y="240"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ed_2" bpmnElement="df2"><di:waypoint x="290" y="240"/><di:waypoint x="340" y="240"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ed_3" bpmnElement="df3"><di:waypoint x="490" y="240"/><di:waypoint x="540" y="240"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ed_4" bpmnElement="df4"><di:waypoint x="590" y="240"/><di:waypoint x="640" y="240"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ed_5" bpmnElement="df5"><di:waypoint x="565" y="265"/><di:waypoint x="565" y="370"/><di:waypoint x="640" y="370"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ed_6" bpmnElement="df6"><di:waypoint x="790" y="370"/><di:waypoint x="840" y="366"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ed_7" bpmnElement="df7"><di:waypoint x="790" y="240"/><di:waypoint x="840" y="240"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ed_8" bpmnElement="df8"><di:waypoint x="990" y="240"/><di:waypoint x="1040" y="240"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ed_9" bpmnElement="df9"><di:waypoint x="1090" y="240"/><di:waypoint x="1140" y="240"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ed_10" bpmnElement="df10"><di:waypoint x="1065" y="265"/><di:waypoint x="1065" y="340"/><di:waypoint x="915" y="340"/><di:waypoint x="915" y="280"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ed_11" bpmnElement="df11"><di:waypoint x="1290" y="240"/><di:waypoint x="1340" y="240"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+// ─── Render engine ────────────────────────────────────────────────────────────
+async function renderDiagram(id) {
+  const canvasEl = document.getElementById('canvas-' + id);
+  if (!canvasEl) return;
+
+  const viewer = new BpmnJS({ container: canvasEl });
+  try {
+    await viewer.importXML(BPMN[id]);
+    viewer.get('canvas').zoom('fit-viewport', 'auto');
+    renderedDiagrams.add(id);
+  } catch (err) {
+    canvasEl.innerHTML = '<p class="error-msg">Error al renderizar diagrama: ' + err.message + '</p>';
+  }
+}
+
+// Render the first diagram on load
+window.addEventListener('load', () => renderDiagram('auth'));
+</script>
+
+</body>
+</html>
