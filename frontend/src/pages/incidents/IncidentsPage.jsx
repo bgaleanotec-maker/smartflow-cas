@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, AlertTriangle, DollarSign, Clock } from 'lucide-react'
+import { Plus, Search, AlertTriangle, DollarSign, Clock, Pencil, Trash2, X } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
-import { incidentsAPI, adminAPI } from '../../services/api'
+import { incidentsAPI, adminAPI, usersAPI } from '../../services/api'
 import clsx from 'clsx'
 
 const SEVERITY_STYLES = {
@@ -21,11 +21,11 @@ const STATUS_STYLES = {
   cerrado: 'bg-slate-800 text-slate-500',
 }
 
-function IncidentRow({ incident, onClick }) {
+function IncidentRow({ incident, onClick, onEdit, onDelete }) {
   return (
     <div
       onClick={onClick}
-      className="card hover:border-slate-600 cursor-pointer transition-all hover:bg-slate-800/30"
+      className="card hover:border-slate-600 cursor-pointer transition-all hover:bg-slate-800/30 group relative"
     >
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
@@ -49,15 +49,33 @@ function IncidentRow({ incident, onClick }) {
             <p className="text-xs text-slate-500 mt-1 line-clamp-1">{incident.description}</p>
           )}
         </div>
-        <div className="text-right flex-shrink-0">
-          {incident.responsible && (
-            <div className="w-7 h-7 rounded-full bg-brand-700 flex items-center justify-center text-xs font-bold mb-1">
-              {incident.responsible.full_name?.slice(0, 2).toUpperCase()}
-            </div>
-          )}
-          <p className="text-xs text-slate-600">
-            {new Date(incident.created_at).toLocaleDateString('es-CO')}
-          </p>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="text-right">
+            {incident.responsible && (
+              <div className="w-7 h-7 rounded-full bg-brand-700 flex items-center justify-center text-xs font-bold mb-1">
+                {incident.responsible.full_name?.slice(0, 2).toUpperCase()}
+              </div>
+            )}
+            <p className="text-xs text-slate-600">
+              {new Date(incident.created_at).toLocaleDateString('es-CO')}
+            </p>
+          </div>
+          <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+            <button
+              onClick={(e) => { e.stopPropagation(); onEdit(incident) }}
+              className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-blue-400 transition-colors"
+              title="Editar"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(incident) }}
+              className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-red-400 transition-colors"
+              title="Eliminar"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -170,12 +188,160 @@ function CreateIncidentModal({ onClose }) {
   )
 }
 
+function EditIncidentModal({ incident, onClose }) {
+  const qc = useQueryClient()
+  const { data: categories } = useQuery({
+    queryKey: ['incident-categories'],
+    queryFn: () => adminAPI.incidentCategories().then(r => r.data),
+  })
+  const { data: businesses } = useQuery({
+    queryKey: ['businesses'],
+    queryFn: () => adminAPI.businesses().then(r => r.data),
+  })
+  const { data: users } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => usersAPI.list().then(r => r.data?.items || r.data || []),
+  })
+
+  const { register, handleSubmit, watch, formState: { isSubmitting } } = useForm({
+    defaultValues: {
+      title: incident.title || '',
+      description: incident.description || '',
+      severity: incident.severity || 'medio',
+      status: incident.status || 'abierto',
+      category_id: incident.category_id || '',
+      business_id: incident.business_id || '',
+      responsible_id: incident.responsible_id || incident.responsible?.id || '',
+      affected_users_count: incident.affected_users_count || 0,
+      has_economic_impact: incident.has_economic_impact || false,
+      economic_impact_amount: incident.economic_impact_amount || '',
+      economic_impact_description: incident.economic_impact_description || '',
+    }
+  })
+  const hasEconomicImpact = watch('has_economic_impact')
+
+  const mutation = useMutation({
+    mutationFn: (data) => incidentsAPI.update(incident.id, {
+      ...data,
+      has_economic_impact: data.has_economic_impact === 'true' || data.has_economic_impact === true,
+      affected_users_count: parseInt(data.affected_users_count) || 0,
+      category_id: data.category_id ? parseInt(data.category_id) : null,
+      business_id: data.business_id ? parseInt(data.business_id) : null,
+      responsible_id: data.responsible_id ? parseInt(data.responsible_id) : null,
+      economic_impact_amount: data.economic_impact_amount ? parseFloat(data.economic_impact_amount) : null,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries(['incidents'])
+      qc.invalidateQueries(['incident', String(incident.id)])
+      toast.success('Incidente actualizado')
+      onClose()
+    },
+    onError: (err) => {
+      const detail = err.response?.data?.detail
+      const msg = Array.isArray(detail)
+        ? detail.map(d => d.msg).join(', ')
+        : (typeof detail === 'string' ? detail : 'Error al actualizar incidente')
+      toast.error(msg)
+    },
+  })
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg my-4">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+          <h2 className="font-semibold text-white flex items-center gap-2">
+            <Pencil size={16} className="text-blue-400" /> Editar incidente {incident.incident_number}
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+        </div>
+        <form onSubmit={handleSubmit(d => mutation.mutate(d))} className="p-6 space-y-4">
+          <div>
+            <label className="label">Título *</label>
+            <input {...register('title', { required: true })} className="input" />
+          </div>
+          <div>
+            <label className="label">Descripción</label>
+            <textarea {...register('description')} className="input h-20 resize-none" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Severidad</label>
+              <select {...register('severity')} className="input">
+                <option value="bajo">Bajo</option>
+                <option value="medio">Medio</option>
+                <option value="alto">Alto</option>
+                <option value="critico">Crítico</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Estado</label>
+              <select {...register('status')} className="input">
+                <option value="abierto">Abierto</option>
+                <option value="en_investigacion">En investigación</option>
+                <option value="resuelto">Resuelto</option>
+                <option value="cerrado">Cerrado</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Categoría</label>
+              <select {...register('category_id')} className="input">
+                <option value="">Sin categoría</option>
+                {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Negocio</label>
+              <select {...register('business_id')} className="input">
+                <option value="">Sin negocio</option>
+                {businesses?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="label">Responsable</label>
+            <select {...register('responsible_id')} className="input">
+              <option value="">Sin asignar</option>
+              {users?.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Usuarios afectados</label>
+            <input {...register('affected_users_count')} type="number" min="0" className="input" />
+          </div>
+          <div className="flex items-center gap-3">
+            <input {...register('has_economic_impact')} type="checkbox" id="eco-edit" className="w-4 h-4 accent-brand-500" />
+            <label htmlFor="eco-edit" className="text-sm text-slate-300">¿Tiene impacto económico?</label>
+          </div>
+          {hasEconomicImpact && (
+            <div>
+              <label className="label">Monto estimado ($)</label>
+              <input {...register('economic_impact_amount')} type="number" step="0.01" className="input" placeholder="0.00" />
+              <textarea {...register('economic_impact_description')} className="input mt-2 h-16 resize-none" placeholder="Describe el impacto económico..." />
+            </div>
+          )}
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancelar</button>
+            <button type="submit" disabled={isSubmitting || mutation.isPending} className="btn-primary flex-1">
+              {mutation.isPending ? 'Guardando…' : 'Guardar cambios'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function IncidentsPage() {
   const [search, setSearch] = useState('')
   const [severityFilter, setSeverityFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [editingIncident, setEditingIncident] = useState(null)
+  const [deletingIncident, setDeletingIncident] = useState(null)
   const navigate = useNavigate()
+  const qc = useQueryClient()
 
   const { data: incidents, isLoading } = useQuery({
     queryKey: ['incidents', search, severityFilter, statusFilter],
@@ -184,6 +350,16 @@ export default function IncidentsPage() {
       severity: severityFilter || undefined,
       status: statusFilter || undefined,
     }).then(r => r.data),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => incidentsAPI.delete(id),
+    onSuccess: () => {
+      qc.invalidateQueries(['incidents'])
+      toast.success('Incidente eliminado')
+      setDeletingIncident(null)
+    },
+    onError: (err) => toast.error(err?.response?.data?.detail || 'Error al eliminar incidente'),
   })
 
   return (
@@ -232,12 +408,47 @@ export default function IncidentsPage() {
       ) : (
         <div className="space-y-3">
           {incidents?.map(inc => (
-            <IncidentRow key={inc.id} incident={inc} onClick={() => navigate(`/incidents/${inc.id}`)} />
+            <IncidentRow
+              key={inc.id}
+              incident={inc}
+              onClick={() => navigate(`/incidents/${inc.id}`)}
+              onEdit={(inc) => setEditingIncident(inc)}
+              onDelete={(inc) => setDeletingIncident(inc)}
+            />
           ))}
         </div>
       )}
 
       {showCreate && <CreateIncidentModal onClose={() => setShowCreate(false)} />}
+
+      {editingIncident && (
+        <EditIncidentModal incident={editingIncident} onClose={() => setEditingIncident(null)} />
+      )}
+
+      {deletingIncident && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-red-900/50 rounded-xl w-full max-w-sm shadow-2xl p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0" />
+              <h3 className="font-semibold text-slate-100">¿Eliminar incidente?</h3>
+            </div>
+            <p className="text-sm text-slate-400 mb-2">
+              <span className="font-mono text-slate-300">{deletingIncident.incident_number}</span> — {deletingIncident.title}
+            </p>
+            <p className="text-xs text-slate-500 mb-6">Esta acción no se puede deshacer.</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setDeletingIncident(null)} className="btn-secondary">Cancelar</button>
+              <button
+                onClick={() => deleteMutation.mutate(deletingIncident.id)}
+                disabled={deleteMutation.isPending}
+                className="bg-red-700 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? 'Eliminando…' : 'Sí, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -96,6 +96,7 @@ export const incidentsAPI = {
   create: (data) => api.post('/incidents', data),
   get: (id) => api.get(`/incidents/${id}`),
   update: (id, data) => api.patch(`/incidents/${id}`, data),
+  delete: (id) => api.delete(`/incidents/${id}`),
   addComment: (id, comment) =>
     api.post(`/incidents/${id}/comment`, { comment }),
 }

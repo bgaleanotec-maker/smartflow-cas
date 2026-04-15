@@ -1,15 +1,161 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, DollarSign, Clock, User, MessageSquare, Loader2, FileText } from 'lucide-react'
+import { ArrowLeft, DollarSign, Clock, User, MessageSquare, Loader2, FileText, Pencil, Trash2, X, AlertTriangle } from 'lucide-react'
+import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
-import { incidentsAPI, demandsAPI } from '../../services/api'
+import { incidentsAPI, demandsAPI, adminAPI, usersAPI } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import VoiceInputButton from '../../components/voice/VoiceInputButton'
 import clsx from 'clsx'
 
 const SEVERITY_COLORS = {
   critico: '#ef4444', alto: '#f97316', medio: '#eab308', bajo: '#22c55e'
+}
+
+function EditIncidentModal({ incident, onClose }) {
+  const qc = useQueryClient()
+  const { data: categories } = useQuery({
+    queryKey: ['incident-categories'],
+    queryFn: () => adminAPI.incidentCategories().then(r => r.data),
+  })
+  const { data: businesses } = useQuery({
+    queryKey: ['businesses'],
+    queryFn: () => adminAPI.businesses().then(r => r.data),
+  })
+  const { data: users } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => usersAPI.list().then(r => r.data?.items || r.data || []),
+  })
+
+  const { register, handleSubmit, watch, formState: { isSubmitting } } = useForm({
+    defaultValues: {
+      title: incident.title || '',
+      description: incident.description || '',
+      severity: incident.severity || 'medio',
+      status: incident.status || 'abierto',
+      category_id: incident.category_id || '',
+      business_id: incident.business_id || '',
+      responsible_id: incident.responsible_id || incident.responsible?.id || '',
+      affected_users_count: incident.affected_users_count || 0,
+      has_economic_impact: incident.has_economic_impact || false,
+      economic_impact_amount: incident.economic_impact_amount || '',
+      economic_impact_description: incident.economic_impact_description || '',
+    }
+  })
+  const hasEconomicImpact = watch('has_economic_impact')
+
+  const mutation = useMutation({
+    mutationFn: (data) => incidentsAPI.update(incident.id, {
+      ...data,
+      has_economic_impact: data.has_economic_impact === 'true' || data.has_economic_impact === true,
+      affected_users_count: parseInt(data.affected_users_count) || 0,
+      category_id: data.category_id ? parseInt(data.category_id) : null,
+      business_id: data.business_id ? parseInt(data.business_id) : null,
+      responsible_id: data.responsible_id ? parseInt(data.responsible_id) : null,
+      economic_impact_amount: data.economic_impact_amount ? parseFloat(data.economic_impact_amount) : null,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries(['incidents'])
+      qc.invalidateQueries(['incident', String(incident.id)])
+      toast.success('Incidente actualizado')
+      onClose()
+    },
+    onError: (err) => {
+      const detail = err.response?.data?.detail
+      const msg = Array.isArray(detail)
+        ? detail.map(d => d.msg).join(', ')
+        : (typeof detail === 'string' ? detail : 'Error al actualizar incidente')
+      toast.error(msg)
+    },
+  })
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg my-4">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+          <h2 className="font-semibold text-white flex items-center gap-2">
+            <Pencil size={16} className="text-blue-400" /> Editar incidente {incident.incident_number}
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+        </div>
+        <form onSubmit={handleSubmit(d => mutation.mutate(d))} className="p-6 space-y-4">
+          <div>
+            <label className="label">Título *</label>
+            <input {...register('title', { required: true })} className="input" />
+          </div>
+          <div>
+            <label className="label">Descripción</label>
+            <textarea {...register('description')} className="input h-20 resize-none" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Severidad</label>
+              <select {...register('severity')} className="input">
+                <option value="bajo">Bajo</option>
+                <option value="medio">Medio</option>
+                <option value="alto">Alto</option>
+                <option value="critico">Crítico</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Estado</label>
+              <select {...register('status')} className="input">
+                <option value="abierto">Abierto</option>
+                <option value="en_investigacion">En investigación</option>
+                <option value="resuelto">Resuelto</option>
+                <option value="cerrado">Cerrado</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Categoría</label>
+              <select {...register('category_id')} className="input">
+                <option value="">Sin categoría</option>
+                {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Negocio</label>
+              <select {...register('business_id')} className="input">
+                <option value="">Sin negocio</option>
+                {businesses?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="label">Responsable</label>
+            <select {...register('responsible_id')} className="input">
+              <option value="">Sin asignar</option>
+              {users?.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Usuarios afectados</label>
+            <input {...register('affected_users_count')} type="number" min="0" className="input" />
+          </div>
+          <div className="flex items-center gap-3">
+            <input {...register('has_economic_impact')} type="checkbox" id="eco-edit" className="w-4 h-4 accent-brand-500" />
+            <label htmlFor="eco-edit" className="text-sm text-slate-300">¿Tiene impacto económico?</label>
+          </div>
+          {hasEconomicImpact && (
+            <div>
+              <label className="label">Monto estimado ($)</label>
+              <input {...register('economic_impact_amount')} type="number" step="0.01" className="input" placeholder="0.00" />
+              <textarea {...register('economic_impact_description')} className="input mt-2 h-16 resize-none" placeholder="Describe el impacto económico..." />
+            </div>
+          )}
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancelar</button>
+            <button type="submit" disabled={isSubmitting || mutation.isPending} className="btn-primary flex-1">
+              {mutation.isPending ? 'Guardando…' : 'Guardar cambios'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
 }
 
 export default function IncidentDetailPage() {
@@ -20,6 +166,8 @@ export default function IncidentDetailPage() {
   const [newStatus, setNewStatus] = useState('')
   const [rootCause, setRootCause] = useState('')
   const [resolutionNotes, setResolutionNotes] = useState('')
+  const [showEdit, setShowEdit] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const { data: incident, isLoading } = useQuery({
     queryKey: ['incident', id],
@@ -42,6 +190,15 @@ export default function IncidentDetailPage() {
       setComment('')
       toast.success('Comentario agregado')
     },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => incidentsAPI.delete(id),
+    onSuccess: () => {
+      toast.success('Incidente eliminado')
+      navigate('/incidents')
+    },
+    onError: (err) => toast.error(err?.response?.data?.detail || 'Error al eliminar incidente'),
   })
 
   useEffect(() => {
@@ -77,6 +234,20 @@ export default function IncidentDetailPage() {
             </span>
           </div>
           <h1 className="text-xl font-bold text-white">{incident.title}</h1>
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              onClick={() => setShowEdit(true)}
+              className="btn-ghost text-sm flex items-center gap-1.5 text-blue-400 hover:text-blue-300"
+            >
+              <Pencil size={14} /> Editar
+            </button>
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="btn-ghost text-sm flex items-center gap-1.5 text-red-400 hover:text-red-300"
+            >
+              <Trash2 size={14} /> Eliminar
+            </button>
+          </div>
         </div>
       </div>
 
@@ -290,6 +461,35 @@ export default function IncidentDetailPage() {
           </div>
         </div>
       </div>
+
+      {showEdit && (
+        <EditIncidentModal incident={incident} onClose={() => setShowEdit(false)} />
+      )}
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-red-900/50 rounded-xl w-full max-w-sm shadow-2xl p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0" />
+              <h3 className="font-semibold text-slate-100">¿Eliminar incidente?</h3>
+            </div>
+            <p className="text-sm text-slate-400 mb-2">
+              <span className="font-mono text-slate-300">{incident.incident_number}</span> — {incident.title}
+            </p>
+            <p className="text-xs text-slate-500 mb-6">Esta acción no se puede deshacer.</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowDeleteConfirm(false)} className="btn-secondary">Cancelar</button>
+              <button
+                onClick={() => deleteMutation.mutate()}
+                disabled={deleteMutation.isPending}
+                className="bg-red-700 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? 'Eliminando…' : 'Sí, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

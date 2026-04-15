@@ -184,6 +184,25 @@ async def update_incident(
     return incident
 
 
+@router.delete("/{incident_id}", status_code=204)
+async def delete_incident(incident_id: int, db: DB, current_user: CurrentUser):
+    result = await db.execute(
+        select(Incident).where(Incident.id == incident_id, Incident.is_deleted == False)
+    )
+    incident = result.scalar_one_or_none()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incidente no encontrado")
+    incident.is_deleted = True
+    timeline_entry = IncidentTimeline(
+        incident_id=incident.id,
+        user_id=current_user.id,
+        action="updated",
+        description=f"Incidente eliminado por {current_user.full_name}",
+    )
+    db.add(timeline_entry)
+    await db.flush()
+
+
 class CommentBody(BaseModel):
     comment: str
     type: str = "comment"  # "comment" | "update" | "escalation" | "resolution"
