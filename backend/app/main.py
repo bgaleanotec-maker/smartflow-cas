@@ -66,6 +66,11 @@ async def _run_column_migrations():
             # activity_instances escalation tracking columns (2026-04-12)
             ("activity_instances", "escalation_sent_at", "DATETIME"),
             ("activity_instances", "reminder_sent_at", "DATETIME"),
+            # pomodoro_sessions new FK columns (added 2026-04-15)
+            ("pomodoro_sessions", "activity_id", "INTEGER REFERENCES recurring_activities(id)"),
+            ("pomodoro_sessions", "project_id", "INTEGER REFERENCES projects(id)"),
+            # recurring_activities pomodoro tracking (added 2026-04-15)
+            ("recurring_activities", "pomodoro_minutes", "INTEGER DEFAULT 0"),
             # users table — columns added after initial deploy
             ("users", "last_login", "DATETIME"),
             ("users", "must_change_password", "BOOLEAN DEFAULT 0"),
@@ -167,6 +172,11 @@ async def _run_column_migrations():
             "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS labels VARCHAR(500)",
             "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS attachments TEXT",
             "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE",
+            # pomodoro_sessions new FK columns (added 2026-04-15)
+            "ALTER TABLE pomodoro_sessions ADD COLUMN IF NOT EXISTS activity_id INTEGER REFERENCES recurring_activities(id)",
+            "ALTER TABLE pomodoro_sessions ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES projects(id)",
+            # recurring_activities pomodoro tracking (added 2026-04-15)
+            "ALTER TABLE recurring_activities ADD COLUMN IF NOT EXISTS pomodoro_minutes INTEGER DEFAULT 0",
         ]
         # PostgreSQL: create tables that may not exist yet
         pg_create_tables = [

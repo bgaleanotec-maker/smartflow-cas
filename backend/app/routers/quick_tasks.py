@@ -114,6 +114,7 @@ async def list_quick_tasks(
     status: Optional[str] = None,
     include_done: bool = False,
     all_users: bool = False,   # leaders/admins can see all
+    assigned_to_id: Optional[int] = None,  # filter by specific user (leader/admin only)
     db: DB = None,
     current_user: CurrentUser = None,
 ):
@@ -131,8 +132,15 @@ async def list_quick_tasks(
 
     # all_users only for leaders/admins
     can_see_all = current_user.role in ("admin", "leader")
-    if all_users and can_see_all:
-        pass  # no user filter
+
+    if assigned_to_id and can_see_all:
+        # filter by specific user
+        q = q.where(
+            (QuickTask.user_id == assigned_to_id) |
+            (QuickTask.assigned_to_id == assigned_to_id)
+        )
+    elif (all_users or can_see_all) and can_see_all:
+        pass  # no user filter — show all
     else:
         # show tasks assigned to me OR created by me
         q = q.where(

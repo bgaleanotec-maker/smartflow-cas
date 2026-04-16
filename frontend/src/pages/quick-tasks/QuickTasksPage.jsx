@@ -534,18 +534,19 @@ export default function QuickTasksPage() {
   const [businessFilter, setBusinessFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [includeDone, setIncludeDone] = useState(false)
-  const [allUsers, setAllUsers] = useState(false)
+  const [userIdFilter, setUserIdFilter] = useState('')
   const [leaderView, setLeaderView] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [editTask, setEditTask] = useState(null)
 
   const { data: tasks, isLoading } = useQuery({
-    queryKey: ['quick-tasks', businessFilter, statusFilter, includeDone, allUsers],
+    queryKey: ['quick-tasks', businessFilter, statusFilter, includeDone, userIdFilter],
     queryFn: () => quickTasksAPI.list({
       business_id: businessFilter || undefined,
       status: statusFilter || undefined,
       include_done: includeDone,
-      all_users: allUsers,
+      all_users: isLeaderOrAdmin ? true : undefined,
+      assigned_to_id: userIdFilter || undefined,
     }).then(r => r.data),
     enabled: !leaderView,
   })
@@ -555,10 +556,11 @@ export default function QuickTasksPage() {
     queryFn: () => adminAPI.businesses().then(r => Array.isArray(r.data) ? r.data : r.data?.items || []),
   })
 
-  const { data: users } = useQuery({
+  const { data: usersData } = useQuery({
     queryKey: ['users-list'],
     queryFn: () => usersAPI.list({ is_active: true, limit: 100 }).then(r => r.data),
   })
+  const users = usersData?.items || usersData || []
 
   const doneMutation = useMutation({
     mutationFn: (id) => quickTasksAPI.done(id),
@@ -687,15 +689,14 @@ export default function QuickTasksPage() {
             </label>
 
             {isLeaderOrAdmin && (
-              <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={allUsers}
-                  onChange={e => setAllUsers(e.target.checked)}
-                  className="rounded"
-                />
-                Todos los usuarios
-              </label>
+              <select
+                value={userIdFilter}
+                onChange={e => setUserIdFilter(e.target.value)}
+                className="input w-36 text-sm"
+              >
+                <option value="">Todos los usuarios</option>
+                {users?.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+              </select>
             )}
           </div>
 

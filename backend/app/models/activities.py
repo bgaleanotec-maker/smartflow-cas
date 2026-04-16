@@ -69,6 +69,9 @@ class RecurringActivity(Base):
     created_by_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     business_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("businesses.id"), nullable=True)
 
+    # Pomodoro tracking
+    pomodoro_minutes: Mapped[int] = mapped_column(Integer, default=0)  # total Pomodoro time logged
+
     # Meta
     tags: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON
     color: Mapped[str] = mapped_column(String(7), default="#6366f1")

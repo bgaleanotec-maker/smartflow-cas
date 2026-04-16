@@ -189,6 +189,10 @@ async def delete_task(task_id: int, db: DB, current_user: CurrentUser):
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Tarea no encontrada")
+    # Admin can delete any task; others need ownership check
+    if current_user.role not in ("admin", "leader"):
+        if task.reporter_id != current_user.id and task.assignee_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Sin permiso para eliminar esta tarea")
     task.is_deleted = True
     await db.flush()
 

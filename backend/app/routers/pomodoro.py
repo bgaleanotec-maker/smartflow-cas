@@ -12,6 +12,8 @@ router = APIRouter(prefix="/pomodoro", tags=["Pomodoro"])
 
 class StartSessionRequest(BaseModel):
     task_id: Optional[int] = None
+    activity_id: Optional[int] = None
+    project_id: Optional[int] = None
     duration_minutes: int = 25
     session_type: SessionType = SessionType.WORK
 
@@ -19,6 +21,8 @@ class StartSessionRequest(BaseModel):
 class PomodoroSessionResponse(BaseModel):
     id: int
     task_id: Optional[int]
+    activity_id: Optional[int] = None
+    project_id: Optional[int] = None
     session_type: SessionType
     duration_minutes: int
     started_at: datetime
@@ -50,6 +54,8 @@ async def start_session(payload: StartSessionRequest, db: DB, current_user: Curr
     session = PomodoroSession(
         user_id=current_user.id,
         task_id=payload.task_id,
+        activity_id=payload.activity_id,
+        project_id=payload.project_id,
         session_type=payload.session_type,
         duration_minutes=payload.duration_minutes,
         started_at=datetime.now(timezone.utc),
@@ -85,6 +91,14 @@ async def complete_session(
         task = task_result.scalar_one_or_none()
         if task:
             task.logged_hours = (task.logged_hours or 0) + (session.duration_minutes / 60)
+
+    # Update pomodoro_minutes on RecurringActivity
+    if session.activity_id and session.session_type == SessionType.WORK:
+        from app.models.activities import RecurringActivity
+        act_result = await db.execute(select(RecurringActivity).where(RecurringActivity.id == session.activity_id))
+        act = act_result.scalar_one_or_none()
+        if act:
+            act.pomodoro_minutes = (act.pomodoro_minutes or 0) + session.duration_minutes
 
     await db.flush()
     await db.refresh(session)

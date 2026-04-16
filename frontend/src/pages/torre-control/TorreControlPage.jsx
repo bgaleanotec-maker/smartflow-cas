@@ -46,7 +46,7 @@ const STATUS_CONFIG = {
 }
 
 // ── Activity Card ─────────────────────────────────────────────────────────────
-function ActivityCard({ activity, onComplete, onStart, onViewLog, onEdit, onDelete, completing }) {
+function ActivityCard({ activity, onComplete, onStart, onViewLog, onEdit, onDelete, completing, isLeaderOrAdmin }) {
   const [expanded, setExpanded] = useState(false)
   const cfg = STATUS_CONFIG[activity.status] || STATUS_CONFIG.sin_iniciar
   const StatusIcon = cfg.icon
@@ -100,6 +100,14 @@ function ActivityCard({ activity, onComplete, onStart, onViewLog, onEdit, onDele
             {activity.streak > 1 && (
               <span className="text-[10px] text-orange-400 flex items-center gap-0.5">
                 <Flame size={9} /> {activity.streak} seguidos
+              </span>
+            )}
+            {/* Pomodoro minutes */}
+            {activity.pomodoro_minutes > 0 && (
+              <span className="text-[10px] text-orange-400 flex items-center gap-0.5">
+                <Timer size={9} /> {Math.floor(activity.pomodoro_minutes / 60) > 0
+                  ? `${Math.floor(activity.pomodoro_minutes / 60)}h ${activity.pomodoro_minutes % 60}m`
+                  : `${activity.pomodoro_minutes}m`} pomodoro
               </span>
             )}
           </div>
@@ -223,7 +231,7 @@ function ActivityCard({ activity, onComplete, onStart, onViewLog, onEdit, onDele
               <Edit3 size={11} /> Editar
             </button>
             <button onClick={() => onDelete(activity.id)} className="flex items-center gap-1 text-xs text-red-500/70 hover:text-red-400 px-2 py-1 rounded hover:bg-red-900/20 transition-colors">
-              <Trash2 size={11} /> Desactivar
+              <Trash2 size={11} /> {isLeaderOrAdmin ? 'Eliminar' : 'Desactivar'}
             </button>
           </div>
         </div>
@@ -511,8 +519,10 @@ function SectionHeader({ icon: Icon, label, count, color, defaultOpen = true }) 
 export default function TorreControlPage() {
   const qc = useQueryClient()
   const { user } = useAuthStore()
+  const isLeaderOrAdmin = ['admin', 'leader'].includes(user?.role)
   const [scopeFilter, setScopeFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
+  const [userFilter, setUserFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editActivity, setEditActivity] = useState(null)
   const [logActivity, setLogActivity] = useState(null)
@@ -526,8 +536,12 @@ export default function TorreControlPage() {
   const [openCompletadas, setOpenCompletadas] = useState(false)
 
   const { data: torre, isLoading, refetch } = useQuery({
-    queryKey: ['torre-control', scopeFilter, categoryFilter],
-    queryFn: () => activitiesAPI.torreControl({ scope: scopeFilter || undefined, category: categoryFilter || undefined }).then(r => r.data),
+    queryKey: ['torre-control', scopeFilter, categoryFilter, userFilter],
+    queryFn: () => activitiesAPI.torreControl({
+      scope: scopeFilter || undefined,
+      category: categoryFilter || undefined,
+      assigned_to_id: userFilter || undefined,
+    }).then(r => r.data),
     refetchInterval: 60000,
   })
 
@@ -565,7 +579,7 @@ export default function TorreControlPage() {
     mutationFn: (id) => activitiesAPI.delete(id),
     onSuccess: () => {
       qc.invalidateQueries(['torre-control'])
-      toast.success('Desactivada')
+      toast.success(isLeaderOrAdmin ? 'Actividad eliminada' : 'Desactivada')
     },
   })
 
@@ -617,6 +631,7 @@ export default function TorreControlPage() {
                 onEdit={setEditActivity}
                 onDelete={(id) => deleteMut.mutate(id)}
                 completing={completing}
+                isLeaderOrAdmin={isLeaderOrAdmin}
               />
             ))}
           </div>
@@ -649,6 +664,12 @@ export default function TorreControlPage() {
             {['gestion','reporte','reunion','seguimiento','operativo'].map(c =>
               <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
           </select>
+          {isLeaderOrAdmin && (
+            <select value={userFilter} onChange={e => setUserFilter(e.target.value)} className="input text-sm py-1.5 w-36">
+              <option value="">Todos los usuarios</option>
+              {users?.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+            </select>
+          )}
           <button onClick={() => refetch()} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors" title="Actualizar">
             <RefreshCw size={15} className={isLoading ? 'animate-spin' : ''} />
           </button>

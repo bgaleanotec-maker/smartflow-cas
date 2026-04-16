@@ -257,6 +257,7 @@ def _activity_to_dict(a: RecurringActivity, current_instance: Optional[ActivityI
             for inst in sorted(log, key=lambda x: x.due_date, reverse=True)[:10]
         ],
         "is_active": a.is_active,
+        "pomodoro_minutes": a.pomodoro_minutes or 0,
     }
 
 
@@ -384,7 +385,11 @@ async def delete_activity(activity_id: int, db: DB, user: CurrentUser):
     a = result.scalar_one_or_none()
     if not a:
         raise HTTPException(status_code=404, detail="Actividad no encontrada")
-    a.is_active = False
+    # Admin/leader: hard delete; others: deactivate
+    if user.role in ("admin", "leader"):
+        await db.delete(a)
+    else:
+        a.is_active = False
     await db.flush()
 
 
@@ -486,7 +491,7 @@ async def start_activity(activity_id: int, db: DB, user: CurrentUser):
 # ─── Torre de Control Dashboard ──────────────────────────────────────────────
 
 @router.get("/torre-control")
-async def torre_control(db: DB, user: CurrentUser, scope: Optional[str] = None, category: Optional[str] = None):
+async def torre_control(db: DB, user: CurrentUser, scope: Optional[str] = None, category: Optional[str] = None, assigned_to_id: Optional[int] = None):
     """
     Dashboard: each recurring activity shown ONCE with real-time computed status.
     Groups by: vencidas | proximas_a_vencer | en_proceso | sin_iniciar | completadas.
@@ -501,6 +506,8 @@ async def torre_control(db: DB, user: CurrentUser, scope: Optional[str] = None, 
         query = query.where(RecurringActivity.scope == scope)
     if category:
         query = query.where(RecurringActivity.category == category)
+    if assigned_to_id:
+        query = query.where(RecurringActivity.assigned_to_id == assigned_to_id)
     query = query.order_by(RecurringActivity.priority.desc(), RecurringActivity.title)
 
     result = await db.execute(query)

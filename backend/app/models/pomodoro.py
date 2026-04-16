@@ -20,6 +20,8 @@ class PomodoroSession(Base):
     task_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("tasks.id"), nullable=True
     )
+    activity_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("recurring_activities.id"), nullable=True)
+    project_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("projects.id"), nullable=True)
     session_type: Mapped[SessionType] = mapped_column(
         Enum(SessionType), default=SessionType.WORK
     )
