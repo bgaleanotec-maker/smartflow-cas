@@ -63,53 +63,37 @@ async def list_incidents(
     if search:
         query = query.where(Incident.title.ilike(f"%{search}%"))
 
-    # Role-based visibility
+    # Role-based visibility (raw SQL text to avoid PG enum cast errors)
+    from sqlalchemy import text as _text, or_ as _or
     role = current_user.role
     if role == "leader":
-        lider_sr_ids_result = await db.execute(
-            select(User.id).where(User.role == "lider_sr")
-        )
-        lider_sr_ids = lider_sr_ids_result.scalars().all()
+        lider_sr_res = await db.execute(_text("SELECT id FROM users WHERE role::text = 'lider_sr'"))
+        lider_sr_ids = [r[0] for r in lider_sr_res.fetchall()]
         if lider_sr_ids:
-            from sqlalchemy import or_
             query = query.where(
-                or_(
+                _or(
                     ~Incident.reporter_id.in_(lider_sr_ids),
                     Incident.responsible_id == current_user.id,
                     Incident.reporter_id == current_user.id,
                 )
             )
     elif role == "negocio":
-        negocio_ids_result = await db.execute(
-            select(User.id).where(User.role == "negocio")
-        )
-        negocio_ids = negocio_ids_result.scalars().all()
-        from sqlalchemy import or_
-        query = query.where(
-            or_(
-                Incident.reporter_id.in_(negocio_ids),
-                Incident.responsible_id == current_user.id,
-            )
-        )
+        neg_res = await db.execute(_text("SELECT id FROM users WHERE role::text = 'negocio'"))
+        neg_ids = [r[0] for r in neg_res.fetchall()]
+        if neg_ids:
+            query = query.where(_or(Incident.reporter_id.in_(neg_ids), Incident.responsible_id == current_user.id))
+        else:
+            query = query.where(Incident.responsible_id == current_user.id)
     elif role == "herramientas":
-        herr_ids_result = await db.execute(
-            select(User.id).where(User.role == "herramientas")
-        )
-        herr_ids = herr_ids_result.scalars().all()
-        from sqlalchemy import or_
-        query = query.where(
-            or_(
-                Incident.reporter_id.in_(herr_ids),
-                Incident.responsible_id == current_user.id,
-            )
-        )
+        herr_res = await db.execute(_text("SELECT id FROM users WHERE role::text = 'herramientas'"))
+        herr_ids = [r[0] for r in herr_res.fetchall()]
+        if herr_ids:
+            query = query.where(_or(Incident.reporter_id.in_(herr_ids), Incident.responsible_id == current_user.id))
+        else:
+            query = query.where(Incident.responsible_id == current_user.id)
     elif role not in ("admin", "lider_sr"):
-        from sqlalchemy import or_
         query = query.where(
-            or_(
-                Incident.reporter_id == current_user.id,
-                Incident.responsible_id == current_user.id,
-            )
+            _or(Incident.reporter_id == current_user.id, Incident.responsible_id == current_user.id)
         )
     # admin and lider_sr see everything
 

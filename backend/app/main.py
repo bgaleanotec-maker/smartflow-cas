@@ -112,14 +112,13 @@ async def _run_column_migrations():
                     import logging
                     logging.getLogger(__name__).warning(f"Migration warning ({table}.{column}): {e}")
     else:
-        # PostgreSQL: add new enum values (must run outside transaction / with AUTOCOMMIT)
-        pg_enum_migrations = [
+        # PostgreSQL: add new enum values (must run with AUTOCOMMIT — no transaction)
+        import logging as _logging
+        _enum_sqls = [
             "ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'lider_sr'",
         ]
-        import logging as _logging
-        async with engine.connect() as _conn:
-            await _conn.execution_options(isolation_level="AUTOCOMMIT")
-            for _sql in pg_enum_migrations:
+        async with engine.execution_options(isolation_level="AUTOCOMMIT").connect() as _conn:
+            for _sql in _enum_sqls:
                 try:
                     await _conn.execute(text(_sql))
                 except Exception as _e:

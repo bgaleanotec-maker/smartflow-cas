@@ -715,7 +715,7 @@ export default function QuickTasksPage() {
             </div>
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {tasks.map(t => (
+              {(tasks || []).map(t => (
                 <TaskCard
                   key={t.id}
                   task={t}

@@ -509,49 +509,35 @@ async def torre_control(db: DB, user: CurrentUser, scope: Optional[str] = None, 
     if assigned_to_id:
         query = query.where(RecurringActivity.assigned_to_id == assigned_to_id)
 
-    # Role-based visibility
+    # Role-based visibility (use raw SQL text for role comparisons to avoid PG enum cast issues)
+    from sqlalchemy import text as _text, or_ as _or
     role = user.role
     if role == "leader":
-        # Leaders see all EXCEPT lider_sr's private activities
-        lider_sr_ids_result = await db.execute(
-            select(User.id).where(User.role == "lider_sr")
-        )
-        lider_sr_ids = lider_sr_ids_result.scalars().all()
+        lider_sr_res = await db.execute(_text("SELECT id FROM users WHERE role::text = 'lider_sr'"))
+        lider_sr_ids = [r[0] for r in lider_sr_res.fetchall()]
         if lider_sr_ids:
-            from sqlalchemy import or_
             query = query.where(
-                or_(
+                _or(
                     ~RecurringActivity.created_by_id.in_(lider_sr_ids),
                     RecurringActivity.assigned_to_id == user.id,
                     RecurringActivity.created_by_id == user.id,
                 )
             )
     elif role == "negocio":
-        negocio_ids_result = await db.execute(
-            select(User.id).where(User.role == "negocio")
-        )
-        negocio_ids = negocio_ids_result.scalars().all()
-        from sqlalchemy import or_
-        query = query.where(
-            or_(
-                RecurringActivity.created_by_id.in_(negocio_ids),
-                RecurringActivity.assigned_to_id == user.id,
-            )
-        )
+        neg_res = await db.execute(_text("SELECT id FROM users WHERE role::text = 'negocio'"))
+        neg_ids = [r[0] for r in neg_res.fetchall()]
+        if neg_ids:
+            query = query.where(_or(RecurringActivity.created_by_id.in_(neg_ids), RecurringActivity.assigned_to_id == user.id))
+        else:
+            query = query.where(RecurringActivity.assigned_to_id == user.id)
     elif role == "herramientas":
-        herr_ids_result = await db.execute(
-            select(User.id).where(User.role == "herramientas")
-        )
-        herr_ids = herr_ids_result.scalars().all()
-        from sqlalchemy import or_
-        query = query.where(
-            or_(
-                RecurringActivity.created_by_id.in_(herr_ids),
-                RecurringActivity.assigned_to_id == user.id,
-            )
-        )
+        herr_res = await db.execute(_text("SELECT id FROM users WHERE role::text = 'herramientas'"))
+        herr_ids = [r[0] for r in herr_res.fetchall()]
+        if herr_ids:
+            query = query.where(_or(RecurringActivity.created_by_id.in_(herr_ids), RecurringActivity.assigned_to_id == user.id))
+        else:
+            query = query.where(RecurringActivity.assigned_to_id == user.id)
     elif role not in ("admin", "lider_sr"):
-        # member, directivo: own only
         query = query.where(
             (RecurringActivity.created_by_id == user.id) |
             (RecurringActivity.assigned_to_id == user.id)
