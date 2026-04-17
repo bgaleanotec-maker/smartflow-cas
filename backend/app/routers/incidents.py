@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 from app.core.deps import DB, CurrentUser
 from app.models.incident import Incident, IncidentTimeline, IncidentStatus
 from app.models.user import User
+from app.models.business import Business
 from app.schemas.incident import IncidentCreate, IncidentUpdate, IncidentResponse
 
 router = APIRouter(prefix="/incidents", tags=["Incidentes"])
@@ -61,6 +62,56 @@ async def list_incidents(
         query = query.where(Incident.has_economic_impact == has_economic_impact)
     if search:
         query = query.where(Incident.title.ilike(f"%{search}%"))
+
+    # Role-based visibility
+    role = current_user.role
+    if role == "leader":
+        lider_sr_ids_result = await db.execute(
+            select(User.id).where(User.role == "lider_sr")
+        )
+        lider_sr_ids = lider_sr_ids_result.scalars().all()
+        if lider_sr_ids:
+            from sqlalchemy import or_
+            query = query.where(
+                or_(
+                    ~Incident.reporter_id.in_(lider_sr_ids),
+                    Incident.responsible_id == current_user.id,
+                    Incident.reporter_id == current_user.id,
+                )
+            )
+    elif role == "negocio":
+        negocio_ids_result = await db.execute(
+            select(User.id).where(User.role == "negocio")
+        )
+        negocio_ids = negocio_ids_result.scalars().all()
+        from sqlalchemy import or_
+        query = query.where(
+            or_(
+                Incident.reporter_id.in_(negocio_ids),
+                Incident.responsible_id == current_user.id,
+            )
+        )
+    elif role == "herramientas":
+        herr_ids_result = await db.execute(
+            select(User.id).where(User.role == "herramientas")
+        )
+        herr_ids = herr_ids_result.scalars().all()
+        from sqlalchemy import or_
+        query = query.where(
+            or_(
+                Incident.reporter_id.in_(herr_ids),
+                Incident.responsible_id == current_user.id,
+            )
+        )
+    elif role not in ("admin", "lider_sr"):
+        from sqlalchemy import or_
+        query = query.where(
+            or_(
+                Incident.reporter_id == current_user.id,
+                Incident.responsible_id == current_user.id,
+            )
+        )
+    # admin and lider_sr see everything
 
     result = await db.execute(query)
     return result.scalars().all()
@@ -230,3 +281,50 @@ async def add_comment(
     db.add(entry)
     await db.flush()
     return {"message": "Comentario agregado", "action": action}
+
+
+@router.get("/summary/by-business")
+async def incidents_business_summary(db: DB, current_user: CurrentUser):
+    """Returns per-business incident summary: count, total economic impact, affected users, status breakdown."""
+    from sqlalchemy import func as sqlfunc, case
+
+    result = await db.execute(
+        select(Incident).where(Incident.is_deleted == False)
+        .options(selectinload(Incident.business))
+    )
+    incidents = result.scalars().all()
+
+    # Also load businesses
+    biz_result = await db.execute(select(Business).where(Business.is_active == True))
+    businesses = {b.id: b for b in biz_result.scalars().all()}
+
+    summary = {}
+    for inc in incidents:
+        biz_id = inc.business_id or 0
+        if biz_id not in summary:
+            biz = businesses.get(biz_id)
+            summary[biz_id] = {
+                "business_id": biz_id or None,
+                "business_name": biz.name if biz else "Sin negocio",
+                "business_color": biz.color if biz else "#64748b",
+                "count": 0,
+                "total_economic_impact": 0.0,
+                "total_affected_users": 0,
+                "status_counts": {
+                    "abierto": 0,
+                    "en_investigacion": 0,
+                    "resuelto": 0,
+                    "cerrado": 0,
+                },
+            }
+        s = summary[biz_id]
+        s["count"] += 1
+        if inc.has_economic_impact and inc.economic_impact_amount:
+            s["total_economic_impact"] += float(inc.economic_impact_amount)
+        if inc.affected_users_count:
+            s["total_affected_users"] += inc.affected_users_count
+        status_key = inc.status.value if hasattr(inc.status, 'value') else str(inc.status)
+        if status_key in s["status_counts"]:
+            s["status_counts"][status_key] += 1
+
+    return sorted(summary.values(), key=lambda x: x["count"], reverse=True)

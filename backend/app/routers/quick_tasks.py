@@ -130,19 +130,55 @@ async def list_quick_tasks(
     if status:
         q = q.where(QuickTask.status == status)
 
-    # all_users only for leaders/admins
-    can_see_all = current_user.role in ("admin", "leader")
+    role = current_user.role
+
+    # Specific user filter (leader/admin/lider_sr only)
+    can_see_all = role in ("admin", "leader", "lider_sr")
 
     if assigned_to_id and can_see_all:
-        # filter by specific user
         q = q.where(
             (QuickTask.user_id == assigned_to_id) |
             (QuickTask.assigned_to_id == assigned_to_id)
         )
-    elif (all_users or can_see_all) and can_see_all:
-        pass  # no user filter — show all
+    elif can_see_all:
+        if role in ("leader",):
+            # Leaders see all EXCEPT lider_sr's private tasks (not assigned to current user)
+            lider_sr_ids_result = await db.execute(
+                select(User.id).where(User.role == "lider_sr")
+            )
+            lider_sr_ids = lider_sr_ids_result.scalars().all()
+            if lider_sr_ids:
+                from sqlalchemy import or_, and_, not_
+                q = q.where(
+                    or_(
+                        ~QuickTask.user_id.in_(lider_sr_ids),  # not created by lider_sr
+                        QuickTask.assigned_to_id == current_user.id,  # OR assigned to me
+                        QuickTask.user_id == current_user.id,  # OR I created it
+                    )
+                )
+        # admin and lider_sr see everything — no filter
+    elif role in ("negocio",):
+        # See tasks created by negocio-role users OR assigned to me
+        negocio_ids_result = await db.execute(
+            select(User.id).where(User.role == "negocio")
+        )
+        negocio_ids = negocio_ids_result.scalars().all()
+        q = q.where(
+            (QuickTask.user_id.in_(negocio_ids)) |
+            (QuickTask.assigned_to_id == current_user.id)
+        )
+    elif role in ("herramientas",):
+        # See tasks created by herramientas-role users OR assigned to me
+        herr_ids_result = await db.execute(
+            select(User.id).where(User.role == "herramientas")
+        )
+        herr_ids = herr_ids_result.scalars().all()
+        q = q.where(
+            (QuickTask.user_id.in_(herr_ids)) |
+            (QuickTask.assigned_to_id == current_user.id)
+        )
     else:
-        # show tasks assigned to me OR created by me
+        # member, directivo: own tasks only
         q = q.where(
             (QuickTask.user_id == current_user.id) |
             (QuickTask.assigned_to_id == current_user.id)

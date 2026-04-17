@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, AlertTriangle, DollarSign, Clock, Pencil, Trash2, X } from 'lucide-react'
+import { Plus, Search, AlertTriangle, DollarSign, Clock, Pencil, Trash2, X, Users, TrendingUp, Building2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import { incidentsAPI, adminAPI, usersAPI } from '../../services/api'
@@ -21,6 +21,76 @@ const STATUS_STYLES = {
   cerrado: 'bg-slate-800 text-slate-500',
 }
 
+const STATUS_LABELS = {
+  abierto: 'Abierto',
+  en_investigacion: 'Investigación',
+  resuelto: 'Resuelto',
+  cerrado: 'Cerrado',
+}
+
+function formatCurrency(amount) {
+  if (!amount) return null
+  return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(amount)
+}
+
+function BusinessSummaryPanel({ incidents, businesses }) {
+  if (!incidents || incidents.length === 0) return null
+
+  // Build per-business summary from incidents
+  const bizMap = {}
+  businesses?.forEach(b => {
+    bizMap[b.id] = { ...b, count: 0, economic: 0, affected: 0, statuses: {} }
+  })
+  // also "no business"
+  bizMap[0] = { id: 0, name: 'Sin negocio', color: '#64748b', count: 0, economic: 0, affected: 0, statuses: {} }
+
+  incidents.forEach(inc => {
+    const key = inc.business_id || 0
+    if (!bizMap[key]) bizMap[key] = { id: key, name: inc.business?.name || 'Sin negocio', color: '#64748b', count: 0, economic: 0, affected: 0, statuses: {} }
+    bizMap[key].count++
+    if (inc.has_economic_impact && inc.economic_impact_amount) bizMap[key].economic += parseFloat(inc.economic_impact_amount)
+    if (inc.affected_users_count) bizMap[key].affected += inc.affected_users_count
+    const s = inc.status || 'abierto'
+    bizMap[key].statuses[s] = (bizMap[key].statuses[s] || 0) + 1
+  })
+
+  const items = Object.values(bizMap).filter(b => b.count > 0).sort((a, b) => b.count - a.count)
+  if (items.length === 0) return null
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+      {items.map(biz => (
+        <div key={biz.id} className="card p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: biz.color || '#6366f1' }} />
+            <span className="font-medium text-slate-200 text-sm truncate">{biz.name}</span>
+            <span className="ml-auto text-xs font-bold text-slate-300">{biz.count}</span>
+          </div>
+          {biz.economic > 0 && (
+            <div className="flex items-center gap-1.5 text-amber-400 text-xs">
+              <DollarSign size={12} />
+              <span>{formatCurrency(biz.economic)}</span>
+            </div>
+          )}
+          {biz.affected > 0 && (
+            <div className="flex items-center gap-1.5 text-blue-400 text-xs">
+              <Users size={12} />
+              <span>{biz.affected.toLocaleString()} usuarios afectados</span>
+            </div>
+          )}
+          <div className="flex flex-wrap gap-1">
+            {Object.entries(biz.statuses).map(([status, count]) => (
+              <span key={status} className={clsx('text-xs px-1.5 py-0.5 rounded-full', STATUS_STYLES[status] || 'bg-slate-800 text-slate-400')}>
+                {count} {STATUS_LABELS[status] || status}
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function IncidentRow({ incident, onClick, onEdit, onDelete }) {
   return (
     <div
@@ -32,15 +102,32 @@ function IncidentRow({ incident, onClick, onEdit, onDelete }) {
           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
             <span className="text-xs font-mono text-slate-500">{incident.incident_number}</span>
             <span className={clsx('badge text-xs', SEVERITY_STYLES[incident.severity])}>
-              {incident.severity.toUpperCase()}
+              {incident.severity?.toUpperCase()}
             </span>
             <span className={clsx('badge text-xs', STATUS_STYLES[incident.status])}>
-              {incident.status.replace('_', ' ')}
+              {STATUS_LABELS[incident.status] || incident.status?.replace('_', ' ')}
             </span>
-            {incident.has_economic_impact && (
-              <span className="badge bg-amber-900/50 text-amber-400 border border-amber-800 text-xs">
+            {incident.business_id && (
+              <span className="badge text-xs bg-slate-800 text-slate-300 flex items-center gap-1">
+                <Building2 size={10} />
+                {incident.business?.name || `Negocio #${incident.business_id}`}
+              </span>
+            )}
+            {incident.has_economic_impact && incident.economic_impact_amount && (
+              <span className="badge bg-amber-900/50 text-amber-400 border border-amber-800 text-xs flex items-center gap-1">
                 <DollarSign size={10} />
-                Impacto económico
+                {formatCurrency(incident.economic_impact_amount)}
+              </span>
+            )}
+            {incident.has_economic_impact && !incident.economic_impact_amount && (
+              <span className="badge bg-amber-900/50 text-amber-400 border border-amber-800 text-xs">
+                <DollarSign size={10} /> Impacto económico
+              </span>
+            )}
+            {incident.affected_users_count > 0 && (
+              <span className="badge bg-blue-900/30 text-blue-400 text-xs flex items-center gap-1">
+                <Users size={10} />
+                {incident.affected_users_count} usuarios
               </span>
             )}
           </div>
@@ -337,18 +424,32 @@ export default function IncidentsPage() {
   const [search, setSearch] = useState('')
   const [severityFilter, setSeverityFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [businessFilter, setBusinessFilter] = useState('')
+  const [showSummary, setShowSummary] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [editingIncident, setEditingIncident] = useState(null)
   const [deletingIncident, setDeletingIncident] = useState(null)
   const navigate = useNavigate()
   const qc = useQueryClient()
 
+  const { data: businesses } = useQuery({
+    queryKey: ['businesses'],
+    queryFn: () => adminAPI.businesses().then(r => r.data),
+  })
+
+  // All incidents (no business filter) for summary panel
+  const { data: allIncidents } = useQuery({
+    queryKey: ['incidents-all'],
+    queryFn: () => incidentsAPI.list({ limit: 200 }).then(r => r.data),
+  })
+
   const { data: incidents, isLoading } = useQuery({
-    queryKey: ['incidents', search, severityFilter, statusFilter],
+    queryKey: ['incidents', search, severityFilter, statusFilter, businessFilter],
     queryFn: () => incidentsAPI.list({
       search,
       severity: severityFilter || undefined,
       status: statusFilter || undefined,
+      business_id: businessFilter ? parseInt(businessFilter) : undefined,
     }).then(r => r.data),
   })
 
@@ -356,6 +457,7 @@ export default function IncidentsPage() {
     mutationFn: (id) => incidentsAPI.delete(id),
     onSuccess: () => {
       qc.invalidateQueries(['incidents'])
+      qc.invalidateQueries(['incidents-all'])
       toast.success('Incidente eliminado')
       setDeletingIncident(null)
     },
@@ -369,10 +471,26 @@ export default function IncidentsPage() {
           <h1 className="text-2xl font-bold text-white">Incidentes</h1>
           <p className="text-slate-400 text-sm mt-0.5">{incidents?.length ?? 0} incidentes</p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn-danger">
-          <Plus size={16} /> Reportar incidente
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowSummary(v => !v)}
+            className={clsx('btn-ghost text-xs px-3 py-2 flex items-center gap-1.5', showSummary ? 'text-brand-400' : 'text-slate-500')}
+          >
+            <TrendingUp size={14} /> {showSummary ? 'Ocultar' : 'Ver'} resumen
+          </button>
+          <button onClick={() => setShowCreate(true)} className="btn-danger">
+            <Plus size={16} /> Reportar incidente
+          </button>
+        </div>
       </div>
+
+      {/* Business Summary Panel */}
+      {showSummary && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Resumen por negocio</p>
+          <BusinessSummaryPanel incidents={allIncidents} businesses={businesses} />
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-3 flex-wrap">
@@ -380,6 +498,10 @@ export default function IncidentsPage() {
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar incidentes..." className="input pl-9" />
         </div>
+        <select value={businessFilter} onChange={e => setBusinessFilter(e.target.value)} className="input w-auto">
+          <option value="">Todos los negocios</option>
+          {businesses?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select>
         <select value={severityFilter} onChange={e => setSeverityFilter(e.target.value)} className="input w-auto">
           <option value="">Todas las severidades</option>
           <option value="critico">Crítico</option>

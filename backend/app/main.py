@@ -112,6 +112,19 @@ async def _run_column_migrations():
                     import logging
                     logging.getLogger(__name__).warning(f"Migration warning ({table}.{column}): {e}")
     else:
+        # PostgreSQL: add new enum values (must run outside transaction / with AUTOCOMMIT)
+        pg_enum_migrations = [
+            "ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'lider_sr'",
+        ]
+        import logging as _logging
+        async with engine.connect() as _conn:
+            await _conn.execution_options(isolation_level="AUTOCOMMIT")
+            for _sql in pg_enum_migrations:
+                try:
+                    await _conn.execute(text(_sql))
+                except Exception as _e:
+                    _logging.getLogger(__name__).warning(f"Enum migration: {_e}")
+
         # PostgreSQL: supports ADD COLUMN IF NOT EXISTS
         pg_migrations = [
             # voice_meetings context FK columns

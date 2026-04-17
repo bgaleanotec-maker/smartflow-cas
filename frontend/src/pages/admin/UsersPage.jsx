@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, UserCheck, UserX, KeyRound, Edit2, Copy, CheckCircle } from 'lucide-react'
+import { Plus, Search, UserCheck, UserX, KeyRound, Edit2, Copy, CheckCircle, Save } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import { usersAPI, adminAPI } from '../../services/api'
@@ -9,6 +9,7 @@ import clsx from 'clsx'
 const ROLE_BADGES = {
   admin: 'bg-purple-900/50 text-purple-400 border border-purple-800',
   leader: 'bg-brand-900/50 text-brand-400 border border-brand-800',
+  lider_sr: 'bg-indigo-900/50 text-indigo-400 border border-indigo-800',
   member: 'bg-slate-800 text-slate-400',
   negocio: 'bg-emerald-900/50 text-emerald-400 border border-emerald-800',
   herramientas: 'bg-amber-900/50 text-amber-400 border border-amber-800',
@@ -96,7 +97,6 @@ function CreateUserModal({ onClose, onCreated }) {
           <button onClick={onClose} className="text-slate-400 hover:text-slate-200">✕</button>
         </div>
         <form onSubmit={handleSubmit(d => {
-          // Clean empty string fields to null for the API
           const clean = { ...d }
           if (!clean.phone) delete clean.phone
           if (!clean.team) delete clean.team
@@ -127,6 +127,7 @@ function CreateUserModal({ onClose, onCreated }) {
               <select {...register('role')} className="input">
                 <option value="member">Miembro</option>
                 <option value="leader">Líder</option>
+                <option value="lider_sr">Líder Sr</option>
                 <option value="admin">Admin</option>
                 <option value="negocio">Negocio</option>
                 <option value="herramientas">Herramientas</option>
@@ -186,11 +187,154 @@ function CreateUserModal({ onClose, onCreated }) {
   )
 }
 
+function EditUserModal({ user, onClose }) {
+  const qc = useQueryClient()
+  const { data: businesses } = useQuery({
+    queryKey: ['businesses'],
+    queryFn: () => adminAPI.businesses().then(r => r.data),
+  })
+
+  const { register, handleSubmit, watch, formState: { isSubmitting } } = useForm({
+    defaultValues: {
+      full_name: user.full_name || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      role: user.role || 'member',
+      team: user.team || '',
+      main_business_id: user.main_business?.id || user.main_business_id || '',
+      secondary_business_id: user.secondary_business?.id || user.secondary_business_id || '',
+      contract_type: user.contract_type || 'indefinido',
+      contract_start_date: user.contract_start_date || '',
+      contract_renewal_date: user.contract_renewal_date || '',
+      is_active: user.is_active !== false,
+    }
+  })
+
+  const contractType = watch('contract_type')
+
+  const mutation = useMutation({
+    mutationFn: (data) => usersAPI.update(user.id, data),
+    onSuccess: () => {
+      qc.invalidateQueries(['users'])
+      toast.success('Usuario actualizado')
+      onClose()
+    },
+    onError: (err) => toast.error(err.response?.data?.detail || 'Error al actualizar usuario'),
+  })
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-xl my-4">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+          <h2 className="font-semibold text-white flex items-center gap-2">
+            <Edit2 size={16} className="text-brand-400" /> Editar usuario
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-200">✕</button>
+        </div>
+        <form onSubmit={handleSubmit(d => {
+          const clean = { ...d }
+          if (!clean.phone) clean.phone = null
+          if (!clean.team) clean.team = null
+          if (!clean.main_business_id) clean.main_business_id = null
+          else clean.main_business_id = Number(clean.main_business_id)
+          if (!clean.secondary_business_id) clean.secondary_business_id = null
+          else clean.secondary_business_id = Number(clean.secondary_business_id)
+          if (!clean.contract_start_date) clean.contract_start_date = null
+          if (!clean.contract_renewal_date) clean.contract_renewal_date = null
+          clean.is_active = clean.is_active === true || clean.is_active === 'true'
+          mutation.mutate(clean)
+        })} className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2">
+              <label className="label">Nombre completo *</label>
+              <input {...register('full_name', { required: true })} className="input" />
+            </div>
+            <div>
+              <label className="label">Correo electrónico *</label>
+              <input {...register('email', { required: true })} type="email" className="input" />
+            </div>
+            <div>
+              <label className="label">Teléfono / WhatsApp</label>
+              <input {...register('phone')} className="input" placeholder="+57 300 000 0000" />
+            </div>
+            <div>
+              <label className="label">Rol</label>
+              <select {...register('role')} className="input">
+                <option value="member">Miembro</option>
+                <option value="leader">Líder</option>
+                <option value="lider_sr">Líder Sr</option>
+                <option value="admin">Admin</option>
+                <option value="negocio">Negocio</option>
+                <option value="herramientas">Herramientas</option>
+                <option value="directivo">Directivo</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Equipo</label>
+              <select {...register('team')} className="input">
+                <option value="">Sin equipo</option>
+                <option value="BO">BO (Back Office)</option>
+                <option value="CAS">CAS</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Negocio principal</label>
+              <select {...register('main_business_id')} className="input">
+                <option value="">Sin negocio</option>
+                {businesses?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Negocio secundario</label>
+              <select {...register('secondary_business_id')} className="input">
+                <option value="">Sin negocio</option>
+                {businesses?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Tipo de contrato</label>
+              <select {...register('contract_type')} className="input">
+                <option value="indefinido">Indefinido</option>
+                <option value="fijo">Fijo</option>
+                <option value="temporal">Temporal</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Fecha inicio contrato</label>
+              <input {...register('contract_start_date')} type="date" className="input" />
+            </div>
+            {contractType !== 'indefinido' && (
+              <div>
+                <label className="label">Fecha renovación</label>
+                <input {...register('contract_renewal_date')} type="date" className="input" />
+              </div>
+            )}
+            <div className="col-span-2">
+              <label className="label">Estado</label>
+              <select {...register('is_active')} className="input">
+                <option value="true">Activo</option>
+                <option value="false">Inactivo</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancelar</button>
+            <button type="submit" disabled={isSubmitting || mutation.isPending} className="btn-primary flex-1">
+              <Save size={15} /> {mutation.isPending ? 'Guardando…' : 'Guardar cambios'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function UsersPage() {
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
   const [teamFilter, setTeamFilter] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [editingUser, setEditingUser] = useState(null)
   const [createdUser, setCreatedUser] = useState(null)
   const [resetUser, setResetUser] = useState(null)
   const qc = useQueryClient()
@@ -210,10 +354,15 @@ export default function UsersPage() {
     onSuccess: () => { qc.invalidateQueries(['users']); toast.success('Usuario desactivado') },
   })
 
+  const activateMutation = useMutation({
+    mutationFn: (id) => usersAPI.update(id, { is_active: true }),
+    onSuccess: () => { qc.invalidateQueries(['users']); toast.success('Usuario activado') },
+    onError: (err) => toast.error(err.response?.data?.detail || 'Error al activar usuario'),
+  })
+
   const resetPasswordMutation = useMutation({
     mutationFn: (id) => usersAPI.resetPassword(id),
     onSuccess: (res, userId) => {
-      // Find the user by id so we can show their name/email in the modal
       const user = users?.find(u => u.id === userId)
       setResetUser({
         full_name: user?.full_name ?? '—',
@@ -246,9 +395,11 @@ export default function UsersPage() {
           <option value="">Todos los roles</option>
           <option value="admin">Admin</option>
           <option value="leader">Líder</option>
+          <option value="lider_sr">Líder Sr</option>
           <option value="member">Miembro</option>
           <option value="negocio">Negocio</option>
           <option value="herramientas">Herramientas</option>
+          <option value="directivo">Directivo</option>
         </select>
         <select value={teamFilter} onChange={e => setTeamFilter(e.target.value)} className="input w-auto">
           <option value="">Todos los equipos</option>
@@ -283,11 +434,12 @@ export default function UsersPage() {
                       <div>
                         <p className="font-medium text-slate-100">{user.full_name}</p>
                         <p className="text-xs text-slate-500">{user.email}</p>
+                        {user.phone && <p className="text-xs text-slate-600">{user.phone}</p>}
                       </div>
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={clsx('badge', ROLE_BADGES[user.role])}>{user.role}</span>
+                    <span className={clsx('badge', ROLE_BADGES[user.role] || 'bg-slate-800 text-slate-400')}>{user.role}</span>
                   </td>
                   <td className="px-4 py-3">
                     {user.team && <span className={clsx('badge', TEAM_BADGES[user.team])}>{user.team}</span>}
@@ -296,7 +448,8 @@ export default function UsersPage() {
                     {user.main_business?.name || '—'}
                   </td>
                   <td className="px-4 py-3 text-slate-400 text-xs">
-                    —
+                    {user.contract_type || '—'}
+                    {user.contract_start_date && <div className="text-slate-600">desde {user.contract_start_date}</div>}
                   </td>
                   <td className="px-4 py-3">
                     {user.is_active ? (
@@ -308,13 +461,20 @@ export default function UsersPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
                       <button
+                        onClick={() => setEditingUser(user)}
+                        className="btn-ghost p-1.5 text-slate-500 hover:text-brand-400"
+                        title="Editar usuario"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
                         onClick={() => resetPasswordMutation.mutate(user.id)}
                         className="btn-ghost p-1.5 text-slate-500 hover:text-amber-400"
                         title="Resetear contraseña"
                       >
                         <KeyRound size={14} />
                       </button>
-                      {user.is_active && (
+                      {user.is_active ? (
                         <button
                           onClick={() => {
                             if (confirm(`¿Desactivar a ${user.full_name}?`))
@@ -324,6 +484,17 @@ export default function UsersPage() {
                           title="Desactivar usuario"
                         >
                           <UserX size={14} />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            if (confirm(`¿Activar a ${user.full_name}?`))
+                              activateMutation.mutate(user.id)
+                          }}
+                          className="btn-ghost p-1.5 text-slate-500 hover:text-green-400"
+                          title="Activar usuario"
+                        >
+                          <UserCheck size={14} />
                         </button>
                       )}
                     </div>
@@ -346,6 +517,9 @@ export default function UsersPage() {
           onClose={() => setShowCreate(false)}
           onCreated={(user) => setCreatedUser(user)}
         />
+      )}
+      {editingUser && (
+        <EditUserModal user={editingUser} onClose={() => setEditingUser(null)} />
       )}
       {createdUser && (
         <TempPasswordModal

@@ -508,6 +508,56 @@ async def torre_control(db: DB, user: CurrentUser, scope: Optional[str] = None, 
         query = query.where(RecurringActivity.category == category)
     if assigned_to_id:
         query = query.where(RecurringActivity.assigned_to_id == assigned_to_id)
+
+    # Role-based visibility
+    role = user.role
+    if role == "leader":
+        # Leaders see all EXCEPT lider_sr's private activities
+        lider_sr_ids_result = await db.execute(
+            select(User.id).where(User.role == "lider_sr")
+        )
+        lider_sr_ids = lider_sr_ids_result.scalars().all()
+        if lider_sr_ids:
+            from sqlalchemy import or_
+            query = query.where(
+                or_(
+                    ~RecurringActivity.created_by_id.in_(lider_sr_ids),
+                    RecurringActivity.assigned_to_id == user.id,
+                    RecurringActivity.created_by_id == user.id,
+                )
+            )
+    elif role == "negocio":
+        negocio_ids_result = await db.execute(
+            select(User.id).where(User.role == "negocio")
+        )
+        negocio_ids = negocio_ids_result.scalars().all()
+        from sqlalchemy import or_
+        query = query.where(
+            or_(
+                RecurringActivity.created_by_id.in_(negocio_ids),
+                RecurringActivity.assigned_to_id == user.id,
+            )
+        )
+    elif role == "herramientas":
+        herr_ids_result = await db.execute(
+            select(User.id).where(User.role == "herramientas")
+        )
+        herr_ids = herr_ids_result.scalars().all()
+        from sqlalchemy import or_
+        query = query.where(
+            or_(
+                RecurringActivity.created_by_id.in_(herr_ids),
+                RecurringActivity.assigned_to_id == user.id,
+            )
+        )
+    elif role not in ("admin", "lider_sr"):
+        # member, directivo: own only
+        query = query.where(
+            (RecurringActivity.created_by_id == user.id) |
+            (RecurringActivity.assigned_to_id == user.id)
+        )
+    # admin and lider_sr see everything
+
     query = query.order_by(RecurringActivity.priority.desc(), RecurringActivity.title)
 
     result = await db.execute(query)
