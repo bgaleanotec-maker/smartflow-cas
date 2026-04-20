@@ -28,7 +28,43 @@ async def lifespan(app: FastAPI):
 
     # Seed default data
     await seed_defaults()
+
+    # ── Task reminder scheduler (WhatsApp, America/Bogota UTC-5) ──────────────
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    from app.services.task_reminders import send_daily_reminders
+    import logging as _sched_log
+
+    _scheduler = AsyncIOScheduler(timezone="America/Bogota")
+
+    # 9:00 AM — all active users with pending tasks due today/overdue
+    _scheduler.add_job(
+        send_daily_reminders,
+        CronTrigger(hour=9, minute=0, timezone="America/Bogota"),
+        id="reminders_morning",
+        kwargs={"is_afternoon": False},
+        replace_existing=True,
+        misfire_grace_time=300,   # allow up to 5 min late start (e.g. cold boot)
+    )
+
+    # 3:00 PM — lider_sr users only (second daily reminder)
+    _scheduler.add_job(
+        send_daily_reminders,
+        CronTrigger(hour=15, minute=0, timezone="America/Bogota"),
+        id="reminders_afternoon",
+        kwargs={"is_afternoon": True},
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+
+    _scheduler.start()
+    _sched_log.getLogger(__name__).info(
+        "Task reminder scheduler started — morning=09:00, afternoon=15:00 (Bogota)"
+    )
+
     yield
+
+    _scheduler.shutdown(wait=False)
 
 
 async def _run_column_migrations():
@@ -511,7 +547,7 @@ app.include_router(backup.router, prefix=API_PREFIX)
 app.include_router(quick_tasks.router, prefix=API_PREFIX)
 
 
-# force redeploy 2026-04-19 — role column VARCHAR migration
+# force redeploy 2026-04-19b — WhatsApp reminders + APScheduler + role VARCHAR
 @app.get("/health")
 async def health():
     return {"status": "ok", "app": settings.APP_NAME, "version": settings.VERSION}

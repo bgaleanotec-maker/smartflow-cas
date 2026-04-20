@@ -1,10 +1,11 @@
 """
 Quick reminders router — lightweight notes/todos for mobile.
 Endpoints:
-  GET    /reminders          — list my reminders (pending first, done last)
-  POST   /reminders          — create reminder
-  PATCH  /reminders/{id}     — update (mark done, edit title, etc.)
-  DELETE /reminders/{id}     — delete
+  GET    /reminders                    — list my reminders (pending first, done last)
+  POST   /reminders                    — create reminder
+  PATCH  /reminders/{id}               — update (mark done, edit title, etc.)
+  DELETE /reminders/{id}               — delete
+  POST   /reminders/trigger-whatsapp   — manual trigger for admins (testing)
 """
 from datetime import datetime, timezone
 from typing import Optional
@@ -13,7 +14,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from app.core.deps import DB, CurrentUser
+from app.core.deps import DB, CurrentUser, LeaderOrAdmin
 from app.models.reminder import Reminder
 
 router = APIRouter(prefix="/reminders", tags=["Reminders"])
@@ -115,3 +116,26 @@ async def delete_reminder(reminder_id: int, db: DB, user: CurrentUser):
     if not r:
         raise HTTPException(status_code=404, detail="Recordatorio no encontrado")
     await db.delete(r)
+
+
+# ─── Admin: manual WhatsApp reminder trigger ──────────────────────────────────
+
+@router.post("/trigger-whatsapp", status_code=200)
+async def trigger_whatsapp_reminders(
+    admin: LeaderOrAdmin,
+    afternoon: bool = False,
+):
+    """
+    Trigger WhatsApp task reminders immediately (admin/leader only).
+    Use afternoon=true to simulate the 3 PM lider_sr-only run.
+    """
+    from app.services.task_reminders import send_daily_reminders
+    import asyncio
+
+    # Run in background so the HTTP response returns immediately
+    asyncio.create_task(send_daily_reminders(is_afternoon=afternoon))
+    run_type = "tarde (lider_sr)" if afternoon else "mañana (todos)"
+    return {
+        "message": f"Recordatorios WhatsApp en proceso — run: {run_type}",
+        "afternoon": afternoon,
+    }
