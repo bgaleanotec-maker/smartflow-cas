@@ -21,16 +21,21 @@ async def list_users(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, le=200),
 ):
+    from sqlalchemy import text as _text, cast, String
     query = (
         select(User)
-        .options(selectinload(User.main_business))
+        .options(
+            selectinload(User.main_business),
+            selectinload(User.secondary_business),
+        )
         .offset(skip)
         .limit(limit)
     )
     if is_active is not None:
         query = query.where(User.is_active == is_active)
     if role:
-        query = query.where(User.role == role)
+        # Use text cast to avoid PostgreSQL enum cast error when enum has new values not yet migrated
+        query = query.where(cast(User.role, String) == role.value)
     if team:
         query = query.where(User.team == team)
     if search:

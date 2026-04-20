@@ -63,12 +63,16 @@ async def list_incidents(
     if search:
         query = query.where(Incident.title.ilike(f"%{search}%"))
 
-    # Role-based visibility (raw SQL text to avoid PG enum cast errors)
-    from sqlalchemy import text as _text, or_ as _or
-    role = current_user.role
-    if role == "leader":
-        lider_sr_res = await db.execute(_text("SELECT id FROM users WHERE role::text = 'lider_sr'"))
-        lider_sr_ids = [r[0] for r in lider_sr_res.fetchall()]
+    # Role-based visibility (CAST to avoid PG enum cast errors with new enum values)
+    from sqlalchemy import text as _t, or_ as _or
+    role_val = str(current_user.role.value) if hasattr(current_user.role, 'value') else str(current_user.role)
+
+    async def _ids_by_role_inc(role_name: str):
+        res = await db.execute(_t(f"SELECT id FROM users WHERE CAST(role AS VARCHAR) = '{role_name}'"))
+        return [r[0] for r in res.fetchall()]
+
+    if role_val == "leader":
+        lider_sr_ids = await _ids_by_role_inc("lider_sr")
         if lider_sr_ids:
             query = query.where(
                 _or(
@@ -77,21 +81,19 @@ async def list_incidents(
                     Incident.reporter_id == current_user.id,
                 )
             )
-    elif role == "negocio":
-        neg_res = await db.execute(_text("SELECT id FROM users WHERE role::text = 'negocio'"))
-        neg_ids = [r[0] for r in neg_res.fetchall()]
+    elif role_val == "negocio":
+        neg_ids = await _ids_by_role_inc("negocio")
         if neg_ids:
             query = query.where(_or(Incident.reporter_id.in_(neg_ids), Incident.responsible_id == current_user.id))
         else:
             query = query.where(Incident.responsible_id == current_user.id)
-    elif role == "herramientas":
-        herr_res = await db.execute(_text("SELECT id FROM users WHERE role::text = 'herramientas'"))
-        herr_ids = [r[0] for r in herr_res.fetchall()]
+    elif role_val == "herramientas":
+        herr_ids = await _ids_by_role_inc("herramientas")
         if herr_ids:
             query = query.where(_or(Incident.reporter_id.in_(herr_ids), Incident.responsible_id == current_user.id))
         else:
             query = query.where(Incident.responsible_id == current_user.id)
-    elif role not in ("admin", "lider_sr"):
+    elif role_val not in ("admin", "lider_sr"):
         query = query.where(
             _or(Incident.reporter_id == current_user.id, Incident.responsible_id == current_user.id)
         )

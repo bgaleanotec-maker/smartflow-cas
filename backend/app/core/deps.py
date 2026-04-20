@@ -52,7 +52,7 @@ async def get_admin_user(
 async def get_leader_or_admin(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:
-    if current_user.role not in [UserRole.ADMIN, UserRole.LEADER]:
+    if current_user.role not in [UserRole.ADMIN, UserRole.LEADER, UserRole.LIDER_SR]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Se requieren permisos de líder o administrador",

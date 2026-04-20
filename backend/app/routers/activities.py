@@ -509,12 +509,16 @@ async def torre_control(db: DB, user: CurrentUser, scope: Optional[str] = None, 
     if assigned_to_id:
         query = query.where(RecurringActivity.assigned_to_id == assigned_to_id)
 
-    # Role-based visibility (use raw SQL text for role comparisons to avoid PG enum cast issues)
-    from sqlalchemy import text as _text, or_ as _or
-    role = user.role
-    if role == "leader":
-        lider_sr_res = await db.execute(_text("SELECT id FROM users WHERE role::text = 'lider_sr'"))
-        lider_sr_ids = [r[0] for r in lider_sr_res.fetchall()]
+    # Role-based visibility (CAST to avoid PG enum cast errors with new enum values)
+    from sqlalchemy import text as _t, or_ as _or
+    role_val = str(user.role.value) if hasattr(user.role, 'value') else str(user.role)
+
+    async def _ids_by_role_act(role_name: str):
+        res = await db.execute(_t(f"SELECT id FROM users WHERE CAST(role AS VARCHAR) = '{role_name}'"))
+        return [r[0] for r in res.fetchall()]
+
+    if role_val == "leader":
+        lider_sr_ids = await _ids_by_role_act("lider_sr")
         if lider_sr_ids:
             query = query.where(
                 _or(
@@ -523,21 +527,19 @@ async def torre_control(db: DB, user: CurrentUser, scope: Optional[str] = None, 
                     RecurringActivity.created_by_id == user.id,
                 )
             )
-    elif role == "negocio":
-        neg_res = await db.execute(_text("SELECT id FROM users WHERE role::text = 'negocio'"))
-        neg_ids = [r[0] for r in neg_res.fetchall()]
+    elif role_val == "negocio":
+        neg_ids = await _ids_by_role_act("negocio")
         if neg_ids:
             query = query.where(_or(RecurringActivity.created_by_id.in_(neg_ids), RecurringActivity.assigned_to_id == user.id))
         else:
             query = query.where(RecurringActivity.assigned_to_id == user.id)
-    elif role == "herramientas":
-        herr_res = await db.execute(_text("SELECT id FROM users WHERE role::text = 'herramientas'"))
-        herr_ids = [r[0] for r in herr_res.fetchall()]
+    elif role_val == "herramientas":
+        herr_ids = await _ids_by_role_act("herramientas")
         if herr_ids:
             query = query.where(_or(RecurringActivity.created_by_id.in_(herr_ids), RecurringActivity.assigned_to_id == user.id))
         else:
             query = query.where(RecurringActivity.assigned_to_id == user.id)
-    elif role not in ("admin", "lider_sr"):
+    elif role_val not in ("admin", "lider_sr"):
         query = query.where(
             (RecurringActivity.created_by_id == user.id) |
             (RecurringActivity.assigned_to_id == user.id)

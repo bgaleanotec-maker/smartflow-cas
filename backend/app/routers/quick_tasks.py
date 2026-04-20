@@ -130,10 +130,15 @@ async def list_quick_tasks(
     if status:
         q = q.where(QuickTask.status == status)
 
-    role = current_user.role
+    from sqlalchemy import text as _t, or_ as _or, cast as _cast, String as _Str
+    role_val = str(current_user.role.value) if hasattr(current_user.role, 'value') else str(current_user.role)
 
-    # Specific user filter (leader/admin/lider_sr only)
-    can_see_all = role in ("admin", "leader", "lider_sr")
+    async def _ids_by_role(role_name: str):
+        """Return list of user IDs with the given role using CAST to avoid PG enum cast errors."""
+        res = await db.execute(_t(f"SELECT id FROM users WHERE CAST(role AS VARCHAR) = '{role_name}'"))
+        return [r[0] for r in res.fetchall()]
+
+    can_see_all = role_val in ("admin", "leader", "lider_sr")
 
     if assigned_to_id and can_see_all:
         q = q.where(
@@ -141,52 +146,31 @@ async def list_quick_tasks(
             (QuickTask.assigned_to_id == assigned_to_id)
         )
     elif can_see_all:
-        if role in ("leader",):
-            # Leaders see all EXCEPT lider_sr's private tasks
-            # Use raw SQL to avoid PostgreSQL enum cast issues if lider_sr not yet in DB
-            from sqlalchemy import text as _text
-            lider_sr_result = await db.execute(
-                _text("SELECT id FROM users WHERE role::text = 'lider_sr'")
-            )
-            lider_sr_ids = [row[0] for row in lider_sr_result.fetchall()]
+        if role_val == "leader":
+            lider_sr_ids = await _ids_by_role("lider_sr")
             if lider_sr_ids:
-                from sqlalchemy import or_
                 q = q.where(
-                    or_(
+                    _or(
                         ~QuickTask.user_id.in_(lider_sr_ids),
                         QuickTask.assigned_to_id == current_user.id,
                         QuickTask.user_id == current_user.id,
                     )
                 )
         # admin and lider_sr see everything — no filter
-    elif role in ("negocio",):
-        from sqlalchemy import text as _text, or_
-        negocio_result = await db.execute(
-            _text("SELECT id FROM users WHERE role::text = 'negocio'")
-        )
-        negocio_ids = [row[0] for row in negocio_result.fetchall()]
+    elif role_val == "negocio":
+        negocio_ids = await _ids_by_role("negocio")
         if negocio_ids:
-            q = q.where(
-                or_(QuickTask.user_id.in_(negocio_ids),
-                    QuickTask.assigned_to_id == current_user.id)
-            )
+            q = q.where(_or(QuickTask.user_id.in_(negocio_ids), QuickTask.assigned_to_id == current_user.id))
         else:
             q = q.where(QuickTask.assigned_to_id == current_user.id)
-    elif role in ("herramientas",):
-        from sqlalchemy import text as _text, or_
-        herr_result = await db.execute(
-            _text("SELECT id FROM users WHERE role::text = 'herramientas'")
-        )
-        herr_ids = [row[0] for row in herr_result.fetchall()]
+    elif role_val == "herramientas":
+        herr_ids = await _ids_by_role("herramientas")
         if herr_ids:
-            q = q.where(
-                or_(QuickTask.user_id.in_(herr_ids),
-                    QuickTask.assigned_to_id == current_user.id)
-            )
+            q = q.where(_or(QuickTask.user_id.in_(herr_ids), QuickTask.assigned_to_id == current_user.id))
         else:
             q = q.where(QuickTask.assigned_to_id == current_user.id)
     else:
-        # member, directivo: own tasks only
+        # member, directivo, project_leader: own tasks only
         q = q.where(
             (QuickTask.user_id == current_user.id) |
             (QuickTask.assigned_to_id == current_user.id)

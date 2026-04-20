@@ -30,6 +30,7 @@ class UserCreate(UserBase):
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
+    email: Optional[EmailStr] = None
     phone: Optional[str] = None
     role: Optional[UserRole] = None
     team: Optional[TeamType] = None
@@ -95,11 +96,16 @@ class UserListResponse(BaseModel):
     id: int
     full_name: str
     email: str
+    phone: Optional[str] = None
     role: UserRole
     team: Optional[TeamType] = None
     is_active: bool
     avatar_url: Optional[str] = None
     main_business: Optional[BusinessInfo] = None
+    secondary_business: Optional[BusinessInfo] = None
+    contract_type: Optional[ContractType] = None
+    contract_start_date: Optional[date] = None
+    contract_renewal_date: Optional[date] = None
 
     class Config:
         from_attributes = True

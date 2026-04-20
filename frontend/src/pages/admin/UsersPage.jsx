@@ -201,12 +201,12 @@ function EditUserModal({ user, onClose }) {
       phone: user.phone || '',
       role: user.role || 'member',
       team: user.team || '',
-      main_business_id: user.main_business?.id || user.main_business_id || '',
-      secondary_business_id: user.secondary_business?.id || user.secondary_business_id || '',
+      main_business_id: user.main_business?.id ? String(user.main_business.id) : '',
+      secondary_business_id: user.secondary_business?.id ? String(user.secondary_business.id) : '',
       contract_type: user.contract_type || 'indefinido',
       contract_start_date: user.contract_start_date || '',
       contract_renewal_date: user.contract_renewal_date || '',
-      is_active: user.is_active !== false,
+      is_active: user.is_active !== false ? 'true' : 'false',
     }
   })
 
