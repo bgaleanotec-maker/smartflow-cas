@@ -20,8 +20,12 @@ class NovedadCreate(BaseModel):
     business_id: Optional[int] = None
     has_economic_impact: bool = False
     economic_impact_amount: Optional[Decimal] = None
-    impact_type: str = "OTRO"          # OPEX | ON | OTRO
-    importance_stars: int = 3          # 1-5
+    impact_type: str = "OTRO"           # OPEX | ON | OTRO
+    importance_stars: int = 3           # 1-5
+    impact_sentiment: str = "neutral"   # positivo | neutral | negativo
+    has_reproceso: bool = False
+    reproceso_hours: Optional[Decimal] = None
+    reproceso_status: str = "sin_iniciar"  # subsanado | en_proceso | sin_iniciar
 
 
 class NovedadUpdate(BaseModel):
@@ -32,7 +36,11 @@ class NovedadUpdate(BaseModel):
     economic_impact_amount: Optional[Decimal] = None
     impact_type: Optional[str] = None
     importance_stars: Optional[int] = None
-    status: Optional[str] = None      # activa | archivada
+    impact_sentiment: Optional[str] = None
+    has_reproceso: Optional[bool] = None
+    reproceso_hours: Optional[Decimal] = None
+    reproceso_status: Optional[str] = None
+    status: Optional[str] = None       # activa | archivada
 
 
 def _to_dict(n: NovedadOperativa) -> dict:
@@ -47,6 +55,10 @@ def _to_dict(n: NovedadOperativa) -> dict:
         "economic_impact_amount": float(n.economic_impact_amount) if n.economic_impact_amount else None,
         "impact_type": n.impact_type,
         "importance_stars": n.importance_stars,
+        "impact_sentiment": n.impact_sentiment,
+        "has_reproceso": n.has_reproceso,
+        "reproceso_hours": float(n.reproceso_hours) if n.reproceso_hours else None,
+        "reproceso_status": n.reproceso_status,
         "status": n.status,
         "created_by_id": n.created_by_id,
         "created_by_name": n.created_by.full_name if n.created_by else None,
@@ -189,17 +201,24 @@ async def export_novedades_csv(db: DB, user: CurrentUser):
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        "ID", "Título", "Descripción", "Negocio", "Impacto Económico",
-        "Monto", "Tipo Impacto", "Importancia (estrellas)", "Estado",
-        "Creado por", "Fecha",
+        "ID", "Título", "Descripción", "Negocio", "Tipo Impacto",
+        "Sentimiento", "Importancia (★)", "Impacto Económico", "Monto COP",
+        "Reproceso", "Horas Reproceso", "Estado Reproceso",
+        "Estado", "Creado por", "Fecha",
     ])
     for n in novedades:
         writer.writerow([
             n.id, n.title, n.description or "",
             n.business.name if n.business else "",
+            n.impact_type,
+            n.impact_sentiment,
+            n.importance_stars,
             "Sí" if n.has_economic_impact else "No",
             float(n.economic_impact_amount) if n.economic_impact_amount else "",
-            n.impact_type, n.importance_stars, n.status,
+            "Sí" if n.has_reproceso else "No",
+            float(n.reproceso_hours) if n.reproceso_hours else "",
+            n.reproceso_status if n.has_reproceso else "",
+            n.status,
             n.created_by.full_name if n.created_by else "",
             n.created_at.strftime("%Y-%m-%d %H:%M") if n.created_at else "",
         ])

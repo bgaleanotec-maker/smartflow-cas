@@ -6,7 +6,8 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Radio, Search, Loader2, X, Edit3, Trash2, Download,
-  Building2, DollarSign, Star, AlertCircle, CheckCircle2,
+  Building2, DollarSign, Star, TrendingUp, TrendingDown, Minus,
+  Clock, CheckCircle2, AlertCircle, RefreshCw,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { novedadesAPI, adminAPI } from '../../services/api'
@@ -22,6 +23,27 @@ const IMPACT_TYPE_STYLES = {
 }
 
 const IMPACT_TYPE_LABELS = { OPEX: 'OPEX', ON: 'ON', OTRO: 'Otro' }
+
+const SENTIMENT_STYLES = {
+  positivo: 'bg-green-500/15 text-green-300 border-green-500/30',
+  neutral:  'bg-slate-500/15 text-slate-300 border-slate-500/30',
+  negativo: 'bg-red-500/15 text-red-300 border-red-500/30',
+}
+const SENTIMENT_ICONS = {
+  positivo: TrendingUp,
+  neutral:  Minus,
+  negativo: TrendingDown,
+}
+const SENTIMENT_LABELS = { positivo: 'Positivo', neutral: 'Neutral', negativo: 'Negativo' }
+
+const REPROCESO_STYLES = {
+  subsanado:   'bg-green-500/15 text-green-300 border-green-500/30',
+  en_proceso:  'bg-yellow-500/15 text-yellow-300 border-yellow-500/30',
+  sin_iniciar: 'bg-red-500/15 text-red-300 border-red-500/30',
+}
+const REPROCESO_LABELS = {
+  subsanado: 'Subsanado', en_proceso: 'En proceso', sin_iniciar: 'Sin iniciar',
+}
 
 // ─── Stars component ──────────────────────────────────────────────────────────
 
@@ -77,8 +99,8 @@ function NovedadForm({ initial, businesses, onSave, onCancel, saving, title: for
             className="absolute bottom-2 right-2" />
         </div>
 
-        {/* Row: business + impact_type */}
-        <div className="grid sm:grid-cols-2 gap-3">
+        {/* Row: business + impact_type + sentiment */}
+        <div className="grid sm:grid-cols-3 gap-3">
           <div>
             <label className="label">Negocio afectado</label>
             <select className="input" value={form.business_id || ''} onChange={e => set('business_id', e.target.value ? Number(e.target.value) : null)}>
@@ -94,32 +116,72 @@ function NovedadForm({ initial, businesses, onSave, onCancel, saving, title: for
               <option value="OTRO">Otro</option>
             </select>
           </div>
-        </div>
-
-        {/* Stars */}
-        <div>
-          <label className="label">Nivel de importancia</label>
-          <StarRating value={form.importance_stars} onChange={v => set('importance_stars', v)} />
-        </div>
-
-        {/* Economic impact */}
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input type="checkbox" className="w-4 h-4 rounded accent-indigo-500"
-              checked={form.has_economic_impact}
-              onChange={e => set('has_economic_impact', e.target.checked)} />
-            <span className="text-sm text-slate-300">Genera impacto económico</span>
-          </label>
-        </div>
-        {form.has_economic_impact && (
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 text-sm">COP</span>
-            <input type="number" min="0" step="1000" className="input flex-1"
-              placeholder="Monto estimado"
-              value={form.economic_impact_amount || ''}
-              onChange={e => set('economic_impact_amount', e.target.value ? Number(e.target.value) : null)} />
+          <div>
+            <label className="label">Sentimiento</label>
+            <select className="input" value={form.impact_sentiment} onChange={e => set('impact_sentiment', e.target.value)}>
+              <option value="positivo">✅ Positivo</option>
+              <option value="neutral">➖ Neutral</option>
+              <option value="negativo">❌ Negativo</option>
+            </select>
           </div>
-        )}
+        </div>
+
+        {/* Stars + economic impact row */}
+        <div className="grid sm:grid-cols-2 gap-3 items-start">
+          <div>
+            <label className="label">Nivel de importancia</label>
+            <StarRating value={form.importance_stars} onChange={v => set('importance_stars', v)} />
+          </div>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer select-none mt-5">
+              <input type="checkbox" className="w-4 h-4 rounded accent-indigo-500"
+                checked={form.has_economic_impact}
+                onChange={e => set('has_economic_impact', e.target.checked)} />
+              <span className="text-sm text-slate-300">Impacto económico</span>
+            </label>
+            {form.has_economic_impact && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400 text-sm flex-shrink-0">COP</span>
+                <input type="number" min="0" step="1000" className="input flex-1"
+                  placeholder="Monto estimado"
+                  value={form.economic_impact_amount || ''}
+                  onChange={e => set('economic_impact_amount', e.target.value ? Number(e.target.value) : null)} />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Reproceso section */}
+        <div className="border border-slate-700 rounded-xl p-3 space-y-2 bg-slate-800/30">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" className="w-4 h-4 rounded accent-orange-500"
+              checked={form.has_reproceso}
+              onChange={e => set('has_reproceso', e.target.checked)} />
+            <span className="text-sm text-slate-300 flex items-center gap-1.5">
+              <RefreshCw size={13} className="text-orange-400" />
+              Generó reproceso
+            </span>
+          </label>
+          {form.has_reproceso && (
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <div>
+                <label className="label text-xs">Horas de reproceso</label>
+                <input type="number" min="0" step="0.5" className="input"
+                  placeholder="Ej: 4.5"
+                  value={form.reproceso_hours || ''}
+                  onChange={e => set('reproceso_hours', e.target.value ? Number(e.target.value) : null)} />
+              </div>
+              <div>
+                <label className="label text-xs">Estado de subsanación</label>
+                <select className="input" value={form.reproceso_status} onChange={e => set('reproceso_status', e.target.value)}>
+                  <option value="sin_iniciar">🔴 Sin iniciar</option>
+                  <option value="en_proceso">🟡 En proceso</option>
+                  <option value="subsanado">🟢 Subsanado</option>
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Actions */}
         <div className="flex gap-2 pt-1">
@@ -152,15 +214,23 @@ function NovedadCard({ n, onEdit, onDelete, canManage }) {
           <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
             {n.business_name && (
               <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400">
-                <Building2 size={9} />
-                {n.business_name}
+                <Building2 size={9} /> {n.business_name}
               </span>
             )}
             <span className={`text-[10px] px-1.5 py-0.5 rounded-md border font-semibold ${IMPACT_TYPE_STYLES[n.impact_type] || IMPACT_TYPE_STYLES.OTRO}`}>
               {IMPACT_TYPE_LABELS[n.impact_type] || n.impact_type}
             </span>
+            {/* Sentiment badge */}
+            {(() => {
+              const SIcon = SENTIMENT_ICONS[n.impact_sentiment] || Minus
+              return (
+                <span className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border ${SENTIMENT_STYLES[n.impact_sentiment] || SENTIMENT_STYLES.neutral}`}>
+                  <SIcon size={9} /> {SENTIMENT_LABELS[n.impact_sentiment] || n.impact_sentiment}
+                </span>
+              )
+            })()}
             {n.has_economic_impact && (
-              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-green-500/10 text-green-400 border border-green-500/20">
+              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 <DollarSign size={9} />
                 {n.economic_impact_amount
                   ? new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n.economic_impact_amount)
@@ -202,6 +272,19 @@ function NovedadCard({ n, onEdit, onDelete, canManage }) {
           </div>
         )}
 
+        {/* Reproceso row */}
+        {n.has_reproceso && (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-orange-500/10 text-orange-400 border border-orange-500/20">
+              <RefreshCw size={9} />
+              Reproceso{n.reproceso_hours ? `: ${n.reproceso_hours}h` : ''}
+            </span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-md border ${REPROCESO_STYLES[n.reproceso_status] || REPROCESO_STYLES.sin_iniciar}`}>
+              {REPROCESO_LABELS[n.reproceso_status] || n.reproceso_status}
+            </span>
+          </div>
+        )}
+
         {/* Footer */}
         <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-800">
           <span className="text-[10px] text-slate-600">
@@ -222,6 +305,8 @@ const EMPTY_FORM = {
   title: '', description: '', business_id: null,
   has_economic_impact: false, economic_impact_amount: null,
   impact_type: 'OTRO', importance_stars: 3,
+  impact_sentiment: 'neutral',
+  has_reproceso: false, reproceso_hours: null, reproceso_status: 'sin_iniciar',
 }
 
 export default function NovedadesPage() {
@@ -378,6 +463,10 @@ export default function NovedadesPage() {
             economic_impact_amount: editing.economic_impact_amount || null,
             impact_type: editing.impact_type,
             importance_stars: editing.importance_stars,
+            impact_sentiment: editing.impact_sentiment || 'neutral',
+            has_reproceso: editing.has_reproceso || false,
+            reproceso_hours: editing.reproceso_hours || null,
+            reproceso_status: editing.reproceso_status || 'sin_iniciar',
             status: editing.status,
           }}
           businesses={businesses}

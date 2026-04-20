@@ -121,9 +121,13 @@ class NovedadOperativa(Base):
     business_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("businesses.id"), nullable=True)
     has_economic_impact: Mapped[bool] = mapped_column(Boolean, default=False)
     economic_impact_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(15, 2), nullable=True)
-    impact_type: Mapped[str] = mapped_column(String(20), default="OTRO")   # OPEX | ON | OTRO
-    importance_stars: Mapped[int] = mapped_column(Integer, default=3)       # 1-5
-    status: Mapped[str] = mapped_column(String(20), default="activa")       # activa | archivada
+    impact_type: Mapped[str] = mapped_column(String(20), default="OTRO")       # OPEX | ON | OTRO
+    importance_stars: Mapped[int] = mapped_column(Integer, default=3)         # 1-5
+    impact_sentiment: Mapped[str] = mapped_column(String(20), default="neutral")  # positivo | neutral | negativo
+    has_reproceso: Mapped[bool] = mapped_column(Boolean, default=False)
+    reproceso_hours: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 1), nullable=True)
+    reproceso_status: Mapped[str] = mapped_column(String(20), default="sin_iniciar")  # subsanado | en_proceso | sin_iniciar
+    status: Mapped[str] = mapped_column(String(20), default="activa")         # activa | archivada
     created_by_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

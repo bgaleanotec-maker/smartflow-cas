@@ -211,8 +211,11 @@ async def _run_column_migrations():
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS contract_renewal_date DATE",
             # Convert role column from PostgreSQL native ENUM to VARCHAR so any role value works without ALTER TYPE
             "ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(50) USING role::text",
-            # novedades_operativas — create if missing (handled by create_all, but guard here too)
-            # (table created automatically by SQLAlchemy create_all above)
+            # novedades_operativas — new columns added 2026-04-20
+            "ALTER TABLE novedades_operativas ADD COLUMN IF NOT EXISTS impact_sentiment VARCHAR(20) DEFAULT 'neutral'",
+            "ALTER TABLE novedades_operativas ADD COLUMN IF NOT EXISTS has_reproceso BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE novedades_operativas ADD COLUMN IF NOT EXISTS reproceso_hours NUMERIC(8,1)",
+            "ALTER TABLE novedades_operativas ADD COLUMN IF NOT EXISTS reproceso_status VARCHAR(20) DEFAULT 'sin_iniciar'",
             # voice_notes table — task association added after initial deploy
             "ALTER TABLE voice_notes ADD COLUMN IF NOT EXISTS task_id INTEGER",
             # tasks table — PMO/Scrum columns added after initial deploy
@@ -550,7 +553,7 @@ app.include_router(quick_tasks.router, prefix=API_PREFIX)
 app.include_router(novedades.router, prefix=API_PREFIX)
 
 
-# force redeploy 2026-04-19c — Novedades Operativas + Hechos CSV export + edit fix
+# force redeploy 2026-04-20 — Novedades: sentiment + reproceso fields
 @app.get("/health")
 async def health():
     return {"status": "ok", "app": settings.APP_NAME, "version": settings.VERSION}

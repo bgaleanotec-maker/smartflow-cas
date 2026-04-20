@@ -315,6 +315,8 @@ function QuickNovedadModal({ onClose }) {
     title: '', description: '', business_id: '',
     has_economic_impact: false, economic_impact_amount: '',
     impact_type: 'OTRO', importance_stars: 3,
+    impact_sentiment: 'neutral',
+    has_reproceso: false, reproceso_hours: '', reproceso_status: 'sin_iniciar',
   })
   const [businesses, setBusinesses] = useState([])
   const [saving, setSaving] = useState(false)
@@ -340,6 +342,10 @@ function QuickNovedadModal({ onClose }) {
         economic_impact_amount: form.has_economic_impact && form.economic_impact_amount ? Number(form.economic_impact_amount) : null,
         impact_type: form.impact_type,
         importance_stars: form.importance_stars,
+        impact_sentiment: form.impact_sentiment,
+        has_reproceso: form.has_reproceso,
+        reproceso_hours: form.has_reproceso && form.reproceso_hours ? Number(form.reproceso_hours) : null,
+        reproceso_status: form.reproceso_status,
       })
       toast.success('Novedad operativa registrada')
       onClose()
@@ -388,6 +394,14 @@ function QuickNovedadModal({ onClose }) {
             </div>
           </div>
           <div>
+            <label className="label">Sentimiento del impacto</label>
+            <select value={form.impact_sentiment} onChange={e => set('impact_sentiment', e.target.value)} className="input">
+              <option value="positivo">✅ Positivo</option>
+              <option value="neutral">➖ Neutral</option>
+              <option value="negativo">❌ Negativo</option>
+            </select>
+          </div>
+          <div>
             <label className="label">Importancia</label>
             <StarPicker value={form.importance_stars} onChange={v => set('importance_stars', v)} />
           </div>
@@ -401,6 +415,24 @@ function QuickNovedadModal({ onClose }) {
               placeholder="Monto COP estimado"
               value={form.economic_impact_amount}
               onChange={e => set('economic_impact_amount', e.target.value)} />
+          )}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" className="w-4 h-4 rounded accent-orange-500"
+              checked={form.has_reproceso} onChange={e => set('has_reproceso', e.target.checked)} />
+            <span className="text-sm text-slate-300">Generó reproceso</span>
+          </label>
+          {form.has_reproceso && (
+            <div className="grid grid-cols-2 gap-2">
+              <input type="number" min="0" step="0.5" className="input"
+                placeholder="Horas reproceso"
+                value={form.reproceso_hours}
+                onChange={e => set('reproceso_hours', e.target.value)} />
+              <select value={form.reproceso_status} onChange={e => set('reproceso_status', e.target.value)} className="input">
+                <option value="sin_iniciar">🔴 Sin iniciar</option>
+                <option value="en_proceso">🟡 En proceso</option>
+                <option value="subsanado">🟢 Subsanado</option>
+              </select>
+            </div>
           )}
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancelar</button>
