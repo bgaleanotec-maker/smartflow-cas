@@ -11,7 +11,7 @@ import app.models  # noqa: F401
 from app.models import epic  # noqa: F401
 from app.models.quick_task import QuickTask  # noqa: F401
 
-from app.routers import auth, users, projects, tasks, incidents, admin, pomodoro, demands, demand_admin, hechos, premisas, ai_assistant, activities, dashboard_builder, lean_pro, ai_chat, business_plan, bp_financial_ai, executive, voice, reminders, sprints, backup, quick_tasks
+from app.routers import auth, users, projects, tasks, incidents, admin, pomodoro, demands, demand_admin, hechos, premisas, ai_assistant, activities, dashboard_builder, lean_pro, ai_chat, business_plan, bp_financial_ai, executive, voice, reminders, sprints, backup, quick_tasks, novedades
 from app.routers.voice_notes import router as voice_notes_router
 from app.routers.epics import router as epics_router, router2 as stories_router
 from app.routers.dashboard import router as dashboard_router
@@ -211,6 +211,8 @@ async def _run_column_migrations():
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS contract_renewal_date DATE",
             # Convert role column from PostgreSQL native ENUM to VARCHAR so any role value works without ALTER TYPE
             "ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(50) USING role::text",
+            # novedades_operativas — create if missing (handled by create_all, but guard here too)
+            # (table created automatically by SQLAlchemy create_all above)
             # voice_notes table — task association added after initial deploy
             "ALTER TABLE voice_notes ADD COLUMN IF NOT EXISTS task_id INTEGER",
             # tasks table — PMO/Scrum columns added after initial deploy
@@ -545,9 +547,10 @@ app.include_router(stories_router, prefix=API_PREFIX)
 app.include_router(dashboard_router, prefix=API_PREFIX)
 app.include_router(backup.router, prefix=API_PREFIX)
 app.include_router(quick_tasks.router, prefix=API_PREFIX)
+app.include_router(novedades.router, prefix=API_PREFIX)
 
 
-# force redeploy 2026-04-19b — WhatsApp reminders + APScheduler + role VARCHAR
+# force redeploy 2026-04-19c — Novedades Operativas + Hechos CSV export + edit fix
 @app.get("/health")
 async def health():
     return {"status": "ok", "app": settings.APP_NAME, "version": settings.VERSION}

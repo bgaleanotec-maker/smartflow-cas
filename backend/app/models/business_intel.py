@@ -110,6 +110,32 @@ class PremisaTimeline(Base):
     user: Mapped[Optional["User"]] = relationship("User", lazy="select")
 
 
+# ─── Novedades Operativas ────────────────────────────────────────────────────
+
+class NovedadOperativa(Base):
+    __tablename__ = "novedades_operativas"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    business_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("businesses.id"), nullable=True)
+    has_economic_impact: Mapped[bool] = mapped_column(Boolean, default=False)
+    economic_impact_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(15, 2), nullable=True)
+    impact_type: Mapped[str] = mapped_column(String(20), default="OTRO")   # OPEX | ON | OTRO
+    importance_stars: Mapped[int] = mapped_column(Integer, default=3)       # 1-5
+    status: Mapped[str] = mapped_column(String(20), default="activa")       # activa | archivada
+    created_by_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    created_by: Mapped["User"] = relationship("User", foreign_keys=[created_by_id], lazy="select")
+    business: Mapped[Optional["Business"]] = relationship("Business", lazy="select")
+
+    def __repr__(self):
+        return f"<NovedadOperativa {self.id}: {self.title[:50]}>"
+
+
 # Forward imports
 from app.models.user import User  # noqa: E402
 from app.models.business import Business  # noqa: E402

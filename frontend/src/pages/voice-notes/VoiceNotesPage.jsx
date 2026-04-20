@@ -9,10 +9,10 @@ import {
   Mic, MicOff, Square, Plus, CheckCircle2, Clock, AlertTriangle, User,
   Trash2, Edit3, ChevronDown, ChevronRight, Loader2, Send, X, Filter,
   ClipboardList, UserCheck, Zap, Volume2, FolderOpen, Link2, Inbox,
-  LayoutList, Radio
+  LayoutList, Radio, Star,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { voiceNotesAPI, projectsAPI, tasksAPI } from '../../services/api'
+import { voiceNotesAPI, projectsAPI, tasksAPI, novedadesAPI, adminAPI } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import api from '../../services/api'
 
@@ -240,6 +240,20 @@ function RecordModal({ users, projects, currentUser, onClose, onSaved }) {
   const [saving, setSaving]         = useState(false)
   const [transcribing, setTranscribing] = useState(false)
   const [transcribeSource, setTranscribeSource] = useState(null) // 'server' | 'browser' | 'manual'
+  // Novedad operativa link
+  const [asNovedad, setAsNovedad]       = useState(false)
+  const [novImpactType, setNovImpactType] = useState('OTRO')
+  const [novStars, setNovStars]         = useState(3)
+  const [novBusinessId, setNovBusinessId] = useState('')
+  const [novHasEco, setNovHasEco]       = useState(false)
+  const [novEcoAmount, setNovEcoAmount] = useState('')
+  const [businesses, setBusinesses]     = useState([])
+
+  useEffect(() => {
+    adminAPI.businesses().then(r => {
+      setBusinesses(Array.isArray(r.data) ? r.data : r.data?.items || [])
+    }).catch(() => {})
+  }, [])
 
   // Load tasks when project changes
   useEffect(() => {
@@ -302,7 +316,23 @@ function RecordModal({ users, projects, currentUser, onClose, onSaved }) {
         priority,
         due_date: dueDate || null,
       })
-      toast.success('Nota guardada')
+      // Also create novedad if requested
+      if (asNovedad && title.trim()) {
+        try {
+          await novedadesAPI.create({
+            title: title.trim() || transcript.substring(0, 120),
+            description: transcript.trim(),
+            business_id: novBusinessId ? parseInt(novBusinessId) : null,
+            has_economic_impact: novHasEco,
+            economic_impact_amount: novHasEco && novEcoAmount ? Number(novEcoAmount) : null,
+            impact_type: novImpactType,
+            importance_stars: novStars,
+          })
+          toast.success('Nota y novedad guardadas')
+        } catch { toast.success('Nota guardada (novedad falló)') }
+      } else {
+        toast.success('Nota guardada')
+      }
       onSaved(); onClose()
     } catch { toast.error('Error al guardar') }
     finally { setSaving(false) }
@@ -454,6 +484,53 @@ function RecordModal({ users, projects, currentUser, onClose, onSaved }) {
                 onProjectChange={setProjectId}
                 onTaskChange={setTaskId}
               />
+
+              {/* ── Registrar también como Novedad Operativa ── */}
+              <div className="border border-slate-700 rounded-xl p-3 space-y-2 bg-slate-800/40">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" className="w-4 h-4 rounded accent-indigo-500"
+                    checked={asNovedad} onChange={e => setAsNovedad(e.target.checked)} />
+                  <span className="text-sm text-slate-300 flex items-center gap-1.5">
+                    <Radio size={13} className="text-indigo-400" />
+                    Registrar también como <strong className="text-indigo-300">Novedad Operativa</strong>
+                  </span>
+                </label>
+                {asNovedad && (
+                  <div className="space-y-2 pt-1">
+                    <div className="grid grid-cols-2 gap-2">
+                      <select value={novBusinessId} onChange={e => setNovBusinessId(e.target.value)} className="input text-xs py-1.5">
+                        <option value="">Sin negocio</option>
+                        {businesses.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                      </select>
+                      <select value={novImpactType} onChange={e => setNovImpactType(e.target.value)} className="input text-xs py-1.5">
+                        <option value="OPEX">OPEX</option>
+                        <option value="ON">ON</option>
+                        <option value="OTRO">Otro</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400">Importancia:</span>
+                      <div className="flex gap-0.5">
+                        {[1,2,3,4,5].map(s => (
+                          <button key={s} type="button" onClick={() => setNovStars(s)}
+                            className="transition-transform hover:scale-110">
+                            <Star size={16} className={s <= novStars ? 'text-amber-400 fill-amber-400' : 'text-slate-600'} />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" className="w-3.5 h-3.5 rounded accent-indigo-500"
+                        checked={novHasEco} onChange={e => setNovHasEco(e.target.checked)} />
+                      <span className="text-xs text-slate-400">Impacto económico</span>
+                    </label>
+                    {novHasEco && (
+                      <input type="number" className="input text-xs py-1.5" placeholder="Monto COP"
+                        value={novEcoAmount} onChange={e => setNovEcoAmount(e.target.value)} />
+                    )}
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>

@@ -7,6 +7,7 @@ import {
   Bell, Search, Menu, X, FileText, BarChart3, Newspaper, Landmark,
   Plane, LayoutGrid, Zap, TrendingUp, Crown, Mic2, MoreHorizontal,
   Mic, Home, MessageSquareMore, Volume2, BookOpen, ListTodo, Plus,
+  Radio, Star,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { usePomodoroStore } from '../../stores/pomodoroStore'
@@ -14,7 +15,7 @@ import clsx from 'clsx'
 import VoiceAIPanel from '../voice/VoiceAIPanel'
 import QuickChatPanel from '../mobile/QuickChatPanel'
 import toast from 'react-hot-toast'
-import { quickTasksAPI, voiceNotesAPI, adminAPI, usersAPI } from '../../services/api'
+import { quickTasksAPI, voiceNotesAPI, adminAPI, usersAPI, novedadesAPI } from '../../services/api'
 
 // ─── QuickTaskCreateModal ─────────────────────────────────────────────────────
 
@@ -294,6 +295,125 @@ function QuickVoiceNoteModal({ onClose }) {
   )
 }
 
+// ─── QuickNovedadModal ─────────────────────────────────────────────────────────
+
+function StarPicker({ value, onChange }) {
+  return (
+    <div className="flex gap-1">
+      {[1,2,3,4,5].map(s => (
+        <button key={s} type="button" onClick={() => onChange(s)}
+          className="transition-transform hover:scale-110">
+          <Star size={20} className={s <= value ? 'text-amber-400 fill-amber-400' : 'text-slate-600'} />
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function QuickNovedadModal({ onClose }) {
+  const [form, setForm] = useState({
+    title: '', description: '', business_id: '',
+    has_economic_impact: false, economic_impact_amount: '',
+    impact_type: 'OTRO', importance_stars: 3,
+  })
+  const [businesses, setBusinesses] = useState([])
+  const [saving, setSaving] = useState(false)
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  useEffect(() => {
+    adminAPI.businesses().then(r => {
+      const data = Array.isArray(r.data) ? r.data : r.data?.items || []
+      setBusinesses(data)
+    }).catch(() => {})
+  }, [])
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.title.trim()) return toast.error('El título es obligatorio')
+    setSaving(true)
+    try {
+      await novedadesAPI.create({
+        title: form.title.trim(),
+        description: form.description.trim() || null,
+        business_id: form.business_id ? parseInt(form.business_id) : null,
+        has_economic_impact: form.has_economic_impact,
+        economic_impact_amount: form.has_economic_impact && form.economic_impact_amount ? Number(form.economic_impact_amount) : null,
+        impact_type: form.impact_type,
+        importance_stars: form.importance_stars,
+      })
+      toast.success('Novedad operativa registrada')
+      onClose()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al registrar novedad')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+          <h2 className="font-semibold text-white flex items-center gap-2">
+            <Radio size={15} className="text-indigo-400" /> Novedad Operativa
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-200"><X size={16} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-5 space-y-3">
+          <div>
+            <label className="label">Título *</label>
+            <input value={form.title} onChange={e => set('title', e.target.value)}
+              className="input" placeholder="¿Qué ocurrió?" autoFocus />
+          </div>
+          <div>
+            <label className="label">Descripción</label>
+            <textarea value={form.description} onChange={e => set('description', e.target.value)}
+              className="input resize-none h-20" placeholder="Detalla la novedad..." />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Negocio</label>
+              <select value={form.business_id} onChange={e => set('business_id', e.target.value)} className="input">
+                <option value="">Sin negocio</option>
+                {businesses.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Tipo</label>
+              <select value={form.impact_type} onChange={e => set('impact_type', e.target.value)} className="input">
+                <option value="OPEX">OPEX</option>
+                <option value="ON">ON</option>
+                <option value="OTRO">Otro</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="label">Importancia</label>
+            <StarPicker value={form.importance_stars} onChange={v => set('importance_stars', v)} />
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" className="w-4 h-4 rounded accent-indigo-500"
+              checked={form.has_economic_impact} onChange={e => set('has_economic_impact', e.target.checked)} />
+            <span className="text-sm text-slate-300">Genera impacto económico</span>
+          </label>
+          {form.has_economic_impact && (
+            <input type="number" min="0" step="1000" className="input"
+              placeholder="Monto COP estimado"
+              value={form.economic_impact_amount}
+              onChange={e => set('economic_impact_amount', e.target.value)} />
+          )}
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancelar</button>
+            <button type="submit" disabled={saving} className="btn-primary flex-1">
+              {saving ? 'Registrando...' : 'Registrar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ─── Nav items ────────────────────────────────────────────────────────────────
 
 const navItems = [
@@ -304,6 +424,7 @@ const navItems = [
   { to: '/centro-info', icon: LayoutGrid, label: 'Centro Info' },
   { to: '/demands', icon: FileText, label: 'Demandas' },
   { to: '/demands/dashboard', icon: BarChart3, label: 'Dashboard Demandas', roles: ['admin', 'leader', 'herramientas'] },
+  { to: '/novedades', icon: Radio, label: 'Novedades Operativas' },
   { to: '/hechos', icon: Newspaper, label: 'Hechos Relevantes' },
   { to: '/premisas', icon: Landmark, label: 'Premisas' },
   { to: '/bp', icon: TrendingUp, label: 'Plan de Negocio', cas: true },
@@ -330,6 +451,7 @@ export default function MainLayout() {
   const [fabOpen, setFabOpen] = useState(false)
   const [quickVoiceOpen, setQuickVoiceOpen] = useState(false)
   const [quickTaskOpen, setQuickTaskOpen] = useState(false)
+  const [quickNovedadOpen, setQuickNovedadOpen] = useState(false)
   const { user, logout } = useAuthStore()
   const { isRunning, formatTime, sessionType } = usePomodoroStore()
   const navigate = useNavigate()
@@ -733,6 +855,13 @@ export default function MainLayout() {
             >
               <ListTodo size={15} /> Tarea rápida
             </button>
+            {/* Quick Novedad */}
+            <button
+              onClick={() => { setFabOpen(false); setQuickNovedadOpen(true) }}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-3 py-2 rounded-full shadow-lg transition-all animate-fade-in"
+            >
+              <Radio size={15} /> Novedad operativa
+            </button>
           </>
         )}
         {/* Main FAB button */}
@@ -761,6 +890,9 @@ export default function MainLayout() {
       )}
       {quickVoiceOpen && (
         <QuickVoiceNoteModal onClose={() => setQuickVoiceOpen(false)} />
+      )}
+      {quickNovedadOpen && (
+        <QuickNovedadModal onClose={() => setQuickNovedadOpen(false)} />
       )}
 
       {/* ── Voice AI Panel (chat + voz + reuniones) ── */}

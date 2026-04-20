@@ -1,6 +1,7 @@
 from typing import Optional
 from datetime import date
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select, func, extract
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
@@ -130,6 +131,44 @@ async def delete_hecho(hecho_id: int, db: DB, user: CurrentUser):
         raise HTTPException(status_code=404, detail="Hecho no encontrado")
     h.is_deleted = True
     await db.flush()
+
+
+@router.get("/export/csv")
+async def export_hechos_csv(db: DB, user: CurrentUser):
+    """Export all hechos relevantes as CSV."""
+    import io, csv
+    result = await db.execute(
+        select(HechoRelevante)
+        .where(HechoRelevante.is_deleted == False)
+        .options(selectinload(HechoRelevante.created_by), selectinload(HechoRelevante.business))
+        .order_by(HechoRelevante.year.desc(), HechoRelevante.week_number.desc())
+    )
+    hechos = result.scalars().all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "ID", "Título", "Descripción", "Categoría", "Impacto",
+        "Semana", "Año", "Negocio", "Acción requerida",
+        "Responsable", "Estado", "Creado por", "Fecha",
+    ])
+    for h in hechos:
+        writer.writerow([
+            h.id, h.title, h.description or "", h.category, h.impact_level,
+            h.week_number, h.year,
+            h.business.name if h.business else "",
+            h.action_required or "", h.responsible_name or "",
+            h.status,
+            h.created_by.full_name if h.created_by else "",
+            h.created_at.strftime("%Y-%m-%d %H:%M") if h.created_at else "",
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=hechos_relevantes.csv"},
+    )
 
 
 @router.get("/dashboard/stats")

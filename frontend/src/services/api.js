@@ -154,6 +154,15 @@ export const hechosAPI = {
   dashboard: () => api.get('/hechos/dashboard/stats'),
 }
 
+// ─── Novedades Operativas ────────────────────────────────────────────────
+export const novedadesAPI = {
+  list: (params) => api.get('/novedades', { params }),
+  create: (data) => api.post('/novedades', data),
+  get: (id) => api.get(`/novedades/${id}`),
+  update: (id, data) => api.patch(`/novedades/${id}`, data),
+  delete: (id) => api.delete(`/novedades/${id}`),
+}
+
 // ─── Premisas de Negocio ─────────────────────────────────────────────────
 export const premisasAPI = {
   list: (params) => api.get('/premisas', { params }),

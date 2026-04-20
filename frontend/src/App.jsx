@@ -28,6 +28,7 @@ import MobileHomePage from './pages/mobile/MobileHomePage'
 import VoiceNotesPage from './pages/voice-notes/VoiceNotesPage'
 import EpicsPage from './pages/epics/EpicsPage'
 import QuickTasksPage from './pages/quick-tasks/QuickTasksPage'
+import NovedadesPage from './pages/novedades/NovedadesPage'
 
 function ProtectedRoute({ children, requireAdmin = false, requireLeader = false, requireDirectivo = false }) {
   const { isAuthenticated, user } = useAuthStore()
@@ -91,6 +92,7 @@ export default function App() {
           <Route path="voice-notes" element={<VoiceNotesPage />} />
           <Route path="epics" element={<EpicsPage />} />
           <Route path="quick-tasks" element={<QuickTasksPage />} />
+          <Route path="novedades" element={<NovedadesPage />} />
           <Route path="mobile" element={<MobileHomePage />} />
           <Route
             path="executive"
