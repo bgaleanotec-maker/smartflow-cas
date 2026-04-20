@@ -37,7 +37,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(254), unique=True, index=True, nullable=False)
     phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.MEMBER, nullable=False)
+    role: Mapped[UserRole] = mapped_column(Enum(UserRole, native_enum=False, length=50), default=UserRole.MEMBER, nullable=False)
     team: Mapped[Optional[TeamType]] = mapped_column(Enum(TeamType), nullable=True)
 
     # Negocio

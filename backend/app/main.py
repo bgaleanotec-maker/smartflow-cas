@@ -173,6 +173,8 @@ async def _run_column_migrations():
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES users(id)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS contract_start_date DATE",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS contract_renewal_date DATE",
+            # Convert role column from PostgreSQL native ENUM to VARCHAR so any role value works without ALTER TYPE
+            "ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(50) USING role::text",
             # voice_notes table — task association added after initial deploy
             "ALTER TABLE voice_notes ADD COLUMN IF NOT EXISTS task_id INTEGER",
             # tasks table — PMO/Scrum columns added after initial deploy
@@ -509,7 +511,7 @@ app.include_router(backup.router, prefix=API_PREFIX)
 app.include_router(quick_tasks.router, prefix=API_PREFIX)
 
 
-# force redeploy 2026-04-11
+# force redeploy 2026-04-19 — role column VARCHAR migration
 @app.get("/health")
 async def health():
     return {"status": "ok", "app": settings.APP_NAME, "version": settings.VERSION}
