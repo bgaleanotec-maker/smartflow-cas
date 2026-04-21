@@ -347,6 +347,65 @@ async def list_activities(
         query = query.where(RecurringActivity.scope == scope)
     if category:
         query = query.where(RecurringActivity.category == category)
+
+    # ── Role-based visibility (mirrors torre_control logic) ──────────────────
+    from sqlalchemy import text as _t, or_ as _or, and_ as _and
+    role_val = str(user.role.value) if hasattr(user.role, 'value') else str(user.role)
+
+    _lsr_res = await db.execute(_t("SELECT id FROM users WHERE CAST(role AS VARCHAR) = 'lider_sr'"))
+    lider_sr_ids = [r[0] for r in _lsr_res.fetchall()]
+
+    if role_val == "admin":
+        pass  # sees everything
+
+    elif role_val == "lider_sr":
+        pass  # sees everything
+
+    else:
+        # Exclude lider_sr personal tasks from all non-admin views
+        if lider_sr_ids:
+            query = query.where(
+                _or(
+                    ~RecurringActivity.assigned_to_id.in_(lider_sr_ids),
+                    RecurringActivity.assigned_to_id == None,
+                )
+            )
+
+        if role_val == "herramientas":
+            pass  # sees everything after lider_sr exclusion
+
+        elif role_val == "leader":
+            _team_res = await db.execute(_t(f"SELECT CAST(team AS VARCHAR) FROM users WHERE id = {user.id}"))
+            _team_row = _team_res.fetchone()
+            team = _team_row[0] if _team_row else None
+            if team:
+                _tid_res = await db.execute(_t(f"SELECT id FROM users WHERE CAST(team AS VARCHAR) = '{team}'"))
+                team_ids = [r[0] for r in _tid_res.fetchall()]
+                if team_ids:
+                    query = query.where(
+                        _or(
+                            RecurringActivity.assigned_to_id.in_(team_ids),
+                            _and(
+                                RecurringActivity.created_by_id.in_(team_ids),
+                                RecurringActivity.assigned_to_id == None,
+                            ),
+                        )
+                    )
+                else:
+                    query = query.where(
+                        _or(RecurringActivity.created_by_id == user.id, RecurringActivity.assigned_to_id == user.id)
+                    )
+            else:
+                query = query.where(
+                    _or(RecurringActivity.created_by_id == user.id, RecurringActivity.assigned_to_id == user.id)
+                )
+
+        else:
+            # member, negocio, directivo, etc. → own only
+            query = query.where(
+                _or(RecurringActivity.created_by_id == user.id, RecurringActivity.assigned_to_id == user.id)
+            )
+
     query = query.order_by(RecurringActivity.created_at.desc()).offset(skip).limit(limit)
 
     result = await db.execute(query)
@@ -509,42 +568,76 @@ async def torre_control(db: DB, user: CurrentUser, scope: Optional[str] = None, 
     if assigned_to_id:
         query = query.where(RecurringActivity.assigned_to_id == assigned_to_id)
 
-    # Role-based visibility (CAST to avoid PG enum cast errors with new enum values)
-    from sqlalchemy import text as _t, or_ as _or
+    # ── Role-based visibility ────────────────────────────────────────────────
+    # Rules:
+    #   admin      → all
+    #   lider_sr   → all; but their OWN tasks (assigned_to=lider_sr) are hidden
+    #                from everyone else
+    #   herramientas → all (except lider_sr's private tasks)
+    #   leader     → all users of same team (CAS or BO), except lider_sr tasks
+    #   others     → only own (created_by=me OR assigned_to=me)
+    from sqlalchemy import text as _t, or_ as _or, and_ as _and, not_ as _not
     role_val = str(user.role.value) if hasattr(user.role, 'value') else str(user.role)
 
-    async def _ids_by_role_act(role_name: str):
-        res = await db.execute(_t(f"SELECT id FROM users WHERE CAST(role AS VARCHAR) = '{role_name}'"))
-        return [r[0] for r in res.fetchall()]
+    # Get lider_sr ids for exclusion (used by all non-admin branches)
+    _lsr_res = await db.execute(_t("SELECT id FROM users WHERE CAST(role AS VARCHAR) = 'lider_sr'"))
+    lider_sr_ids = [r[0] for r in _lsr_res.fetchall()]
 
-    if role_val == "leader":
-        lider_sr_ids = await _ids_by_role_act("lider_sr")
+    if role_val == "admin":
+        pass  # sees everything including lider_sr private tasks
+
+    elif role_val == "lider_sr":
+        pass  # sees everything
+
+    else:
+        # ── Step 1: always exclude lider_sr's personal tasks from non-admin views
+        # A lider_sr personal task = assigned_to_id IS a lider_sr user
         if lider_sr_ids:
             query = query.where(
                 _or(
-                    ~RecurringActivity.created_by_id.in_(lider_sr_ids),
-                    RecurringActivity.assigned_to_id == user.id,
-                    RecurringActivity.created_by_id == user.id,
+                    ~RecurringActivity.assigned_to_id.in_(lider_sr_ids),
+                    RecurringActivity.assigned_to_id == None,
                 )
             )
-    elif role_val == "negocio":
-        neg_ids = await _ids_by_role_act("negocio")
-        if neg_ids:
-            query = query.where(_or(RecurringActivity.created_by_id.in_(neg_ids), RecurringActivity.assigned_to_id == user.id))
+
+        # ── Step 2: role-specific scoping
+        if role_val == "herramientas":
+            pass  # after lider_sr exclusion, herramientas sees everything else
+
+        elif role_val == "leader":
+            # Scope to same team as current user (CAS or BO)
+            _team_res = await db.execute(_t(f"SELECT CAST(team AS VARCHAR) FROM users WHERE id = {user.id}"))
+            _team_row = _team_res.fetchone()
+            team = _team_row[0] if _team_row else None
+
+            if team:
+                _tid_res = await db.execute(_t(f"SELECT id FROM users WHERE CAST(team AS VARCHAR) = '{team}'"))
+                team_ids = [r[0] for r in _tid_res.fetchall()]
+                if team_ids:
+                    query = query.where(
+                        _or(
+                            RecurringActivity.assigned_to_id.in_(team_ids),
+                            _and(
+                                RecurringActivity.created_by_id.in_(team_ids),
+                                RecurringActivity.assigned_to_id == None,
+                            ),
+                        )
+                    )
+                else:
+                    query = query.where(
+                        _or(RecurringActivity.created_by_id == user.id, RecurringActivity.assigned_to_id == user.id)
+                    )
+            else:
+                # No team configured — show own only
+                query = query.where(
+                    _or(RecurringActivity.created_by_id == user.id, RecurringActivity.assigned_to_id == user.id)
+                )
+
         else:
-            query = query.where(RecurringActivity.assigned_to_id == user.id)
-    elif role_val == "herramientas":
-        herr_ids = await _ids_by_role_act("herramientas")
-        if herr_ids:
-            query = query.where(_or(RecurringActivity.created_by_id.in_(herr_ids), RecurringActivity.assigned_to_id == user.id))
-        else:
-            query = query.where(RecurringActivity.assigned_to_id == user.id)
-    elif role_val not in ("admin", "lider_sr"):
-        query = query.where(
-            (RecurringActivity.created_by_id == user.id) |
-            (RecurringActivity.assigned_to_id == user.id)
-        )
-    # admin and lider_sr see everything
+            # member, negocio, directivo, project_leader, etc. → own only
+            query = query.where(
+                _or(RecurringActivity.created_by_id == user.id, RecurringActivity.assigned_to_id == user.id)
+            )
 
     query = query.order_by(RecurringActivity.priority.desc(), RecurringActivity.title)
 
