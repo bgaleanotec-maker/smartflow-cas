@@ -19,6 +19,10 @@ class BPAssumptionsCreate(BaseModel):
     salary_increase_pct: Optional[float] = None
     energy_cost_change_pct: Optional[float] = None
     custom_assumptions: Optional[dict] = None
+    # Volumen absoluto de clientes
+    client_volume_current: Optional[int] = None
+    client_volume_projected: Optional[int] = None
+    client_volume_actual: Optional[int] = None
     notes: Optional[str] = None
 
 
@@ -35,6 +39,10 @@ class BPAssumptionsUpdate(BaseModel):
     salary_increase_pct: Optional[float] = None
     energy_cost_change_pct: Optional[float] = None
     custom_assumptions: Optional[dict] = None
+    # Volumen absoluto de clientes
+    client_volume_current: Optional[int] = None
+    client_volume_projected: Optional[int] = None
+    client_volume_actual: Optional[int] = None
     notes: Optional[str] = None
 
 

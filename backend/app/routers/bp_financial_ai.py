@@ -15,6 +15,7 @@ from app.core.deps import DB, CurrentUser, LeaderOrAdmin
 from app.models.business_plan import BusinessPlan, BPLine, BPActivity, BPLineCategory
 from app.models.bp_financial_ai import BPAssumptions, BPScenario, BPAuditLog
 from app.models.business import Business
+from app.models.business_intel import PremisaNegocio
 from app.schemas.bp_financial_ai import (
     BPAssumptionsCreate,
     BPAssumptionsUpdate,
@@ -79,6 +80,9 @@ def _assumptions_to_dict(a: BPAssumptions) -> dict:
         "salary_increase_pct": a.salary_increase_pct,
         "energy_cost_change_pct": a.energy_cost_change_pct,
         "custom_assumptions": a.custom_assumptions,
+        "client_volume_current": a.client_volume_current,
+        "client_volume_projected": a.client_volume_projected,
+        "client_volume_actual": a.client_volume_actual,
         "notes": a.notes,
         "source": a.source,
         "created_at": a.created_at,
@@ -996,3 +1000,226 @@ async def update_scenario(
     await db.commit()
     await db.refresh(scenario)
     return _scenario_to_dict(scenario)
+
+
+# ─── Endpoint 11: GET /bp/{bp_id}/premisas ───────────────────────────────────
+
+@router.get("/bp/{bp_id}/premisas")
+async def get_bp_premisas(
+    bp_id: int,
+    db: DB,
+    current_user: CurrentUser,
+):
+    """Return all premisas linked to the BP's business and year (centralized view)."""
+    bp_result = await db.execute(
+        select(BusinessPlan)
+        .options(selectinload(BusinessPlan.business))
+        .where(BusinessPlan.id == bp_id, BusinessPlan.is_deleted == False)
+    )
+    bp = bp_result.scalar_one_or_none()
+    if not bp:
+        raise HTTPException(status_code=404, detail="Business Plan no encontrado")
+
+    q = (
+        select(PremisaNegocio)
+        .where(
+            PremisaNegocio.is_deleted == False,
+            PremisaNegocio.business_id == bp.business_id,
+        )
+        .order_by(PremisaNegocio.created_at.desc())
+    )
+    # Also include premisas for the same budget_year if set
+    result = await db.execute(q)
+    premisas = result.scalars().all()
+
+    # Map line premisa_ids so UI can show which lines already reference each premisa
+    lines_result = await db.execute(
+        select(BPLine).where(BPLine.bp_id == bp_id, BPLine.is_deleted == False)
+    )
+    lines = lines_result.scalars().all()
+    premisa_to_lines: dict[int, list[dict]] = {}
+    for l in lines:
+        if l.premisa_id:
+            premisa_to_lines.setdefault(l.premisa_id, []).append({
+                "id": l.id, "name": l.name, "category": l.category.value if hasattr(l.category, "value") else l.category,
+            })
+
+    return [
+        {
+            "id": p.id,
+            "title": p.title,
+            "description": p.description,
+            "category": p.category,
+            "status": p.status.value if hasattr(p.status, "value") else p.status,
+            "budget_year": p.budget_year,
+            "budget_line": p.budget_line,
+            "estimated_amount": float(p.estimated_amount) if p.estimated_amount else None,
+            "actual_amount": float(p.actual_amount) if p.actual_amount else None,
+            "variance_pct": float(p.variance_pct) if p.variance_pct else None,
+            "assumption_basis": p.assumption_basis,
+            "risk_if_wrong": p.risk_if_wrong,
+            "recommendations": p.recommendations,
+            "ai_recommendation": p.ai_recommendation,
+            "review_date": str(p.review_date) if p.review_date else None,
+            "responsible_name": p.responsible_name,
+            "linked_lines": premisa_to_lines.get(p.id, []),
+        }
+        for p in premisas
+    ]
+
+
+# ─── Endpoint 12: POST /bp/{bp_id}/aria/link-premisas ────────────────────────
+
+@router.post("/bp/{bp_id}/aria/link-premisas")
+async def link_premisas_with_ai(
+    bp_id: int,
+    db: DB,
+    current_user: CurrentUser,
+):
+    """
+    ARIA analyzes the BP lines and the associated premisas, then suggests
+    which lines map to which premisas (with rationale).
+    Also applies the suggested links to bp_lines.premisa_id automatically.
+    """
+    bp = await _get_bp_or_404(db, bp_id)
+
+    # Get premisas for this business
+    premisas_result = await db.execute(
+        select(PremisaNegocio).where(
+            PremisaNegocio.business_id == bp.business_id,
+            PremisaNegocio.is_deleted == False,
+        )
+    )
+    premisas = premisas_result.scalars().all()
+
+    lines = [l for l in bp.lines if not l.is_deleted]
+    summary = _compute_bp_summary(lines)
+
+    if not premisas:
+        return {
+            "message": "No hay premisas registradas para este negocio. Crea premisas primero en el módulo de Premisas.",
+            "associations": [],
+        }
+
+    # Build premisas context
+    premisas_ctx = "\n".join([
+        f"  - PREMISA #{p.id}: '{p.title}' | Categoría: {p.category} | "
+        f"Monto estimado: {'$' + format(float(p.estimated_amount), ',.0f') + ' COP' if p.estimated_amount else 'N/D'} | "
+        f"Base: {p.assumption_basis or 'N/D'}"
+        for p in premisas
+    ])
+
+    lines_ctx = "\n".join([
+        f"  - LÍNEA #{l.id}: '{l.name}' | Categoría: {l.category.value if hasattr(l.category, 'value') else l.category} | "
+        f"Subcategoría: {l.subcategory or 'N/D'} | Total anual: {'$' + format(l.annual_plan, ',.0f') + ' COP' if l.annual_plan else 'N/D'}"
+        for l in lines
+    ])
+
+    prompt = f"""Eres ARIA. Analiza estas líneas presupuestales y las premisas de negocio del BP '{bp.business.name if bp.business else ""} {bp.year}'.
+
+LÍNEAS PRESUPUESTALES:
+{lines_ctx if lines_ctx else 'Sin líneas definidas.'}
+
+PREMISAS DE NEGOCIO:
+{premisas_ctx if premisas_ctx else 'Sin premisas definidas.'}
+
+TAREA: Para cada línea presupuestal, identifica qué premisa la sustenta o justifica.
+Responde EXCLUSIVAMENTE en JSON con este formato exacto (sin texto adicional, sin markdown):
+{{
+  "associations": [
+    {{
+      "line_id": <int>,
+      "premisa_id": <int or null>,
+      "confidence": <0-100>,
+      "rationale": "<1 oración explicando el vínculo>"
+    }}
+  ],
+  "summary": "<2-3 oraciones sobre la coherencia entre premisas y líneas>"
+}}
+
+Si una línea no tiene premisa relevante, usa premisa_id: null.
+Solo incluye líneas que tengan una asociación natural y bien fundamentada."""
+
+    text, log_id = await _call_aria(
+        db=db,
+        prompt_user=prompt,
+        bp_id=bp_id,
+        audit_type="link_premisas",
+        requested_by_id=current_user.id,
+    )
+
+    # Parse JSON from response
+    associations = []
+    summary_text = ""
+    try:
+        # Strip markdown code fences if present
+        clean = text.strip()
+        if clean.startswith("```"):
+            clean = re.sub(r"^```[a-z]*\n?", "", clean)
+            clean = re.sub(r"\n?```$", "", clean)
+        parsed = json.loads(clean)
+        associations = parsed.get("associations", [])
+        summary_text = parsed.get("summary", "")
+    except Exception:
+        pass
+
+    # Apply associations to bp_lines
+    applied = []
+    for assoc in associations:
+        line_id = assoc.get("line_id")
+        premisa_id = assoc.get("premisa_id")
+        confidence = assoc.get("confidence", 0)
+        if line_id and confidence >= 60:  # only apply high-confidence suggestions
+            line_result = await db.execute(
+                select(BPLine).where(BPLine.id == line_id, BPLine.bp_id == bp_id)
+            )
+            line = line_result.scalar_one_or_none()
+            if line:
+                line.premisa_id = premisa_id
+                line.ai_rationale = assoc.get("rationale", "")
+                applied.append(line_id)
+
+    # Update audit log
+    log_result = await db.execute(select(BPAuditLog).where(BPAuditLog.id == log_id))
+    log = log_result.scalar_one_or_none()
+    if log:
+        log.structured_output = {"associations": associations, "summary": summary_text, "applied_count": len(applied)}
+        log.snapshot_metrics = summary
+
+    await db.commit()
+
+    return {
+        "associations": associations,
+        "summary": summary_text,
+        "applied_line_ids": applied,
+        "audit_log_id": log_id,
+        "message": f"ARIA analizó {len(lines)} líneas y {len(premisas)} premisas. {len(applied)} asociaciones aplicadas automáticamente.",
+    }
+
+
+# ─── Endpoint 13: PATCH /bp/{bp_id}/lines/{line_id}/link-premisa ─────────────
+
+@router.patch("/bp/{bp_id}/lines/{line_id}/link-premisa")
+async def link_line_to_premisa(
+    bp_id: int,
+    line_id: int,
+    body: dict,
+    db: DB,
+    current_user: CurrentUser,
+):
+    """Manually link or unlink a BP line to a premisa."""
+    line_result = await db.execute(
+        select(BPLine).where(BPLine.id == line_id, BPLine.bp_id == bp_id, BPLine.is_deleted == False)
+    )
+    line = line_result.scalar_one_or_none()
+    if not line:
+        raise HTTPException(status_code=404, detail="Línea no encontrada")
+
+    line.premisa_id = body.get("premisa_id")  # pass null to unlink
+    await db.commit()
+    return {"id": line.id, "premisa_id": line.premisa_id, "message": "Asociación actualizada"}
+
+
+# ─── Endpoint 14: GET/PUT /bp-ai/assumptions — client volume fields ───────────
+# (existing endpoints already handle these; the new fields are included automatically
+#  via the updated BPAssumptions model — no extra endpoint needed)

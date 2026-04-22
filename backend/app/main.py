@@ -93,6 +93,13 @@ async def _run_column_migrations():
             ("bp_activities", "reminder_sent_at", "DATETIME"),
             ("bp_activities", "tags", "JSON"),
             ("bp_activities", "grupo", "VARCHAR(100)"),
+            # bp_lines — negocio + premisa linking (2026-04-21)
+            ("bp_lines", "business_id", "INTEGER REFERENCES businesses(id)"),
+            ("bp_lines", "premisa_id", "INTEGER REFERENCES premisas_negocio(id)"),
+            # bp_assumptions — volumen de clientes absolutos (2026-04-21)
+            ("bp_assumptions", "client_volume_current", "INTEGER"),
+            ("bp_assumptions", "client_volume_projected", "INTEGER"),
+            ("bp_assumptions", "client_volume_actual", "INTEGER"),
             # recurring_activities new notification/escalation columns (2026-04-12)
             ("recurring_activities", "notify_before_value", "INTEGER DEFAULT 1"),
             ("recurring_activities", "notify_before_unit", "VARCHAR(10) DEFAULT 'dias'"),
@@ -216,6 +223,13 @@ async def _run_column_migrations():
             "ALTER TABLE novedades_operativas ADD COLUMN IF NOT EXISTS has_reproceso BOOLEAN DEFAULT FALSE",
             "ALTER TABLE novedades_operativas ADD COLUMN IF NOT EXISTS reproceso_hours NUMERIC(8,1)",
             "ALTER TABLE novedades_operativas ADD COLUMN IF NOT EXISTS reproceso_status VARCHAR(20) DEFAULT 'sin_iniciar'",
+            # bp_lines — negocio + premisa linking (2026-04-21)
+            "ALTER TABLE bp_lines ADD COLUMN IF NOT EXISTS business_id INTEGER REFERENCES businesses(id)",
+            "ALTER TABLE bp_lines ADD COLUMN IF NOT EXISTS premisa_id INTEGER REFERENCES premisas_negocio(id)",
+            # bp_assumptions — volumen de clientes absolutos (2026-04-21)
+            "ALTER TABLE bp_assumptions ADD COLUMN IF NOT EXISTS client_volume_current INTEGER",
+            "ALTER TABLE bp_assumptions ADD COLUMN IF NOT EXISTS client_volume_projected INTEGER",
+            "ALTER TABLE bp_assumptions ADD COLUMN IF NOT EXISTS client_volume_actual INTEGER",
             # voice_notes table — task association added after initial deploy
             "ALTER TABLE voice_notes ADD COLUMN IF NOT EXISTS task_id INTEGER",
             # tasks table — PMO/Scrum columns added after initial deploy

@@ -72,6 +72,7 @@ function AssumptionsForm({ bp }) {
     ipc_pct: '', gdp_growth_pct: '', trm_avg: '', banrep_rate_pct: '',
     market_growth_pct: '', client_growth_pct: '', churn_rate_pct: '', arpu_monthly: '',
     tariff_adjustment_pct: '', salary_increase_pct: '', energy_cost_change_pct: '',
+    client_volume_current: '', client_volume_projected: '', client_volume_actual: '',
     notes: '',
   })
 
@@ -89,6 +90,9 @@ function AssumptionsForm({ bp }) {
         tariff_adjustment_pct: existing.tariff_adjustment_pct ?? '',
         salary_increase_pct: existing.salary_increase_pct ?? '',
         energy_cost_change_pct: existing.energy_cost_change_pct ?? '',
+        client_volume_current: existing.client_volume_current ?? '',
+        client_volume_projected: existing.client_volume_projected ?? '',
+        client_volume_actual: existing.client_volume_actual ?? '',
         notes: existing.notes ?? '',
       })
     }
@@ -123,6 +127,9 @@ function AssumptionsForm({ bp }) {
         tariff_adjustment_pct: d.tariff_adjustment_pct ?? '',
         salary_increase_pct: d.salary_increase_pct ?? '',
         energy_cost_change_pct: d.energy_cost_change_pct ?? '',
+        client_volume_current: d.client_volume_current ?? '',
+        client_volume_projected: d.client_volume_projected ?? '',
+        client_volume_actual: d.client_volume_actual ?? '',
         notes: d.notes ?? '',
       })
       toast.success('Supuestos generados por ARIA — revisa y guarda')
@@ -153,6 +160,9 @@ function AssumptionsForm({ bp }) {
     { key: 'tariff_adjustment_pct', label: 'Ajuste Tarifario %', placeholder: '6.0' },
     { key: 'salary_increase_pct', label: 'Incremento Salarial %', placeholder: '7.2' },
     { key: 'energy_cost_change_pct', label: 'Variación Costo Gas/Energía %', placeholder: '4.0' },
+    { key: 'client_volume_current', label: 'Clientes Inicio Año', placeholder: '45000', isInt: true },
+    { key: 'client_volume_projected', label: 'Clientes Proyectados', placeholder: '47500', isInt: true },
+    { key: 'client_volume_actual', label: 'Clientes Real YTD', placeholder: '46200', isInt: true },
   ]
 
   return (

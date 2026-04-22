@@ -5,11 +5,11 @@ import {
   TrendingUp, ArrowLeft, Loader2, X, Plus, Upload, FileSpreadsheet,
   Brain, ChevronDown, Edit2, Trash2, Check, BarChart3, Target,
   AlertCircle, DollarSign, Activity, CheckCircle2, Clock, Lightbulb,
-  Sparkles, Image, CalendarRange, Bell,
+  Sparkles, Image, CalendarRange, Bell, Building2, Link,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
-import { bpAPI, usersAPI } from '../../services/api'
+import { bpAPI, usersAPI, ariaAPI, adminAPI } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import BPActivityCard from './components/BPActivityCard'
 import BPImportWizard from './components/BPImportWizard'
@@ -17,6 +17,7 @@ import BPRecommendationsPanel from './components/BPRecommendationsPanel'
 import ARIAPanel from './components/ARIAPanel'
 import BPCronogramaTab from './components/BPCronogramaTab'
 import BPActivityDetailDrawer from './components/BPActivityDetailDrawer'
+import BPPremisasPanel from './components/BPPremisasPanel'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -88,7 +89,7 @@ function formatCOP(value, unit = 'COP') {
 
 // ─── Line Modal ───────────────────────────────────────────────────────────────
 
-function LineModal({ line, onClose, onSave }) {
+function LineModal({ line, onClose, onSave, businesses = [] }) {
   const [form, setForm] = useState(line || {
     category: 'ingreso',
     subcategory: '',
@@ -97,6 +98,7 @@ function LineModal({ line, onClose, onSave }) {
     monthly_plan: {},
     notes: '',
     order_index: 0,
+    business_id: null,
   })
 
   const handleMonthChange = (monthIdx, value) => {
@@ -148,6 +150,22 @@ function LineModal({ line, onClose, onSave }) {
               </select>
             </div>
           </div>
+          {businesses.length > 0 && (
+            <div>
+              <label className="label">Negocio (opcional)</label>
+              <select
+                className="input"
+                value={form.business_id || ''}
+                onChange={(e) => setForm({ ...form, business_id: e.target.value ? parseInt(e.target.value) : null })}
+              >
+                <option value="">— Sin negocio específico —</option>
+                {businesses.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500 mt-1">Etiqueta esta línea a un negocio específico dentro del BP</p>
+            </div>
+          )}
 
           {/* Monthly grid */}
           <div>
@@ -464,7 +482,7 @@ function AIBadge({ confidence, rationale }) {
   )
 }
 
-function PresupuestoTab({ bp, bpId, canWrite, onRefresh }) {
+function PresupuestoTab({ bp, bpId, canWrite, onRefresh, businesses = [] }) {
   const qc = useQueryClient()
   const [lineModal, setLineModal] = useState(null) // null | 'new' | line object
   const [deletingId, setDeletingId] = useState(null)
@@ -508,11 +526,27 @@ function PresupuestoTab({ bp, bpId, canWrite, onRefresh }) {
   const margen = totalIngresos > 0 ? ((totalIngresos - totalCostos) / totalIngresos) * 100 : 0
 
   const aiLinesCount = lines.filter((l) => l.is_ai_generated).length
+  const linkedLinesCount = lines.filter((l) => l.premisa_id).length
+
+  const [processingLink, setProcessingLink] = useState(false)
+
+  const handleLinkPremisas = async () => {
+    setProcessingLink(true)
+    try {
+      const res = await ariaAPI.linkPremisas(bpId)
+      qc.invalidateQueries(['bp', bpId])
+      toast.success(`ARIA vinculó ${res.data.applied_line_ids?.length || 0} líneas a premisas`)
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al vincular con ARIA')
+    } finally {
+      setProcessingLink(false)
+    }
+  }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4 text-sm">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3 text-sm flex-wrap">
           <span className="text-green-400 font-semibold">Ing: {formatCOP(totalIngresos)}</span>
           <span className="text-red-400 font-semibold">Cost: {formatCOP(totalCostos)}</span>
           <span className={clsx('font-semibold', margen >= 0 ? 'text-brand-400' : 'text-red-400')}>
@@ -520,15 +554,31 @@ function PresupuestoTab({ bp, bpId, canWrite, onRefresh }) {
           </span>
           {aiLinesCount > 0 && (
             <span className="badge text-xs bg-purple-500/10 text-purple-400 border border-purple-500/30 flex items-center gap-1">
-              <Brain size={10} /> {aiLinesCount} líneas IA
+              <Brain size={10} /> {aiLinesCount} IA
+            </span>
+          )}
+          {linkedLinesCount > 0 && (
+            <span className="badge text-xs bg-brand-500/10 text-brand-400 border border-brand-500/30 flex items-center gap-1">
+              <Link size={10} /> {linkedLinesCount} con premisa
             </span>
           )}
         </div>
-        {canWrite && (
-          <button className="btn-primary text-sm flex items-center gap-1.5" onClick={() => setLineModal('new')}>
-            <Plus size={14} /> Agregar línea
+        <div className="flex items-center gap-2">
+          <button
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-colors"
+            onClick={handleLinkPremisas}
+            disabled={processingLink}
+            title="ARIA analiza las líneas y sugiere vinculación con premisas"
+          >
+            {processingLink ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+            {processingLink ? 'Procesando...' : 'Vincular con premisas IA'}
           </button>
-        )}
+          {canWrite && (
+            <button className="btn-primary text-sm flex items-center gap-1.5" onClick={() => setLineModal('new')}>
+              <Plus size={14} /> Agregar línea
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Lines table */}
@@ -539,6 +589,7 @@ function PresupuestoTab({ bp, bpId, canWrite, onRefresh }) {
               <th className="text-left px-3 py-2.5 text-xs text-slate-400 font-semibold w-8">#</th>
               <th className="text-left px-3 py-2.5 text-xs text-slate-400 font-semibold">Categoría</th>
               <th className="text-left px-3 py-2.5 text-xs text-slate-400 font-semibold min-w-[160px]">Nombre</th>
+              <th className="text-left px-3 py-2.5 text-xs text-slate-400 font-semibold w-20">Negocio</th>
               <th className="text-left px-3 py-2.5 text-xs text-slate-400 font-semibold w-16">Unidad</th>
               {MONTHS.map((m) => (
                 <th key={m} className="text-right px-1.5 py-2.5 text-xs text-slate-500 font-medium w-14">{m}</th>
@@ -564,13 +615,24 @@ function PresupuestoTab({ bp, bpId, canWrite, onRefresh }) {
                     </span>
                   </td>
                   <td className="px-3 py-2">
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 flex-wrap">
                       <p className="text-slate-200 font-medium text-xs">{line.name}</p>
                       {line.is_ai_generated && (
                         <AIBadge confidence={line.ai_confidence} rationale={line.ai_rationale} />
                       )}
+                      {line.premisa_title && (
+                        <span className="inline-flex items-center gap-0.5 text-xs text-brand-400 bg-brand-500/10 border border-brand-500/20 rounded px-1 py-0.5" title={`Premisa: ${line.premisa_title}`}>
+                          <Link size={8} /> {line.premisa_title.slice(0, 20)}{line.premisa_title.length > 20 ? '…' : ''}
+                        </span>
+                      )}
                     </div>
                     {line.subcategory && <p className="text-slate-500 text-xs">{line.subcategory}</p>}
+                  </td>
+                  <td className="px-3 py-2">
+                    {line.business_name
+                      ? <span className="badge text-xs bg-slate-700/50 text-slate-400 flex items-center gap-1"><Building2 size={9} />{line.business_name}</span>
+                      : <span className="text-slate-700 text-xs">—</span>
+                    }
                   </td>
                   <td className="px-3 py-2 text-slate-500 text-xs">{line.unit}</td>
                   {MONTHS.map((_, idx2) => {
@@ -612,6 +674,7 @@ function PresupuestoTab({ bp, bpId, canWrite, onRefresh }) {
           line={lineModal !== 'new' ? lineModal : null}
           onClose={() => setLineModal(null)}
           onSave={handleSaveLine}
+          businesses={businesses}
         />
       )}
     </div>
@@ -982,6 +1045,12 @@ export default function BPDetailPage() {
     enabled: !!bpId,
   })
 
+  // Load businesses for line negocio tagging
+  const { data: businesses = [] } = useQuery({
+    queryKey: ['businesses-list'],
+    queryFn: () => adminAPI.businesses().then((r) => r.data),
+  })
+
   const updateMutation = useMutation({
     mutationFn: (data) => bpAPI.update(bpId, data),
     onSuccess: () => { qc.invalidateQueries(['bp', bpId]); setEditBP(false); toast.success('BP actualizado') },
@@ -1028,6 +1097,7 @@ export default function BPDetailPage() {
   const TABS = [
     { id: 'resumen', label: 'Resumen', icon: BarChart3 },
     { id: 'presupuesto', label: 'Presupuesto', icon: DollarSign },
+    { id: 'premisas', label: 'Premisas', icon: Building2 },
     { id: 'actividades', label: `Actividades (${(bp.activities || []).length})`, icon: Target },
     { id: 'cronograma', label: 'Cronograma', icon: CalendarRange },
     { id: 'analisis', label: 'Análisis IA', icon: Brain },
@@ -1129,7 +1199,16 @@ export default function BPDetailPage() {
       {/* Tab content */}
       <div>
         {activeTab === 'resumen' && <ResumenTab bp={bp} />}
-        {activeTab === 'presupuesto' && <PresupuestoTab bp={bp} bpId={bpId} canWrite={canWrite} onRefresh={() => qc.invalidateQueries(['bp', bpId])} />}
+        {activeTab === 'presupuesto' && (
+          <PresupuestoTab
+            bp={bp}
+            bpId={bpId}
+            canWrite={canWrite}
+            onRefresh={() => qc.invalidateQueries(['bp', bpId])}
+            businesses={businesses}
+          />
+        )}
+        {activeTab === 'premisas' && <BPPremisasPanel bpId={bpId} bp={bp} />}
         {activeTab === 'actividades' && (
           <ActividadesTab
             bp={bp}

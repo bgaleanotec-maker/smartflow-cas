@@ -20,6 +20,7 @@ from app.models.business_plan import (
     BPChecklist, BPComment, BPMilestone,
 )
 from app.models.business import Business
+from app.models.business_intel import PremisaNegocio
 from app.models.notification import Notification
 from app.schemas.business_plan import (
     BusinessPlanCreate, BusinessPlanUpdate,
@@ -94,6 +95,10 @@ def _line_to_dict(line: BPLine) -> dict:
     return {
         "id": line.id,
         "bp_id": line.bp_id,
+        "business_id": line.business_id,
+        "business_name": line.business.name if hasattr(line, 'business') and line.business else None,
+        "premisa_id": line.premisa_id,
+        "premisa_title": (line.premisa.title if hasattr(line, 'premisa') and line.premisa else None),
         "category": line.category.value if hasattr(line.category, "value") else line.category,
         "subcategory": line.subcategory,
         "name": line.name,
@@ -473,7 +478,8 @@ async def get_bp(bp_id: int, db: DB, user: CurrentUser):
         .options(
             selectinload(BusinessPlan.business),
             selectinload(BusinessPlan.created_by),
-            selectinload(BusinessPlan.lines),
+            selectinload(BusinessPlan.lines).selectinload(BPLine.business),
+            selectinload(BusinessPlan.lines).selectinload(BPLine.premisa),
             selectinload(BusinessPlan.activities).selectinload(BPActivity.owner),
             selectinload(BusinessPlan.activities).selectinload(BPActivity.checklist),
             selectinload(BusinessPlan.activities).selectinload(BPActivity.comments),

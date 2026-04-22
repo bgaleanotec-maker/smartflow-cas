@@ -29,6 +29,10 @@ class BPAssumptions(Base):
     client_growth_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)    # Crecimiento clientes %
     churn_rate_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)       # Deserción %
     arpu_monthly: Mapped[Optional[float]] = mapped_column(Float, nullable=True)         # ARPU COP/mes
+    # ── Volumen de Clientes (absolutos) ──
+    client_volume_current: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)     # Clientes actuales inicio de año
+    client_volume_projected: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)   # Clientes proyectados fin de año
+    client_volume_actual: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)      # Clientes reales (actual YTD)
 
     # ── Precios / Costos ──
     tariff_adjustment_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # Ajuste tarifario %

@@ -297,6 +297,13 @@ export const bpAPI = {
   createMilestone: (bpId, data) => api.post(`/bp/${bpId}/milestones`, data),
   updateMilestone: (bpId, msId, data) => api.patch(`/bp/${bpId}/milestones/${msId}`, data),
   deleteMilestone: (bpId, msId) => api.delete(`/bp/${bpId}/milestones/${msId}`),
+
+  // Premisas centralizadas del BP (por negocio+año)
+  getPremisas: (bpId) => api.get(`/bp/${bpId}/premisas`),
+
+  // Link individual line → premisa (manual)
+  linkLinePremisa: (bpId, lineId, premisaId) =>
+    api.patch(`/bp/${bpId}/lines/${lineId}/link-premisa`, { premisa_id: premisaId }),
 }
 
 // ─── Executive Dashboard ──────────────────────────────────────────────────────
@@ -363,6 +370,8 @@ export const ariaAPI = {
   sensitivity: (bpId, data) => api.post(`/bp/${bpId}/aria/sensitivity`, data),
   chat: (bpId, data) => api.post(`/bp/${bpId}/aria/chat`, data),
   history: (bpId) => api.get(`/bp/${bpId}/aria/history`),
+  // AI: associate BP lines ↔ premisas
+  linkPremisas: (bpId) => api.post(`/bp/${bpId}/aria/link-premisas`),
 }
 
 // ─── Épicas e Historias ───────────────────────────────────────────────────────

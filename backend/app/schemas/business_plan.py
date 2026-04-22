@@ -65,6 +65,8 @@ class BPLineCreate(BaseModel):
     annual_actual: Optional[float] = None
     notes: Optional[str] = None
     order_index: int = 0
+    business_id: Optional[int] = None   # tag line to a specific negocio
+    premisa_id: Optional[int] = None    # link to a budget premisa
 
 
 class BPLineUpdate(BaseModel):
@@ -78,6 +80,8 @@ class BPLineUpdate(BaseModel):
     annual_actual: Optional[float] = None
     notes: Optional[str] = None
     order_index: Optional[int] = None
+    business_id: Optional[int] = None
+    premisa_id: Optional[int] = None
 
 
 class BPLineResponse(BaseModel):

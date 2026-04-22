@@ -90,6 +90,10 @@ class BPLine(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     bp_id: Mapped[int] = mapped_column(Integer, ForeignKey("business_plans.id"), nullable=False, index=True)
+    # Optional negocio tag — allows tagging individual lines to a specific business in multi-business BPs
+    business_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("businesses.id"), nullable=True, index=True)
+    # Optional premisa link — AI can associate a line to a budget premise
+    premisa_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("premisas_negocio.id"), nullable=True)
     category: Mapped[BPLineCategory] = mapped_column(Enum(BPLineCategory), nullable=False)
     subcategory: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # e.g. "Nómina", "Licencias"
     name: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -115,6 +119,8 @@ class BPLine(Base):
     line_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     bp: Mapped["BusinessPlan"] = relationship("BusinessPlan", back_populates="lines", lazy="select")
+    business: Mapped[Optional["Business"]] = relationship("Business", foreign_keys=[business_id], lazy="select")
+    premisa: Mapped[Optional["PremisaNegocio"]] = relationship("PremisaNegocio", foreign_keys=[premisa_id], lazy="select")
 
 
 class BPActivity(Base):
