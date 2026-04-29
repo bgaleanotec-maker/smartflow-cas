@@ -100,6 +100,11 @@ async def _run_column_migrations():
             ("bp_assumptions", "client_volume_current", "INTEGER"),
             ("bp_assumptions", "client_volume_projected", "INTEGER"),
             ("bp_assumptions", "client_volume_actual", "INTEGER"),
+            # quick_tasks — categories, meeting datetimes, sub-tasks (2026-04-28)
+            ("quick_tasks", "category", "VARCHAR(30) DEFAULT 'general'"),
+            ("quick_tasks", "meeting_start", "DATETIME"),
+            ("quick_tasks", "meeting_end", "DATETIME"),
+            ("quick_tasks", "parent_id", "INTEGER REFERENCES quick_tasks(id)"),
             # recurring_activities new notification/escalation columns (2026-04-12)
             ("recurring_activities", "notify_before_value", "INTEGER DEFAULT 1"),
             ("recurring_activities", "notify_before_unit", "VARCHAR(10) DEFAULT 'dias'"),
@@ -230,6 +235,11 @@ async def _run_column_migrations():
             "ALTER TABLE bp_assumptions ADD COLUMN IF NOT EXISTS client_volume_current INTEGER",
             "ALTER TABLE bp_assumptions ADD COLUMN IF NOT EXISTS client_volume_projected INTEGER",
             "ALTER TABLE bp_assumptions ADD COLUMN IF NOT EXISTS client_volume_actual INTEGER",
+            # quick_tasks — categories, meeting datetimes, sub-tasks (2026-04-28)
+            "ALTER TABLE quick_tasks ADD COLUMN IF NOT EXISTS category VARCHAR(30) DEFAULT 'general'",
+            "ALTER TABLE quick_tasks ADD COLUMN IF NOT EXISTS meeting_start TIMESTAMP WITH TIME ZONE",
+            "ALTER TABLE quick_tasks ADD COLUMN IF NOT EXISTS meeting_end TIMESTAMP WITH TIME ZONE",
+            "ALTER TABLE quick_tasks ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES quick_tasks(id)",
             # voice_notes table — task association added after initial deploy
             "ALTER TABLE voice_notes ADD COLUMN IF NOT EXISTS task_id INTEGER",
             # tasks table — PMO/Scrum columns added after initial deploy
@@ -567,7 +577,7 @@ app.include_router(quick_tasks.router, prefix=API_PREFIX)
 app.include_router(novedades.router, prefix=API_PREFIX)
 
 
-# force redeploy 2026-04-20 — Novedades: sentiment + reproceso fields
+# force redeploy 2026-04-28 — QuickTasks: category + meeting datetimes + sub-tasks; nav role filtering; STT fix
 @app.get("/health")
 async def health():
     return {"status": "ok", "app": settings.APP_NAME, "version": settings.VERSION}

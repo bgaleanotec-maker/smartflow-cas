@@ -1,5 +1,7 @@
 /**
  * QuickTasksPage — Tareas puntuales no asociadas a proyectos
+ * Categorías: general | reunion | gestion | seguimiento | revision | soporte | capacitacion | otro
+ * Las reuniones tienen start/end datetime y pueden generar sub-tareas.
  */
 import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -7,7 +9,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Plus, X, Trash2, Edit3, CheckCircle2, Clock, AlertTriangle,
   Timer, Users, Building2, ListTodo, ChevronDown, ChevronRight,
-  BarChart3, User, Calendar,
+  BarChart3, User, Calendar, Tag, Video, ChevronUp, PlusCircle,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -30,6 +32,17 @@ const STATUS_LABELS = {
   completada:  { label: 'Completada',  color: 'text-green-400' },
 }
 
+const CATEGORY_CONFIG = {
+  general:      { label: 'General',      color: 'text-slate-400',   bg: 'bg-slate-800',        icon: '📋' },
+  reunion:      { label: 'Reunión',       color: 'text-violet-400',  bg: 'bg-violet-900/30',    icon: '📅' },
+  gestion:      { label: 'Gestión',       color: 'text-blue-400',    bg: 'bg-blue-900/30',      icon: '⚙️' },
+  seguimiento:  { label: 'Seguimiento',   color: 'text-cyan-400',    bg: 'bg-cyan-900/30',      icon: '🔍' },
+  revision:     { label: 'Revisión',      color: 'text-amber-400',   bg: 'bg-amber-900/30',     icon: '✏️' },
+  soporte:      { label: 'Soporte',       color: 'text-orange-400',  bg: 'bg-orange-900/30',    icon: '🛠️' },
+  capacitacion: { label: 'Capacitación',  color: 'text-green-400',   bg: 'bg-green-900/30',     icon: '🎓' },
+  otro:         { label: 'Otro',          color: 'text-pink-400',    bg: 'bg-pink-900/30',      icon: '📌' },
+}
+
 function fmtMinutes(min) {
   if (!min && min !== 0) return '—'
   if (min < 60) return `${min}m`
@@ -43,20 +56,207 @@ function isOverdue(due_date) {
   return new Date(due_date) < new Date(new Date().toDateString())
 }
 
+function formatDatetime(iso) {
+  if (!iso) return null
+  const d = new Date(iso)
+  return d.toLocaleString('es-CO', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+// ─── Sub-task Row ─────────────────────────────────────────────────────────────
+
+function SubTaskRow({ task, onDone, onDelete, onEdit }) {
+  const pc = PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.media
+  return (
+    <div className="flex items-center gap-2 py-1.5 pl-4 border-l-2 border-slate-700 ml-2">
+      <div className={clsx('w-1.5 h-1.5 rounded-full flex-shrink-0', {
+        'bg-slate-500': task.priority === 'baja',
+        'bg-blue-500': task.priority === 'media',
+        'bg-amber-500': task.priority === 'alta',
+        'bg-red-500': task.priority === 'urgente',
+      })} />
+      <span className={clsx('flex-1 text-xs truncate', task.is_done ? 'line-through text-slate-600' : 'text-slate-300')}>
+        {task.title}
+      </span>
+      {task.assigned_to_name && (
+        <span className="text-[10px] text-slate-500 flex-shrink-0">{task.assigned_to_name}</span>
+      )}
+      {!task.is_done && (
+        <button onClick={() => onDone(task.id)} className="p-1 text-slate-600 hover:text-green-400 transition-colors flex-shrink-0">
+          <CheckCircle2 size={12} />
+        </button>
+      )}
+      <button onClick={() => onEdit(task)} className="p-1 text-slate-600 hover:text-brand-400 transition-colors flex-shrink-0">
+        <Edit3 size={12} />
+      </button>
+      <button onClick={() => onDelete(task.id)} className="p-1 text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
+        <Trash2 size={12} />
+      </button>
+    </div>
+  )
+}
+
+// ─── Task Form Fields (shared by Create/Edit) ─────────────────────────────────
+
+function TaskFormFields({ form, setForm, businesses, users, isEdit = false }) {
+  const isReunion = form.category === 'reunion'
+  return (
+    <>
+      <div>
+        <label className="label">Título *</label>
+        <input
+          value={form.title}
+          onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+          className="input"
+          placeholder="¿Qué hay que hacer?"
+          autoFocus={!isEdit}
+        />
+      </div>
+      <div>
+        <label className="label">Descripción</label>
+        <textarea
+          value={form.description}
+          onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+          className="input h-16 resize-none text-sm"
+          placeholder="Detalles opcionales..."
+        />
+      </div>
+
+      {/* Category */}
+      <div>
+        <label className="label">Categoría</label>
+        <select
+          value={form.category}
+          onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+          className="input"
+        >
+          {Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => (
+            <option key={key} value={key}>{cfg.icon} {cfg.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Meeting datetimes */}
+      {isReunion && (
+        <div className="rounded-lg bg-violet-950/30 border border-violet-800/40 p-3 space-y-2">
+          <p className="text-xs text-violet-400 font-semibold flex items-center gap-1.5">
+            <Video size={12} /> Detalles de la reunión
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="label">Inicio</label>
+              <input
+                type="datetime-local"
+                value={form.meeting_start}
+                onChange={e => setForm(f => ({ ...f, meeting_start: e.target.value }))}
+                className="input text-sm"
+              />
+            </div>
+            <div>
+              <label className="label">Fin</label>
+              <input
+                type="datetime-local"
+                value={form.meeting_end}
+                onChange={e => setForm(f => ({ ...f, meeting_end: e.target.value }))}
+                className="input text-sm"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="label">Prioridad</label>
+          <select
+            value={form.priority}
+            onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
+            className="input"
+          >
+            <option value="baja">Baja</option>
+            <option value="media">Media</option>
+            <option value="alta">Alta</option>
+            <option value="urgente">Urgente</option>
+          </select>
+        </div>
+        <div>
+          <label className="label">Vencimiento</label>
+          <input
+            type="date"
+            value={form.due_date}
+            onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
+            className="input"
+          />
+        </div>
+      </div>
+      <div>
+        <label className="label">Empresa</label>
+        <select
+          value={form.business_id}
+          onChange={e => setForm(f => ({ ...f, business_id: e.target.value }))}
+          className="input"
+        >
+          <option value="">Sin empresa</option>
+          {businesses?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="label">Asignar a</label>
+        <select
+          value={form.assigned_to_id}
+          onChange={e => setForm(f => ({ ...f, assigned_to_id: e.target.value }))}
+          className="input"
+        >
+          <option value="">Sin asignar</option>
+          {users?.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="label">Tiempo estimado (min)</label>
+        <input
+          type="number"
+          min="1"
+          value={form.estimated_minutes}
+          onChange={e => setForm(f => ({ ...f, estimated_minutes: e.target.value }))}
+          className="input"
+          placeholder="Ej: 30"
+        />
+      </div>
+      {isEdit && (
+        <div>
+          <label className="label">Estado</label>
+          <select
+            value={form.status}
+            onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+            className="input"
+          >
+            <option value="pendiente">Pendiente</option>
+            <option value="asignada">Asignada</option>
+            <option value="en_progreso">En progreso</option>
+            <option value="completada">Completada</option>
+          </select>
+        </div>
+      )}
+    </>
+  )
+}
+
 // ─── CreateModal ──────────────────────────────────────────────────────────────
 
-function CreateModal({ onClose, businesses, users }) {
+function CreateModal({ onClose, businesses, users, parentTask = null }) {
   const qc = useQueryClient()
   const [form, setForm] = useState({
-    title: '', description: '', business_id: '', assigned_to_id: '',
-    priority: 'media', estimated_minutes: '', due_date: '',
+    title: '', description: '', business_id: parentTask?.business_id ? String(parentTask.business_id) : '',
+    assigned_to_id: '', priority: 'media', category: 'general',
+    estimated_minutes: '', due_date: '', meeting_start: '', meeting_end: '',
   })
 
   const mutation = useMutation({
-    mutationFn: (data) => quickTasksAPI.create(data),
+    mutationFn: (data) => parentTask
+      ? quickTasksAPI.createSubtask(parentTask.id, data)
+      : quickTasksAPI.create(data),
     onSuccess: () => {
       qc.invalidateQueries(['quick-tasks'])
-      toast.success('Tarea creada')
+      toast.success(parentTask ? 'Sub-tarea creada' : 'Tarea creada')
       onClose()
     },
     onError: (err) => toast.error(err.response?.data?.detail || 'Error al crear tarea'),
@@ -71,8 +271,11 @@ function CreateModal({ onClose, businesses, users }) {
       business_id: form.business_id ? parseInt(form.business_id) : null,
       assigned_to_id: form.assigned_to_id ? parseInt(form.assigned_to_id) : null,
       priority: form.priority,
+      category: form.category,
       estimated_minutes: form.estimated_minutes ? parseInt(form.estimated_minutes) : null,
       due_date: form.due_date || null,
+      meeting_start: form.category === 'reunion' && form.meeting_start ? form.meeting_start : null,
+      meeting_end: form.category === 'reunion' && form.meeting_end ? form.meeting_end : null,
     })
   }
 
@@ -81,91 +284,17 @@ function CreateModal({ onClose, businesses, users }) {
       <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 sticky top-0 bg-slate-900">
           <h2 className="font-semibold text-white flex items-center gap-2">
-            <ListTodo size={16} className="text-amber-400" /> Nueva tarea rápida
+            <ListTodo size={16} className="text-amber-400" />
+            {parentTask ? `Sub-tarea de: ${parentTask.title.slice(0, 30)}` : 'Nueva tarea rápida'}
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-200"><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-3">
-          <div>
-            <label className="label">Título *</label>
-            <input
-              value={form.title}
-              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-              className="input"
-              placeholder="¿Qué hay que hacer?"
-              autoFocus
-            />
-          </div>
-          <div>
-            <label className="label">Descripción</label>
-            <textarea
-              value={form.description}
-              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-              className="input h-16 resize-none text-sm"
-              placeholder="Detalles opcionales..."
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Prioridad</label>
-              <select
-                value={form.priority}
-                onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
-                className="input"
-              >
-                <option value="baja">Baja</option>
-                <option value="media">Media</option>
-                <option value="alta">Alta</option>
-                <option value="urgente">Urgente</option>
-              </select>
-            </div>
-            <div>
-              <label className="label">Vencimiento</label>
-              <input
-                type="date"
-                value={form.due_date}
-                onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
-                className="input"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="label">Empresa</label>
-            <select
-              value={form.business_id}
-              onChange={e => setForm(f => ({ ...f, business_id: e.target.value }))}
-              className="input"
-            >
-              <option value="">Sin empresa</option>
-              {businesses?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="label">Asignar a</label>
-            <select
-              value={form.assigned_to_id}
-              onChange={e => setForm(f => ({ ...f, assigned_to_id: e.target.value }))}
-              className="input"
-            >
-              <option value="">Sin asignar</option>
-              {users?.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="label">Tiempo estimado (min)</label>
-            <input
-              type="number"
-              min="1"
-              value={form.estimated_minutes}
-              onChange={e => setForm(f => ({ ...f, estimated_minutes: e.target.value }))}
-              className="input"
-              placeholder="Ej: 30"
-            />
-          </div>
+          <TaskFormFields form={form} setForm={setForm} businesses={businesses} users={users} />
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancelar</button>
             <button type="submit" disabled={mutation.isPending} className="btn-primary flex-1">
-              {mutation.isPending ? 'Creando...' : 'Crear tarea'}
+              {mutation.isPending ? 'Creando...' : 'Crear'}
             </button>
           </div>
         </form>
@@ -178,6 +307,15 @@ function CreateModal({ onClose, businesses, users }) {
 
 function EditModal({ task, onClose, businesses, users }) {
   const qc = useQueryClient()
+
+  const toLocalDatetime = (iso) => {
+    if (!iso) return ''
+    // Convert ISO to local datetime-local input format
+    const d = new Date(iso)
+    const pad = n => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+
   const [form, setForm] = useState({
     title: task.title || '',
     description: task.description || '',
@@ -185,8 +323,11 @@ function EditModal({ task, onClose, businesses, users }) {
     assigned_to_id: task.assigned_to_id ? String(task.assigned_to_id) : '',
     priority: task.priority || 'media',
     status: task.status || 'pendiente',
+    category: task.category || 'general',
     estimated_minutes: task.estimated_minutes ? String(task.estimated_minutes) : '',
     due_date: task.due_date || '',
+    meeting_start: toLocalDatetime(task.meeting_start),
+    meeting_end: toLocalDatetime(task.meeting_end),
   })
 
   const mutation = useMutation({
@@ -208,8 +349,11 @@ function EditModal({ task, onClose, businesses, users }) {
       assigned_to_id: form.assigned_to_id ? parseInt(form.assigned_to_id) : null,
       priority: form.priority,
       status: form.status,
+      category: form.category,
       estimated_minutes: form.estimated_minutes ? parseInt(form.estimated_minutes) : null,
       due_date: form.due_date || null,
+      meeting_start: form.category === 'reunion' && form.meeting_start ? form.meeting_start : null,
+      meeting_end: form.category === 'reunion' && form.meeting_end ? form.meeting_end : null,
     })
   }
 
@@ -221,68 +365,7 @@ function EditModal({ task, onClose, businesses, users }) {
           <button onClick={onClose} className="text-slate-400 hover:text-slate-200"><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-3">
-          <div>
-            <label className="label">Título *</label>
-            <input
-              value={form.title}
-              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-              className="input"
-            />
-          </div>
-          <div>
-            <label className="label">Descripción</label>
-            <textarea
-              value={form.description}
-              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-              className="input h-16 resize-none text-sm"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Prioridad</label>
-              <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))} className="input">
-                <option value="baja">Baja</option>
-                <option value="media">Media</option>
-                <option value="alta">Alta</option>
-                <option value="urgente">Urgente</option>
-              </select>
-            </div>
-            <div>
-              <label className="label">Estado</label>
-              <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="input">
-                <option value="pendiente">Pendiente</option>
-                <option value="asignada">Asignada</option>
-                <option value="en_progreso">En progreso</option>
-                <option value="completada">Completada</option>
-              </select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Empresa</label>
-              <select value={form.business_id} onChange={e => setForm(f => ({ ...f, business_id: e.target.value }))} className="input">
-                <option value="">Sin empresa</option>
-                {businesses?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Asignado a</label>
-              <select value={form.assigned_to_id} onChange={e => setForm(f => ({ ...f, assigned_to_id: e.target.value }))} className="input">
-                <option value="">Sin asignar</option>
-                {users?.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Estimado (min)</label>
-              <input type="number" min="1" value={form.estimated_minutes} onChange={e => setForm(f => ({ ...f, estimated_minutes: e.target.value }))} className="input" />
-            </div>
-            <div>
-              <label className="label">Vencimiento</label>
-              <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} className="input" />
-            </div>
-          </div>
+          <TaskFormFields form={form} setForm={setForm} businesses={businesses} users={users} isEdit />
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancelar</button>
             <button type="submit" disabled={mutation.isPending} className="btn-primary flex-1">
@@ -297,19 +380,35 @@ function EditModal({ task, onClose, businesses, users }) {
 
 // ─── TaskCard ─────────────────────────────────────────────────────────────────
 
-function TaskCard({ task, onDone, onDelete, onEdit, navigate }) {
+function TaskCard({ task, onDone, onDelete, onEdit, onAddSubtask, navigate }) {
+  const [expandChildren, setExpandChildren] = useState(false)
+  const qc = useQueryClient()
   const pc = PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.media
   const sc = STATUS_LABELS[task.status] || STATUS_LABELS.pendiente
+  const catCfg = CATEGORY_CONFIG[task.category] || CATEGORY_CONFIG.general
   const overdue = isOverdue(task.due_date)
   const hasTime = task.estimated_minutes > 0
   const progress = hasTime ? Math.min(100, Math.round((task.logged_minutes / task.estimated_minutes) * 100)) : 0
+  const children = task.children || []
+  const doneChildren = children.filter(c => c.is_done)
+  const isReunion = task.category === 'reunion'
+
+  const doneMutation = useMutation({
+    mutationFn: (id) => quickTasksAPI.done(id),
+    onSuccess: () => { qc.invalidateQueries(['quick-tasks']); toast.success('Sub-tarea completada') },
+  })
+  const deleteMutation = useMutation({
+    mutationFn: (id) => quickTasksAPI.delete(id),
+    onSuccess: () => { qc.invalidateQueries(['quick-tasks']); toast.success('Eliminada') },
+  })
 
   return (
     <div className={clsx(
       'card border-l-4 hover:border-slate-600 transition-all',
-      pc.border,
+      isReunion ? 'border-l-violet-500' : pc.border,
       task.is_done && 'opacity-60'
     )}>
+      {/* Header row */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <h3 className={clsx('font-medium text-sm', task.is_done ? 'line-through text-slate-500' : 'text-white')}>
@@ -329,16 +428,19 @@ function TaskCard({ task, onDone, onDelete, onEdit, navigate }) {
               <Timer size={14} />
             </button>
           )}
-          <button
-            onClick={() => onEdit(task)}
-            className="p-1.5 rounded text-slate-500 hover:text-brand-400 hover:bg-brand-900/20 transition-colors"
-          >
+          {isReunion && !task.is_done && (
+            <button
+              onClick={() => onAddSubtask(task)}
+              title="Agregar acción de reunión"
+              className="p-1.5 rounded text-slate-500 hover:text-violet-400 hover:bg-violet-900/20 transition-colors"
+            >
+              <PlusCircle size={14} />
+            </button>
+          )}
+          <button onClick={() => onEdit(task)} className="p-1.5 rounded text-slate-500 hover:text-brand-400 hover:bg-brand-900/20 transition-colors">
             <Edit3 size={14} />
           </button>
-          <button
-            onClick={() => onDelete(task.id)}
-            className="p-1.5 rounded text-slate-500 hover:text-red-400 hover:bg-red-900/20 transition-colors"
-          >
+          <button onClick={() => onDelete(task.id)} className="p-1.5 rounded text-slate-500 hover:text-red-400 hover:bg-red-900/20 transition-colors">
             <Trash2 size={14} />
           </button>
         </div>
@@ -346,6 +448,10 @@ function TaskCard({ task, onDone, onDelete, onEdit, navigate }) {
 
       {/* Badges row */}
       <div className="flex items-center gap-2 flex-wrap mt-2">
+        {/* Category badge */}
+        <span className={clsx('text-[10px] font-semibold px-1.5 py-0.5 rounded flex items-center gap-1', catCfg.bg, catCfg.color)}>
+          {catCfg.icon} {catCfg.label}
+        </span>
         <span className={clsx('text-[10px] font-semibold px-1.5 py-0.5 rounded', pc.bg, pc.text)}>
           {pc.label}
         </span>
@@ -366,19 +472,27 @@ function TaskCard({ task, onDone, onDelete, onEdit, navigate }) {
 
         {task.assigned_to_name && (
           <span className="flex items-center gap-1 text-[10px] text-slate-400">
-            <User size={10} />
-            {task.assigned_to_name}
+            <User size={10} /> {task.assigned_to_name}
           </span>
         )}
 
         {task.due_date && (
           <span className={clsx('flex items-center gap-1 text-[10px]', overdue ? 'text-red-400' : 'text-slate-500')}>
-            <Calendar size={10} />
-            {task.due_date}
-            {overdue && ' (vencida)'}
+            <Calendar size={10} /> {task.due_date}{overdue && ' (vencida)'}
           </span>
         )}
       </div>
+
+      {/* Meeting datetimes */}
+      {isReunion && (task.meeting_start || task.meeting_end) && (
+        <div className="mt-2 rounded bg-violet-950/40 border border-violet-800/30 px-2 py-1.5 text-xs text-violet-300 flex flex-wrap gap-x-3 gap-y-0.5">
+          {task.meeting_start && <span>📅 Inicio: {formatDatetime(task.meeting_start)}</span>}
+          {task.meeting_end && <span>🏁 Fin: {formatDatetime(task.meeting_end)}</span>}
+          {task.meeting_duration_min != null && (
+            <span className="text-violet-400 font-medium">⏱ {fmtMinutes(task.meeting_duration_min)}</span>
+          )}
+        </div>
+      )}
 
       {/* Time progress */}
       {hasTime && (
@@ -393,6 +507,37 @@ function TaskCard({ task, onDone, onDelete, onEdit, navigate }) {
               style={{ width: `${progress}%` }}
             />
           </div>
+        </div>
+      )}
+
+      {/* Sub-tasks / action items */}
+      {children.length > 0 && (
+        <div className="mt-2">
+          <button
+            onClick={() => setExpandChildren(!expandChildren)}
+            className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300 transition-colors w-full"
+          >
+            {expandChildren ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+            <span>Acciones ({doneChildren.length}/{children.length} completadas)</span>
+            {doneChildren.length < children.length && (
+              <span className="ml-auto text-amber-500 text-[10px]">● pendientes</span>
+            )}
+          </button>
+          {expandChildren && (
+            <div className="mt-1 space-y-0.5">
+              {children.map(child => (
+                <SubTaskRow
+                  key={child.id}
+                  task={child}
+                  onDone={(id) => doneMutation.mutate(id)}
+                  onDelete={(id) => {
+                    if (confirm('¿Eliminar esta acción?')) deleteMutation.mutate(id)
+                  }}
+                  onEdit={onEdit}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -435,6 +580,9 @@ function LeaderDashboard({ navigate, businesses, users, onEdit }) {
     </div>
   )
 
+  const meetingStats = dash?.meeting_stats_30d || []
+  const OVERUSE_THRESHOLD = 8  // >8 meetings/30d = overuse
+
   return (
     <div className="space-y-6">
       {/* KPIs */}
@@ -452,6 +600,39 @@ function LeaderDashboard({ navigate, businesses, users, onEdit }) {
           <p className="text-xs text-slate-400 mt-0.5">Urgentes</p>
         </div>
       </div>
+
+      {/* Meeting overuse panel */}
+      {meetingStats.length > 0 && (
+        <div className="card">
+          <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
+            <Video size={15} className="text-violet-400" /> Uso de reuniones (últimos 30 días)
+            {meetingStats.some(s => s.count > OVERUSE_THRESHOLD) && (
+              <span className="text-xs text-red-400 ml-auto flex items-center gap-1">
+                <AlertTriangle size={12} /> Sobrecarga detectada
+              </span>
+            )}
+          </h3>
+          <div className="space-y-2">
+            {meetingStats.map(s => (
+              <div key={s.user_id} className="flex items-center gap-2">
+                <span className="text-sm text-slate-300 flex-1 truncate">{s.user_name}</span>
+                <span className={clsx(
+                  'text-xs font-semibold px-2 py-0.5 rounded',
+                  s.count > OVERUSE_THRESHOLD ? 'bg-red-900/40 text-red-400' : 'bg-slate-800 text-slate-400'
+                )}>
+                  {s.count} reuniones
+                </span>
+                {s.total_minutes > 0 && (
+                  <span className="text-xs text-slate-500">{fmtMinutes(s.total_minutes)}</span>
+                )}
+                {s.count > OVERUSE_THRESHOLD && (
+                  <AlertTriangle size={12} className="text-red-400 flex-shrink-0" />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* By business */}
       {dash?.by_business?.map(biz => (
@@ -502,7 +683,6 @@ function LeaderDashboard({ navigate, businesses, users, onEdit }) {
         </div>
       ))}
 
-      {/* No business */}
       {dash?.no_business?.length > 0 && (
         <div className="card">
           <h3 className="font-semibold text-slate-400 mb-3 text-sm">Sin empresa asignada ({dash.no_business.length})</h3>
@@ -529,21 +709,24 @@ export default function QuickTasksPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { user } = useAuthStore()
-  const isLeaderOrAdmin = ['admin', 'leader'].includes(user?.role)
+  const isLeaderOrAdmin = ['admin', 'leader', 'lider_sr'].includes(user?.role)
 
   const [businessFilter, setBusinessFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
   const [includeDone, setIncludeDone] = useState(false)
   const [userIdFilter, setUserIdFilter] = useState('')
   const [leaderView, setLeaderView] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [editTask, setEditTask] = useState(null)
+  const [addSubtaskParent, setAddSubtaskParent] = useState(null)
 
   const { data: tasks, isLoading } = useQuery({
-    queryKey: ['quick-tasks', businessFilter, statusFilter, includeDone, userIdFilter],
+    queryKey: ['quick-tasks', businessFilter, statusFilter, categoryFilter, includeDone, userIdFilter],
     queryFn: () => quickTasksAPI.list({
       business_id: businessFilter || undefined,
       status: statusFilter || undefined,
+      category: categoryFilter || undefined,
       include_done: includeDone,
       all_users: isLeaderOrAdmin ? true : undefined,
       assigned_to_id: userIdFilter || undefined,
@@ -574,14 +757,10 @@ export default function QuickTasksPage() {
     onError: () => toast.error('Error al eliminar tarea'),
   })
 
-  // KPI counts from the task list
   const activeTasks = tasks?.filter(t => !t.is_done) || []
   const overdueTasks = tasks?.filter(t => !t.is_done && isOverdue(t.due_date)) || []
   const urgentTasks = tasks?.filter(t => !t.is_done && t.priority === 'urgente') || []
-  const doneTodayTasks = tasks?.filter(t => {
-    if (!t.done_at) return false
-    return t.done_at.startsWith(new Date().toISOString().slice(0, 10))
-  }) || []
+  const meetingTasks = tasks?.filter(t => !t.is_done && t.category === 'reunion') || []
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -601,7 +780,7 @@ export default function QuickTasksPage() {
               className={clsx('btn-secondary text-sm flex items-center gap-1.5', leaderView && 'bg-brand-600 text-white border-brand-600')}
             >
               <BarChart3 size={14} />
-              {leaderView ? 'Vista líder' : 'Vista líder'}
+              Vista líder
             </button>
           )}
           <button onClick={() => setShowCreate(true)} className="btn-primary">
@@ -626,8 +805,8 @@ export default function QuickTasksPage() {
             <p className="text-xs text-slate-400">Urgentes</p>
           </div>
           <div className="card text-center py-3">
-            <p className="text-xl font-bold text-green-400">{doneTodayTasks.length}</p>
-            <p className="text-xs text-slate-400">Completadas hoy</p>
+            <p className="text-xl font-bold text-violet-400">{meetingTasks.length}</p>
+            <p className="text-xs text-slate-400">Reuniones</p>
           </div>
         </div>
       )}
@@ -666,6 +845,18 @@ export default function QuickTasksPage() {
 
           {/* Filters row */}
           <div className="flex items-center gap-3 flex-wrap">
+            {/* Category filter */}
+            <select
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value)}
+              className="input w-auto text-sm"
+            >
+              <option value="">Todas las categorías</option>
+              {Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => (
+                <option key={key} value={key}>{cfg.icon} {cfg.label}</option>
+              ))}
+            </select>
+
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
@@ -724,6 +915,7 @@ export default function QuickTasksPage() {
                     if (confirm('¿Eliminar esta tarea?')) deleteMutation.mutate(id)
                   }}
                   onEdit={setEditTask}
+                  onAddSubtask={setAddSubtaskParent}
                   navigate={navigate}
                 />
               ))}
@@ -738,6 +930,14 @@ export default function QuickTasksPage() {
       )}
       {editTask && (
         <EditModal task={editTask} onClose={() => setEditTask(null)} businesses={businesses} users={users} />
+      )}
+      {addSubtaskParent && (
+        <CreateModal
+          onClose={() => setAddSubtaskParent(null)}
+          businesses={businesses}
+          users={users}
+          parentTask={addSubtaskParent}
+        />
       )}
     </div>
   )

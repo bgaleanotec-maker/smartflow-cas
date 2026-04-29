@@ -409,9 +409,12 @@ export const voiceNotesAPI = {
 export const quickTasksAPI = {
   list: (params) => api.get('/quick-tasks', { params }),
   create: (data) => api.post('/quick-tasks', data),
+  get: (id) => api.get(`/quick-tasks/${id}`),
   update: (id, data) => api.patch(`/quick-tasks/${id}`, data),
   delete: (id) => api.delete(`/quick-tasks/${id}`),
   done: (id) => api.patch(`/quick-tasks/${id}`, { is_done: true }),
   logTime: (id, minutes) => api.post(`/quick-tasks/${id}/log-time?minutes=${minutes}`),
   dashboard: () => api.get('/quick-tasks/dashboard'),
+  listSubtasks: (parentId) => api.get(`/quick-tasks/${parentId}/subtasks`),
+  createSubtask: (parentId, data) => api.post(`/quick-tasks/${parentId}/subtasks`, data),
 }

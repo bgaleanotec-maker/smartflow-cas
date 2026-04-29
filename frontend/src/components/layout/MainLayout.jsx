@@ -447,26 +447,37 @@ function QuickNovedadModal({ onClose }) {
 }
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
+// Roles strategy:
+//   - No `roles` field → visible to ALL roles (basic + privileged)
+//   - `roles: [...]` → visible only to those specific roles
+//   - Privileged = admin | leader | lider_sr | herramientas | directivo
+//
+// Basic roles (member, negocio, project_leader) see ONLY the items without role restriction
+// plus items that explicitly include their role.
+
+const PRIVILEGED = ['admin', 'leader', 'lider_sr', 'herramientas', 'directivo']
 
 const navItems = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/executive', icon: Crown, label: 'Vista Directiva', badge: 'VP', roles: ['admin', 'directivo'] },
-  { to: '/torre-control', icon: Plane, label: 'Torre de Control' },
-  { to: '/lean-pro', icon: Zap, label: 'Lean Pro' },
-  { to: '/centro-info', icon: LayoutGrid, label: 'Centro Info' },
-  { to: '/demands', icon: FileText, label: 'Demandas' },
-  { to: '/demands/dashboard', icon: BarChart3, label: 'Dashboard Demandas', roles: ['admin', 'leader', 'herramientas'] },
-  { to: '/novedades', icon: Radio, label: 'Novedades Operativas' },
-  { to: '/hechos', icon: Newspaper, label: 'Hechos Relevantes' },
-  { to: '/premisas', icon: Landmark, label: 'Premisas' },
-  { to: '/bp', icon: TrendingUp, label: 'Plan de Negocio', cas: true },
-  { to: '/epics', icon: BookOpen, label: 'Épicas' },
-  { to: '/projects', icon: FolderKanban, label: 'Proyectos' },
-  { to: '/incidents', icon: AlertTriangle, label: 'Incidentes' },
-  { to: '/pomodoro', icon: Timer, label: 'Pomodoro' },
-  { to: '/meetings', icon: Mic2, label: 'Reuniones' },
-  { to: '/voice-notes', icon: Volume2, label: 'Notas de Voz' },
-  { to: '/quick-tasks', icon: ListTodo, label: 'Tareas Rápidas' },
+  // ── Visible to ALL roles ──────────────────────────────────────────────────
+  { to: '/dashboard',     icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/torre-control', icon: Plane,            label: 'Torre de Control' },
+  { to: '/quick-tasks',   icon: ListTodo,         label: 'Tareas Rápidas' },
+  { to: '/projects',      icon: FolderKanban,     label: 'Proyectos' },
+  { to: '/premisas',      icon: Landmark,         label: 'Premisas' },
+  { to: '/novedades',     icon: Radio,            label: 'Novedades Operativas' },
+  { to: '/bp',            icon: TrendingUp,       label: 'Plan de Negocio', cas: true },
+  // ── Privileged only ───────────────────────────────────────────────────────
+  { to: '/executive',          icon: Crown,      label: 'Vista Directiva',    badge: 'VP',  roles: ['admin', 'directivo'] },
+  { to: '/lean-pro',           icon: Zap,         label: 'Lean Pro',                         roles: PRIVILEGED },
+  { to: '/centro-info',        icon: LayoutGrid,  label: 'Centro Info',                      roles: PRIVILEGED },
+  { to: '/demands',            icon: FileText,    label: 'Demandas',                         roles: PRIVILEGED },
+  { to: '/demands/dashboard',  icon: BarChart3,   label: 'Dashboard Demandas',               roles: ['admin', 'leader', 'herramientas'] },
+  { to: '/hechos',             icon: Newspaper,   label: 'Hechos Relevantes',                roles: PRIVILEGED },
+  { to: '/epics',              icon: BookOpen,    label: 'Épicas',                           roles: PRIVILEGED },
+  { to: '/incidents',          icon: AlertTriangle, label: 'Incidentes',                     roles: PRIVILEGED },
+  { to: '/pomodoro',           icon: Timer,       label: 'Pomodoro',                         roles: PRIVILEGED },
+  { to: '/meetings',           icon: Mic2,        label: 'Reuniones',                        roles: PRIVILEGED },
+  { to: '/voice-notes',        icon: Volume2,     label: 'Notas de Voz',                     roles: PRIVILEGED },
 ]
 
 const adminItems = [
