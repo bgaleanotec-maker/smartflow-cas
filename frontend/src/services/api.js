@@ -114,6 +114,9 @@ export const adminAPI = {
   updateIntegration: (service, data) => api.put(`/admin/integrations/${service}`, data),
   deleteIntegration: (service) => api.delete(`/admin/integrations/${service}`),
   testIntegration: (service) => api.post(`/admin/integrations/${service}/test`),
+  // Nav config per role
+  getNavConfig: () => api.get('/admin/nav-config'),
+  saveNavConfig: (config) => api.put('/admin/nav-config', config),
 }
 
 // ─── Demands ─────────────────────────────────────────────────────────────

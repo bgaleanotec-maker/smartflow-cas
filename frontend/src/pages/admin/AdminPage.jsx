@@ -4,10 +4,11 @@ import {
   Plus, Building2, Tag, AlertCircle, BarChart3,
   Key, Mail, MessageCircle, Send, Brain, Smartphone,
   Eye, EyeOff, CheckCircle, XCircle, Loader2, Settings2, Trash2,
-  ChevronDown, ChevronUp, Zap,
+  ChevronDown, ChevronUp, Zap, LayoutGrid,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminAPI, demandAdminAPI } from '../../services/api'
+import NavConfigManager from './NavConfigManager'
 
 const ICON_MAP = { Mail, MessageCircle, Send, Brain, Smartphone, Key }
 
@@ -611,6 +612,11 @@ export default function AdminPage() {
           <CustomFieldManager />
         </SectionCard>
       </div>
+
+      {/* Nav Config per Role */}
+      <SectionCard title="Vistas por Rol" icon={LayoutGrid}>
+        <NavConfigManager />
+      </SectionCard>
 
       {/* Integrations */}
       <SectionCard title="Integraciones y API Keys" icon={Settings2}>

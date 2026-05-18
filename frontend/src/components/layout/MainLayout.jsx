@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import ErrorBoundary from '../ErrorBoundary'
 import {
   LayoutDashboard, FolderKanban, AlertTriangle, Timer,
@@ -500,12 +501,29 @@ export default function MainLayout() {
   const navigate = useNavigate()
   const location = useLocation()
 
+  // ── Nav config from admin (role-based module visibility) ──────────────────
+  const { data: navConfig } = useQuery({
+    queryKey: ['nav-config'],
+    queryFn: () => adminAPI.getNavConfig().then(r => r.data),
+    staleTime: 5 * 60 * 1000,   // 5-min cache — reloads if admin changes config
+    retry: false,                // don't block nav if endpoint fails
+  })
+
+  const filteredNavItems = useMemo(() => {
+    const role = user?.role
+    const configForRole = navConfig?.[role]
+    if (configForRole && Array.isArray(configForRole) && configForRole.length > 0) {
+      // Use admin-configured list — show only items whose path is in the allowed list
+      return navItems.filter(item => configForRole.includes(item.to))
+    }
+    // Fallback: use hardcoded roles[] restriction
+    return navItems.filter(item => !item.roles || item.roles.includes(role))
+  }, [navConfig, user?.role])
+
   const handleLogout = () => {
     logout()
     navigate('/login')
   }
-
-  const filteredNavItems = navItems.filter(item => !item.roles || item.roles.includes(user?.role))
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">

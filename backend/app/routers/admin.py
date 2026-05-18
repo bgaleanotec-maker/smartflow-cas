@@ -1,7 +1,7 @@
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select, func, delete
-from app.core.deps import DB, AdminUser, LeaderOrAdmin
+from app.core.deps import DB, AdminUser, LeaderOrAdmin, CurrentUser
 from app.models.business import Business
 from app.models.catalog import Priority, TaskStatus, IncidentCategory
 from app.models.user import User
@@ -453,3 +453,70 @@ async def test_integration(service_name: str, db: DB, admin: AdminUser):
         return {"success": False, "message": "Timeout: el servicio no respondió en 5 segundos"}
     except Exception as e:
         return {"success": False, "message": f"Error de conexión: {str(e)}"}
+
+
+# ─── Nav Config (role-based module visibility) ────────────────────────────────
+
+import json as _json
+
+_NAV_SERVICE = "nav_config"
+
+# Sensible defaults — used when no config is saved for a role yet
+_NAV_DEFAULTS: dict = {
+    "admin":          ["/dashboard","/torre-control","/quick-tasks","/projects","/premisas","/novedades","/bp","/executive","/lean-pro","/centro-info","/demands","/demands/dashboard","/hechos","/epics","/incidents","/pomodoro","/meetings","/voice-notes"],
+    "lider_sr":       ["/dashboard","/torre-control","/quick-tasks","/projects","/premisas","/novedades","/bp","/lean-pro","/centro-info","/demands","/demands/dashboard","/hechos","/epics","/incidents","/pomodoro","/meetings","/voice-notes"],
+    "leader":         ["/dashboard","/torre-control","/quick-tasks","/projects","/premisas","/novedades","/bp","/lean-pro","/centro-info","/demands","/demands/dashboard","/hechos","/epics","/incidents","/pomodoro","/meetings","/voice-notes"],
+    "herramientas":   ["/dashboard","/torre-control","/quick-tasks","/projects","/premisas","/novedades","/bp","/lean-pro","/centro-info","/demands","/demands/dashboard","/hechos","/epics","/incidents","/pomodoro","/meetings","/voice-notes"],
+    "directivo":      ["/dashboard","/executive","/torre-control","/quick-tasks","/bp","/novedades","/premisas","/demands","/hechos"],
+    "project_leader": ["/dashboard","/torre-control","/quick-tasks","/projects","/premisas","/novedades","/bp","/incidents","/pomodoro"],
+    "member":         ["/dashboard","/torre-control","/quick-tasks","/projects","/premisas","/novedades","/bp"],
+    "negocio":        ["/dashboard","/torre-control","/quick-tasks","/projects","/premisas","/novedades","/bp"],
+}
+
+
+@router.get("/nav-config")
+async def get_nav_config(db: DB, current_user: CurrentUser):
+    """Returns the saved nav config for all roles plus the defaults.
+    Accessible by all authenticated users — every user needs their own role config."""
+    result = await db.execute(
+        select(ServiceConfig).where(ServiceConfig.service_name == _NAV_SERVICE)
+    )
+    rows = result.scalars().all()
+    saved: dict = {}
+    for row in rows:
+        try:
+            saved[row.key_name] = _json.loads(row.key_value)
+        except Exception:
+            pass
+    # Merge defaults — saved values take precedence
+    merged = dict(_NAV_DEFAULTS)
+    merged.update(saved)
+    return merged
+
+
+@router.put("/nav-config")
+async def save_nav_config(config: dict, db: DB, admin: AdminUser):
+    """Persist nav visibility config per role. Admin only.
+    Body: { role_name: [list_of_route_paths] }"""
+    for role_name, paths in config.items():
+        if not isinstance(paths, list):
+            continue
+        result = await db.execute(
+            select(ServiceConfig).where(
+                ServiceConfig.service_name == _NAV_SERVICE,
+                ServiceConfig.key_name == role_name,
+            )
+        )
+        existing = result.scalar_one_or_none()
+        value_str = _json.dumps(paths)
+        if existing:
+            existing.key_value = value_str
+        else:
+            db.add(ServiceConfig(
+                service_name=_NAV_SERVICE,
+                key_name=role_name,
+                key_value=value_str,
+                is_active=True,
+            ))
+    await db.commit()
+    return {"status": "ok", "saved_roles": list(config.keys())}
