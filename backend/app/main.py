@@ -105,6 +105,13 @@ async def _run_column_migrations():
             ("quick_tasks", "meeting_start", "DATETIME"),
             ("quick_tasks", "meeting_end", "DATETIME"),
             ("quick_tasks", "parent_id", "INTEGER REFERENCES quick_tasks(id)"),
+            # quick_tasks — CAS/BO operational system (2026-05-29)
+            ("quick_tasks", "team_scope", "VARCHAR(10)"),
+            ("quick_tasks", "activity_type", "VARCHAR(80)"),
+            ("quick_tasks", "participants", "JSON"),
+            ("quick_tasks", "difficulty", "TEXT"),
+            ("quick_tasks", "will_not_deliver", "BOOLEAN DEFAULT 0"),
+            ("quick_tasks", "not_deliver_reason", "TEXT"),
             # recurring_activities new notification/escalation columns (2026-04-12)
             ("recurring_activities", "notify_before_value", "INTEGER DEFAULT 1"),
             ("recurring_activities", "notify_before_unit", "VARCHAR(10) DEFAULT 'dias'"),
@@ -240,6 +247,13 @@ async def _run_column_migrations():
             "ALTER TABLE quick_tasks ADD COLUMN IF NOT EXISTS meeting_start TIMESTAMP WITH TIME ZONE",
             "ALTER TABLE quick_tasks ADD COLUMN IF NOT EXISTS meeting_end TIMESTAMP WITH TIME ZONE",
             "ALTER TABLE quick_tasks ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES quick_tasks(id)",
+            # quick_tasks — CAS/BO operational system (2026-05-29)
+            "ALTER TABLE quick_tasks ADD COLUMN IF NOT EXISTS team_scope VARCHAR(10)",
+            "ALTER TABLE quick_tasks ADD COLUMN IF NOT EXISTS activity_type VARCHAR(80)",
+            "ALTER TABLE quick_tasks ADD COLUMN IF NOT EXISTS participants JSON",
+            "ALTER TABLE quick_tasks ADD COLUMN IF NOT EXISTS difficulty TEXT",
+            "ALTER TABLE quick_tasks ADD COLUMN IF NOT EXISTS will_not_deliver BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE quick_tasks ADD COLUMN IF NOT EXISTS not_deliver_reason TEXT",
             # voice_notes table — task association added after initial deploy
             "ALTER TABLE voice_notes ADD COLUMN IF NOT EXISTS task_id INTEGER",
             # tasks table — PMO/Scrum columns added after initial deploy
@@ -577,7 +591,7 @@ app.include_router(quick_tasks.router, prefix=API_PREFIX)
 app.include_router(novedades.router, prefix=API_PREFIX)
 
 
-# force redeploy 2026-04-28 — QuickTasks: category + meeting datetimes + sub-tasks; nav role filtering; STT fix
+# force redeploy 2026-05-29 — QuickTasks CAS/BO operational system: team_scope, activity_type, participants, blockers, non-delivery, pomodoro time; activity-types catalog; minimal nav defaults
 @app.get("/health")
 async def health():
     return {"status": "ok", "app": settings.APP_NAME, "version": settings.VERSION}

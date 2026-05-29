@@ -9,6 +9,7 @@ import {
 import toast from 'react-hot-toast'
 import { adminAPI, demandAdminAPI } from '../../services/api'
 import NavConfigManager from './NavConfigManager'
+import ActivityTypesManager from './ActivityTypesManager'
 
 const ICON_MAP = { Mail, MessageCircle, Send, Brain, Smartphone, Key }
 
@@ -612,6 +613,11 @@ export default function AdminPage() {
           <CustomFieldManager />
         </SectionCard>
       </div>
+
+      {/* Activity Types per Team (CAS/BO) */}
+      <SectionCard title="Tipos de Actividad (CAS / BO)" icon={Tag}>
+        <ActivityTypesManager />
+      </SectionCard>
 
       {/* Nav Config per Role */}
       <SectionCard title="Vistas por Rol" icon={LayoutGrid}>

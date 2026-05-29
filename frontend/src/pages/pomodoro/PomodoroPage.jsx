@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Play, Pause, Square, SkipForward, Coffee, Brain } from 'lucide-react'
+import { Play, Pause, Square, SkipForward, Coffee, Brain, ListTodo } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { pomodoroAPI, tasksAPI } from '../../services/api'
+import { pomodoroAPI, tasksAPI, quickTasksAPI } from '../../services/api'
 import api from '../../services/api'
 import { usePomodoroStore } from '../../stores/pomodoroStore'
 import clsx from 'clsx'
@@ -19,6 +19,8 @@ export default function PomodoroPage() {
   const [selectedTaskId, setSelectedTaskId] = useState(null)
   const [selectedProjectId, setSelectedProjectId] = useState(null)
   const [selectedActivityId, setSelectedActivityId] = useState(null)
+  const [quickTaskId, setQuickTaskId] = useState(null)
+  const [quickTaskName, setQuickTaskName] = useState(null)
   const [searchParams] = useSearchParams()
   const qc = useQueryClient()
 
@@ -61,7 +63,16 @@ export default function PomodoroPage() {
 
   const completeMutation = useMutation({
     mutationFn: (id) => pomodoroAPI.complete(id),
-    onSuccess: () => {
+    onSuccess: async () => {
+      // Log focused time back to the linked quick task (CAS/BO operational tasks)
+      if (quickTaskId && selectedType === 'trabajo') {
+        try {
+          await quickTasksAPI.logTime(quickTaskId, workDuration)
+          qc.invalidateQueries(['quick-tasks'])
+          qc.invalidateQueries(['quick-tasks-dashboard'])
+          toast.success(`+${workDuration} min registrados en la tarea ⏱`)
+        } catch { /* non-fatal */ }
+      }
       stopTimer()
       qc.invalidateQueries(['pomodoro-stats'])
       toast.success('¡Sesión completada! 🎉')
@@ -83,6 +94,13 @@ export default function PomodoroPage() {
       setSelectedActivityId(activityId)
       toast(`Pomodoro listo para: ${activityName || 'actividad'}`, { icon: '🍅' })
     }
+    const qtId = searchParams.get('quick_task_id')
+    const qtName = searchParams.get('quick_task_name')
+    if (qtId) {
+      setQuickTaskId(parseInt(qtId))
+      setQuickTaskName(qtName || 'tarea')
+      toast(`Pomodoro listo para: ${qtName || 'tarea'}`, { icon: '🍅' })
+    }
   }, [searchParams])
 
   const handleStart = () => {
@@ -95,6 +113,8 @@ export default function PomodoroPage() {
       session_type: selectedType,
     })
   }
+
+  const clearQuickTask = () => { setQuickTaskId(null); setQuickTaskName(null) }
 
   const handleComplete = () => {
     if (currentSessionId) completeMutation.mutate(currentSessionId)
@@ -117,6 +137,15 @@ export default function PomodoroPage() {
         <h1 className="text-2xl font-bold text-white">Pomodoro</h1>
         <p className="text-slate-400 text-sm mt-0.5">Técnica de gestión del tiempo para máxima productividad</p>
       </div>
+
+      {/* Linked quick task banner */}
+      {quickTaskName && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-900/20 border border-amber-700/40 text-amber-300 text-sm">
+          <ListTodo size={15} />
+          <span className="flex-1">Registrando tiempo en: <strong>{quickTaskName}</strong></span>
+          <button onClick={clearQuickTask} className="text-amber-500 hover:text-amber-300 text-xs">Quitar</button>
+        </div>
+      )}
 
       {/* Session type selector */}
       {!isRunning && !isPaused && (

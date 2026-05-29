@@ -511,13 +511,15 @@ export default function MainLayout() {
 
   const filteredNavItems = useMemo(() => {
     const role = user?.role
+    // /torre-control (actividades recurrentes) cannot be disabled — always visible
+    const MANDATORY = ['/torre-control']
     const configForRole = navConfig?.[role]
     if (configForRole && Array.isArray(configForRole) && configForRole.length > 0) {
-      // Use admin-configured list — show only items whose path is in the allowed list
-      return navItems.filter(item => configForRole.includes(item.to))
+      // Use admin-configured list + mandatory items
+      return navItems.filter(item => configForRole.includes(item.to) || MANDATORY.includes(item.to))
     }
-    // Fallback: use hardcoded roles[] restriction
-    return navItems.filter(item => !item.roles || item.roles.includes(role))
+    // Fallback: use hardcoded roles[] restriction + mandatory items
+    return navItems.filter(item => MANDATORY.includes(item.to) || !item.roles || item.roles.includes(role))
   }, [navConfig, user?.role])
 
   const handleLogout = () => {

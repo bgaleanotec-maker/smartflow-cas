@@ -117,6 +117,9 @@ export const adminAPI = {
   // Nav config per role
   getNavConfig: () => api.get('/admin/nav-config'),
   saveNavConfig: (config) => api.put('/admin/nav-config', config),
+  // Activity types per team (CAS/BO)
+  getActivityTypes: () => api.get('/admin/activity-types'),
+  saveActivityTypes: (config) => api.put('/admin/activity-types', config),
 }
 
 // ─── Demands ─────────────────────────────────────────────────────────────

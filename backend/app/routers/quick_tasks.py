@@ -27,6 +27,13 @@ class QuickTaskCreate(BaseModel):
     meeting_start: Optional[datetime] = None
     meeting_end: Optional[datetime] = None
     parent_id: Optional[int] = None
+    # CAS/BO operational fields
+    team_scope: Optional[str] = None
+    activity_type: Optional[str] = None
+    participants: Optional[list] = None
+    difficulty: Optional[str] = None
+    will_not_deliver: Optional[bool] = None
+    not_deliver_reason: Optional[str] = None
 
 
 class QuickTaskUpdate(BaseModel):
@@ -43,6 +50,13 @@ class QuickTaskUpdate(BaseModel):
     meeting_start: Optional[datetime] = None
     meeting_end: Optional[datetime] = None
     is_done: Optional[bool] = None
+    # CAS/BO operational fields
+    team_scope: Optional[str] = None
+    activity_type: Optional[str] = None
+    participants: Optional[list] = None
+    difficulty: Optional[str] = None
+    will_not_deliver: Optional[bool] = None
+    not_deliver_reason: Optional[str] = None
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -77,6 +91,13 @@ def _task_dict(t: QuickTask, include_children: bool = False) -> dict:
         "is_done": t.is_done,
         "done_at": t.done_at.isoformat() if t.done_at else None,
         "created_at": t.created_at.isoformat(),
+        # CAS/BO operational fields
+        "team_scope": getattr(t, "team_scope", None),
+        "activity_type": getattr(t, "activity_type", None),
+        "participants": getattr(t, "participants", None) or [],
+        "difficulty": getattr(t, "difficulty", None),
+        "will_not_deliver": bool(getattr(t, "will_not_deliver", False)),
+        "not_deliver_reason": getattr(t, "not_deliver_reason", None),
     }
     if include_children:
         try:
@@ -204,13 +225,53 @@ async def quick_tasks_dashboard(
 
     meeting_stats = sorted(meeting_by_user.values(), key=lambda x: x["count"], reverse=True)
 
+    # ── Operational control metrics ─────────────────────────────────────────────
+    # Blockers / difficulties and non-delivery risk
+    blockers = [t for t in all_tasks if getattr(t, "difficulty", None)]
+    not_delivering = [t for t in all_tasks if getattr(t, "will_not_deliver", False)]
+
+    # Per-person workload (the "move 20 people" control view)
+    workload_by_user: dict = {}
+    for t in all_tasks:
+        # Attribute task to its responsable (assigned_to) if present, else creator
+        owner_id = t.assigned_to_id or t.user_id
+        owner_name = (t.assigned_to.full_name if t.assigned_to else None) or (t.user.full_name if t.user else "—")
+        if owner_id not in workload_by_user:
+            workload_by_user[owner_id] = {
+                "user_id": owner_id,
+                "user_name": owner_name,
+                "active": 0,
+                "overdue": 0,
+                "minutes_tracked": 0,
+                "minutes_estimated": 0,
+                "blockers": 0,
+                "will_not_deliver": 0,
+            }
+        w = workload_by_user[owner_id]
+        w["active"] += 1
+        if t.due_date and t.due_date < today:
+            w["overdue"] += 1
+        w["minutes_tracked"] += (t.logged_minutes or 0)
+        w["minutes_estimated"] += (t.estimated_minutes or 0)
+        if getattr(t, "difficulty", None):
+            w["blockers"] += 1
+        if getattr(t, "will_not_deliver", False):
+            w["will_not_deliver"] += 1
+
+    workload = sorted(workload_by_user.values(), key=lambda x: x["active"], reverse=True)
+
     return {
         "total_active": len(all_tasks),
         "total_overdue": len(overdue_all),
         "total_urgent": len(urgent_all),
+        "total_blockers": len(blockers),
+        "total_not_delivering": len(not_delivering),
         "by_business": list(by_business.values()),
         "no_business": [_task_dict(t) for t in no_biz[:10]],
         "meeting_stats_30d": meeting_stats[:10],  # top 10 meeting users
+        "blockers": [_task_dict(t) for t in blockers[:15]],
+        "not_delivering": [_task_dict(t) for t in not_delivering[:15]],
+        "workload": workload,
     }
 
 
@@ -311,6 +372,12 @@ async def create_quick_task(
         meeting_start=data.meeting_start if category == "reunion" else None,
         meeting_end=data.meeting_end if category == "reunion" else None,
         parent_id=data.parent_id,
+        team_scope=data.team_scope,
+        activity_type=data.activity_type,
+        participants=data.participants or None,
+        difficulty=data.difficulty,
+        will_not_deliver=bool(data.will_not_deliver) if data.will_not_deliver is not None else False,
+        not_deliver_reason=data.not_deliver_reason,
         status="asignada" if data.assigned_to_id and data.assigned_to_id != current_user.id else "pendiente",
     )
     db.add(task)

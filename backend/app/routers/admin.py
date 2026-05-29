@@ -461,16 +461,20 @@ import json as _json
 
 _NAV_SERVICE = "nav_config"
 
-# Sensible defaults — used when no config is saved for a role yet
+# Sensible defaults — used when no config is saved for a role yet.
+# Basic roles get a MINIMAL set (proyectos + tareas + recurrentes/torre).
+# /torre-control (actividades recurrentes) is always forced visible client-side.
+_BASIC_DEFAULT = ["/dashboard", "/torre-control", "/quick-tasks", "/projects"]
+
 _NAV_DEFAULTS: dict = {
     "admin":          ["/dashboard","/torre-control","/quick-tasks","/projects","/premisas","/novedades","/bp","/executive","/lean-pro","/centro-info","/demands","/demands/dashboard","/hechos","/epics","/incidents","/pomodoro","/meetings","/voice-notes"],
     "lider_sr":       ["/dashboard","/torre-control","/quick-tasks","/projects","/premisas","/novedades","/bp","/lean-pro","/centro-info","/demands","/demands/dashboard","/hechos","/epics","/incidents","/pomodoro","/meetings","/voice-notes"],
     "leader":         ["/dashboard","/torre-control","/quick-tasks","/projects","/premisas","/novedades","/bp","/lean-pro","/centro-info","/demands","/demands/dashboard","/hechos","/epics","/incidents","/pomodoro","/meetings","/voice-notes"],
     "herramientas":   ["/dashboard","/torre-control","/quick-tasks","/projects","/premisas","/novedades","/bp","/lean-pro","/centro-info","/demands","/demands/dashboard","/hechos","/epics","/incidents","/pomodoro","/meetings","/voice-notes"],
-    "directivo":      ["/dashboard","/executive","/torre-control","/quick-tasks","/bp","/novedades","/premisas","/demands","/hechos"],
-    "project_leader": ["/dashboard","/torre-control","/quick-tasks","/projects","/premisas","/novedades","/bp","/incidents","/pomodoro"],
-    "member":         ["/dashboard","/torre-control","/quick-tasks","/projects","/premisas","/novedades","/bp"],
-    "negocio":        ["/dashboard","/torre-control","/quick-tasks","/projects","/premisas","/novedades","/bp"],
+    "directivo":      ["/dashboard","/executive","/torre-control","/quick-tasks","/projects"],
+    "project_leader": list(_BASIC_DEFAULT),
+    "member":         list(_BASIC_DEFAULT),
+    "negocio":        list(_BASIC_DEFAULT),
 }
 
 
@@ -520,3 +524,65 @@ async def save_nav_config(config: dict, db: DB, admin: AdminUser):
             ))
     await db.commit()
     return {"status": "ok", "saved_roles": list(config.keys())}
+
+
+# ─── Activity Types (configurable per team: CAS / BO) ─────────────────────────
+
+_ACTIVITY_SERVICE = "activity_types"
+
+_ACTIVITY_DEFAULTS: dict = {
+    "CAS": ["BP", "Juntas", "BK", "Seguimiento", "Comité", "Informe", "Análisis"],
+    "BO":  ["Liquidaciones", "Provisiones", "Notas", "Conciliaciones", "Cierre", "Causación", "Reportes"],
+}
+
+
+@router.get("/activity-types")
+async def get_activity_types(db: DB, current_user: CurrentUser):
+    """Returns activity-type catalogs per team (CAS/BO). Accessible by all users."""
+    result = await db.execute(
+        select(ServiceConfig).where(ServiceConfig.service_name == _ACTIVITY_SERVICE)
+    )
+    rows = result.scalars().all()
+    saved: dict = {}
+    for row in rows:
+        try:
+            saved[row.key_name] = _json.loads(row.key_value)
+        except Exception:
+            pass
+    merged = dict(_ACTIVITY_DEFAULTS)
+    merged.update(saved)
+    return merged
+
+
+@router.put("/activity-types")
+async def save_activity_types(config: dict, db: DB, admin: AdminUser):
+    """Persist activity-type catalogs per team. Admin only.
+    Body: { "CAS": [..], "BO": [..] }"""
+    for team_name, types in config.items():
+        if not isinstance(types, list):
+            continue
+        # normalize: strip blanks, dedupe, keep order
+        clean = []
+        for t in types:
+            t = (t or "").strip()
+            if t and t not in clean:
+                clean.append(t)
+        result = await db.execute(
+            select(ServiceConfig).where(
+                ServiceConfig.service_name == _ACTIVITY_SERVICE,
+                ServiceConfig.key_name == team_name,
+            )
+        )
+        existing = result.scalar_one_or_none()
+        value_str = _json.dumps(clean)
+        if existing:
+            existing.key_value = value_str
+        else:
+            db.add(ServiceConfig(
+                service_name=_ACTIVITY_SERVICE,
+                key_name=team_name,
+                key_value=value_str,
+                is_active=True,
+            ))
+    await db.commit()
+    return {"status": "ok", "saved_teams": list(config.keys())}

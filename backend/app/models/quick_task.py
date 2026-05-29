@@ -1,7 +1,7 @@
 """QuickTask — tareas puntuales no asociadas a proyectos."""
 from datetime import date, datetime
 from typing import Optional, List
-from sqlalchemy import Integer, String, Text, ForeignKey, DateTime, Boolean, Date
+from sqlalchemy import Integer, String, Text, ForeignKey, DateTime, Boolean, Date, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
@@ -37,6 +37,13 @@ class QuickTask(Base):
     meeting_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Sub-tasks: self-referential FK (meeting sub-tasks)
     parent_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("quick_tasks.id"), nullable=True)
+    # ── NEW: CAS/BO operational task system ─────────────────────────────────────
+    team_scope: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)      # CAS | BO — drives activity-type catalog + responsable filter
+    activity_type: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)   # configurable per team (BP/Juntas/BK or Liquidaciones/Provisiones/Notas)
+    participants: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)          # list of user IDs (any user)
+    difficulty: Mapped[Optional[str]] = mapped_column(Text, nullable=True)            # blockers / dificultades encontradas
+    will_not_deliver: Mapped[bool] = mapped_column(Boolean, default=False)            # no se va a entregar
+    not_deliver_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)    # razón de no entrega
     # ──────────────────────────────────────────────────────────────────────────
     estimated_minutes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     logged_minutes: Mapped[int] = mapped_column(Integer, default=0)
