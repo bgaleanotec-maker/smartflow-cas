@@ -81,15 +81,18 @@ function toLocalDatetime(iso) {
 // ─── Task Form Fields (shared) ─────────────────────────────────────────────────
 
 function TaskFormFields({ form, setForm, businesses, users, activityTypes, isEdit = false }) {
+  const { user } = useAuthStore()
+  // Admin y Líder Sr pueden asignar a cualquiera (incluidos líderes); el resto solo a su equipo
+  const canAssignAnyone = ['admin', 'lider_sr'].includes(user?.role)
   const isReunion = form.category === 'reunion'
   const scopeTypes = activityTypes?.[form.team_scope] || []
 
-  // Responsables filtered by team_scope; participants = everyone
+  // Responsables: filtrado por equipo salvo admin/lider_sr; participants = everyone
   const responsables = useMemo(() => {
     if (!users) return []
-    if (!form.team_scope) return users
+    if (canAssignAnyone || !form.team_scope) return users
     return users.filter(u => u.team === form.team_scope)
-  }, [users, form.team_scope])
+  }, [users, form.team_scope, canAssignAnyone])
 
   const toggleParticipant = (uid) => {
     setForm(f => {
@@ -201,10 +204,11 @@ function TaskFormFields({ form, setForm, businesses, users, activityTypes, isEdi
         </div>
       )}
 
-      {/* Responsable (filtrado por equipo) */}
+      {/* Responsable (filtrado por equipo, salvo admin/lider_sr) */}
       <div>
         <label className="label">
-          Responsable {form.team_scope && <span className="text-slate-500">(solo {form.team_scope})</span>}
+          Responsable {form.team_scope && !canAssignAnyone && <span className="text-slate-500">(solo {form.team_scope})</span>}
+          {canAssignAnyone && <span className="text-slate-500">(cualquiera)</span>}
         </label>
         <select
           value={form.assigned_to_id}
