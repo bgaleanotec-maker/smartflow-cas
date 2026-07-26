@@ -16,6 +16,112 @@ const docsAPI = {
   get: (id) => api.get(`/project-docs/${id}`),
   update: (id, data) => api.patch(`/project-docs/${id}`, data),
   delete: (id) => api.delete(`/project-docs/${id}`),
+  ask: (projectId, data) => api.post(`/project-docs/project/${projectId}/ask`, data),
+}
+
+// ─── Chat de documentación dinámica (IA) ─────────────────────────────────────
+function AiChatPanel({ projectId, projectName, onClose }) {
+  const [messages, setMessages] = useState([])
+  const [input, setInput] = useState('')
+  const [thinking, setThinking] = useState(false)
+  const bottomRef = useRef(null)
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, thinking])
+
+  const send = async (e) => {
+    e?.preventDefault()
+    const q = input.trim()
+    if (!q || thinking) return
+    setInput('')
+    const history = messages.map(m => ({ role: m.role, content: m.content }))
+    setMessages(m => [...m, { role: 'user', content: q }])
+    setThinking(true)
+    try {
+      const res = await docsAPI.ask(projectId, { question: q, history })
+      setMessages(m => [...m, { role: 'model', content: res.data.answer }])
+    } catch (err) {
+      const detail = err.response?.data?.detail || 'Error consultando la IA'
+      setMessages(m => [...m, { role: 'model', content: `⚠️ ${detail}` }])
+    } finally {
+      setThinking(false)
+    }
+  }
+
+  const SUGGESTIONS = [
+    '¿De qué trata este proyecto?',
+    'Resume la documentación en 5 puntos',
+    '¿Qué pasos tiene el proceso principal?',
+    '¿Qué falta por documentar?',
+  ]
+
+  return (
+    <div className="w-80 flex-shrink-0 border-l border-slate-800 bg-slate-900/70 flex flex-col">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+        <span className="text-xs font-semibold text-violet-300 flex items-center gap-1.5">
+          <Bot size={14} /> IA del proyecto
+        </span>
+        <button onClick={onClose} className="text-slate-500 hover:text-slate-300"><X size={14} /></button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        {messages.length === 0 && (
+          <div className="space-y-2">
+            <p className="text-[11px] text-slate-500 px-1">
+              Pregúntame lo que sea sobre <b className="text-slate-300">{projectName}</b> — respondo con base en su documentación y flujos.
+            </p>
+            {SUGGESTIONS.map(s => (
+              <button
+                key={s}
+                onClick={() => { setInput(s); }}
+                className="w-full text-left text-[11px] px-3 py-2 rounded-xl bg-slate-800/60 border border-slate-700/60 text-slate-300 hover:border-violet-600/50 transition-colors"
+              >
+                💬 {s}
+              </button>
+            ))}
+          </div>
+        )}
+        {messages.map((m, i) => (
+          <div key={i} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
+            <div className={`max-w-[92%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${
+              m.role === 'user'
+                ? 'bg-violet-600 text-white rounded-br-sm'
+                : 'bg-slate-800 text-slate-200 rounded-bl-sm border border-slate-700/60'
+            }`}>
+              {m.role === 'model' ? (
+                <article className="prose prose-invert prose-xs max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:text-white prose-code:text-amber-300">
+                  <ReactMarkdown>{m.content}</ReactMarkdown>
+                </article>
+              ) : m.content}
+            </div>
+          </div>
+        ))}
+        {thinking && (
+          <div className="flex items-center gap-2 text-violet-400 text-xs px-1">
+            <Loader2 size={13} className="animate-spin" /> Leyendo la documentación…
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      <form onSubmit={send} className="p-3 border-t border-slate-800 flex gap-2">
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          className="input py-2 text-xs flex-1"
+          placeholder="Pregunta sobre el proyecto…"
+        />
+        <button
+          type="submit"
+          disabled={thinking || !input.trim()}
+          className="px-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white"
+        >
+          <Bot size={15} />
+        </button>
+      </form>
+    </div>
+  )
 }
 
 // Plantillas de inserción rápida (asistente de escritura)
@@ -61,6 +167,7 @@ export default function ProjectDocsPage() {
   const [saveState, setSaveState] = useState('saved')
   const [flowPickerOpen, setFlowPickerOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
   const saveTimer = useRef(null)
   const textareaRef = useRef(null)
 
@@ -193,13 +300,24 @@ export default function ProjectDocsPage() {
           </button>
         </div>
 
-        {/* Conectar IA */}
+        {/* Chat IA (documentación dinámica) */}
+        <button
+          onClick={() => setChatOpen(o => !o)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            chatOpen ? 'bg-violet-600 text-white' : 'bg-violet-600/80 hover:bg-violet-600 text-white'
+          }`}
+          title="Pregúntale a la IA sobre este proyecto"
+        >
+          <Bot size={13} /> <span className="hidden sm:inline">Chat IA</span>
+        </button>
+
+        {/* Conectar API externa */}
         <button
           onClick={() => setAiOpen(o => !o)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600/80 hover:bg-violet-600 text-white text-xs font-medium"
-          title="Conectar con tu API de IA"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800/70 hover:bg-slate-700 text-slate-300 text-xs font-medium"
+          title="Endpoint para conectar tu propia API de IA"
         >
-          <Bot size={13} /> <span className="hidden sm:inline">Conectar IA</span>
+          <Copy size={12} /> <span className="hidden lg:inline">API</span>
         </button>
       </div>
 
@@ -374,6 +492,15 @@ export default function ProjectDocsPage() {
             </>
           )}
         </div>
+
+        {/* ── Chat IA (documentación dinámica) ── */}
+        {chatOpen && (
+          <AiChatPanel
+            projectId={projectId}
+            projectName={project?.name || 'este proyecto'}
+            onClose={() => setChatOpen(false)}
+          />
+        )}
       </div>
     </div>
   )

@@ -107,6 +107,100 @@ async def delete_doc(doc_id: int, db: DB, current_user: CurrentUser):
     return {"ok": True}
 
 
+async def _build_project_context(db, project_id: int) -> tuple:
+    """Contexto consolidado del proyecto (markdown) para la IA."""
+    project = (await db.execute(
+        select(Project).where(Project.id == project_id)
+    )).scalar_one_or_none()
+    if not project:
+        raise HTTPException(404, "Proyecto no encontrado")
+    docs = (await db.execute(
+        select(ProjectDoc).where(ProjectDoc.project_id == project_id)
+        .order_by(ProjectDoc.order_index, ProjectDoc.id)
+    )).scalars().all()
+    flows = (await db.execute(
+        select(Flow).where(Flow.project_id == project_id, Flow.is_archived == False)  # noqa: E712
+    )).scalars().all()
+
+    parts = [f"# Proyecto: {project.name}\n"]
+    if project.description:
+        parts.append(f"{project.description}\n")
+    for d in docs:
+        parts.append(f"\n## {d.title}\n\n{d.content or ''}")
+    if flows:
+        parts.append("\n## Flujos de proceso (BPMN) del proyecto\n")
+        for f in flows:
+            parts.append(f"- {f.name}" + (f": {f.description}" if f.description else ""))
+    return project, docs, flows, "\n".join(parts)
+
+
+class AskRequest(BaseModel):
+    question: str
+    history: Optional[list] = None   # [{"role": "user"|"model", "content": str}]
+
+
+@router.post("/project/{project_id}/ask")
+async def ask_project_ai(project_id: int, payload: AskRequest, db: DB, current_user: CurrentUser):
+    """Documentación dinámica: pregunta a la IA sobre este proyecto.
+    Usa toda la documentación + flujos como contexto (Gemini, key del Admin)."""
+    import httpx
+    from app.core.config import get_service_config_value
+
+    api_key = await get_service_config_value(db, "gemini", "api_key")
+    if not api_key:
+        raise HTTPException(400, "Configura la API key de Gemini en Admin → Configuración")
+
+    model = await get_service_config_value(db, "gemini", "model") or "gemini-1.5-flash"
+    if model in ("gemini-pro", "gemini-1.0-pro"):
+        model = "gemini-1.5-flash"
+
+    project, docs, flows, context = await _build_project_context(db, project_id)
+
+    system = (
+        f"Eres el asistente de documentación del proyecto '{project.name}' en SmartFlow "
+        f"(sistema de gestión del equipo CAS/BO). Responde SIEMPRE en español, de forma "
+        f"clara y concisa. Basa tus respuestas en la documentación del proyecto que se te "
+        f"entrega como contexto. Si la respuesta no está en la documentación, dilo "
+        f"explícitamente y sugiere qué sección habría que documentar. Puedes citar títulos "
+        f"de secciones. Usa markdown (listas, negritas, código) cuando ayude."
+    )
+
+    contents = []
+    for h in (payload.history or [])[-8:]:
+        role = "model" if h.get("role") == "model" else "user"
+        contents.append({"role": role, "parts": [{"text": str(h.get("content", ""))[:4000]}]})
+    contents.append({
+        "role": "user",
+        "parts": [{"text": f"CONTEXTO (documentación del proyecto):\n{context[:60000]}\n\n---\nPREGUNTA: {payload.question}"}],
+    })
+
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
+                json={
+                    "system_instruction": {"parts": [{"text": system}]},
+                    "contents": contents,
+                    "generationConfig": {"temperature": 0.3, "maxOutputTokens": 2048},
+                },
+            )
+            data = resp.json()
+            if resp.status_code != 200:
+                raise HTTPException(502, f"Gemini error: {data.get('error', {}).get('message', resp.status_code)}")
+            answer = data["candidates"][0]["content"]["parts"][0]["text"]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, f"Error consultando la IA: {e}")
+
+    return {
+        "answer": answer,
+        "model": model,
+        "docs_count": len(docs),
+        "flows_count": len(flows),
+    }
+
+
 @router.get("/project/{project_id}/export")
 async def export_docs(
     project_id: int, db: DB, current_user: CurrentUser,
