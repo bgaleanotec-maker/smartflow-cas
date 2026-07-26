@@ -262,6 +262,162 @@ async def mi_espacio(db: DB, current_user: CurrentUser):
     }
 
 
+# ─── Tablero Kanban personal (Scrum diario) ──────────────────────────────────
+
+PRIVILEGED_ROLES = ("admin", "leader", "lider_sr", "herramientas", "directivo")
+
+
+def _role_str(user):
+    return str(user.role.value if hasattr(user.role, "value") else user.role)
+
+
+@router.get("/board")
+async def personal_board(db: DB, current_user: CurrentUser, user_id: int | None = None):
+    """Tablero Kanban personal: Por Hacer / En Progreso / Hecho (hoy).
+    Líderes y admin pueden ver el tablero de otra persona con ?user_id=."""
+    target_id = user_id or current_user.id
+    if target_id != current_user.id and _role_str(current_user) not in PRIVILEGED_ROLES:
+        from fastapi import HTTPException
+        raise HTTPException(403, "Solo líderes o admin pueden ver tableros de otros")
+
+    today = date.today()
+    items, done_week = await _collect_items(db, user_id=target_id)
+
+    def sort_key(i):
+        prio_rank = {"critica": 0, "urgente": 0, "alta": 1, "media": 2, "baja": 3}
+        return (
+            0 if i["days_overdue"] > 0 else 1,
+            -i["days_overdue"],
+            prio_rank.get(str(i.get("priority", "media")).lower(), 2),
+            i["due_date"] or "9999",
+        )
+
+    todo, doing = [], []
+    for i in sorted(items, key=sort_key):
+        if i["status"] in ("en_proceso", "en_progreso", "En Progreso", "En Revisión"):
+            doing.append(i)
+        else:
+            todo.append(i)
+
+    done_today = sorted(
+        [d for d in done_week if d.get("done_date") == str(today)],
+        key=lambda d: d.get("title", ""),
+    )
+
+    return {
+        "date": str(today),
+        "user_id": target_id,
+        "todo": todo,
+        "doing": doing,
+        "done": done_today,
+    }
+
+
+from pydantic import BaseModel
+
+
+class BoardMove(BaseModel):
+    source: str    # rapida | recurrente | proyecto
+    id: int
+    column: str    # todo | doing | done
+
+
+@router.post("/board/move")
+async def board_move(payload: BoardMove, db: DB, current_user: CurrentUser):
+    """Mueve una tarjeta entre columnas del Kanban, mapeando al estado nativo
+    de cada origen (rápida / instancia recurrente / tarea de proyecto)."""
+    from fastapi import HTTPException
+    from datetime import datetime, timezone
+
+    if payload.column not in ("todo", "doing", "done"):
+        raise HTTPException(400, "Columna inválida")
+    now = datetime.now(timezone.utc)
+    privileged = _role_str(current_user) in PRIVILEGED_ROLES
+
+    if payload.source == "rapida":
+        from app.models.quick_task import QuickTask
+        t = (await db.execute(select(QuickTask).where(QuickTask.id == payload.id))).scalar_one_or_none()
+        if not t:
+            raise HTTPException(404, "Tarea no encontrada")
+        owner_id = t.assigned_to_id or t.user_id
+        if owner_id != current_user.id and not privileged:
+            raise HTTPException(403, "No puedes mover tareas de otros")
+        if payload.column == "todo":
+            t.status, t.is_done, t.done_at = "pendiente", False, None
+        elif payload.column == "doing":
+            t.status, t.is_done, t.done_at = "en_progreso", False, None
+        else:
+            t.status, t.is_done, t.done_at = "completada", True, now
+
+    elif payload.source == "recurrente":
+        from app.models.activities import ActivityInstance, ActivityStatus, RecurringActivity
+        from sqlalchemy.orm import selectinload as _sl
+        inst = (await db.execute(
+            select(ActivityInstance)
+            .options(_sl(ActivityInstance.activity))
+            .where(ActivityInstance.id == payload.id)
+        )).scalar_one_or_none()
+        if not inst:
+            raise HTTPException(404, "Instancia no encontrada")
+        owner_id = inst.assigned_to_id or (inst.activity.assigned_to_id if inst.activity else None)
+        if owner_id != current_user.id and not privileged:
+            raise HTTPException(403, "No puedes mover actividades de otros")
+        if payload.column == "todo":
+            inst.status = ActivityStatus.SIN_INICIAR
+            inst.completed_date = None
+            inst.completed_by_id = None
+        elif payload.column == "doing":
+            inst.status = ActivityStatus.EN_PROCESO
+            inst.completed_date = None
+        else:
+            inst.status = ActivityStatus.COMPLETADA
+            inst.completed_date = date.today()
+            inst.completed_by_id = current_user.id
+
+    elif payload.source == "proyecto":
+        from app.models.task import Task
+        from app.models.catalog import TaskStatus
+        t = (await db.execute(select(Task).where(Task.id == payload.id))).scalar_one_or_none()
+        if not t:
+            raise HTTPException(404, "Tarea no encontrada")
+        if t.assignee_id != current_user.id and not privileged:
+            raise HTTPException(403, "No puedes mover tareas de otros")
+        # Estados del proyecto, o los globales si el proyecto no tiene propios
+        statuses = (await db.execute(
+            select(TaskStatus).where(TaskStatus.project_id == t.project_id)
+            .order_by(TaskStatus.order_index)
+        )).scalars().all()
+        if not statuses:
+            statuses = (await db.execute(
+                select(TaskStatus).where(TaskStatus.project_id == None)  # noqa: E711
+                .order_by(TaskStatus.order_index)
+            )).scalars().all()
+        if not statuses:
+            raise HTTPException(500, "No hay estados de tarea configurados")
+        not_done = [s for s in statuses if not s.is_done_state]
+        done_sts = [s for s in statuses if s.is_done_state]
+        if payload.column == "todo":
+            t.status_id = not_done[0].id if not_done else statuses[0].id
+            t.completed_at = None
+        elif payload.column == "doing":
+            progress = next(
+                (s for s in not_done if "progre" in s.name.lower()),
+                (not_done[1] if len(not_done) > 1 else (not_done[0] if not_done else statuses[0])),
+            )
+            t.status_id = progress.id
+            t.completed_at = None
+        else:
+            if not done_sts:
+                raise HTTPException(500, "El proyecto no tiene columna de finalizado")
+            t.status_id = done_sts[0].id
+            t.completed_at = now
+    else:
+        raise HTTPException(400, "Origen inválido")
+
+    await db.commit()
+    return {"ok": True, "column": payload.column}
+
+
 # ─── Gamificación ────────────────────────────────────────────────────────────
 # XP calculado al vuelo desde el histórico de completadas (sin tablas nuevas):
 #   rápida=10 · recurrente=15 · proyecto=20 · bonus prioridad alta=+5 · a tiempo=+5

@@ -16,6 +16,7 @@ import FlowsListPage from './pages/flows/FlowsListPage'
 import FlowEditorPage from './pages/flows/FlowEditorPage'
 import RetosPage from './pages/retos/RetosPage'
 import PlantaPage from './pages/planta/PlantaPage'
+import TableroPage from './pages/tablero/TableroPage'
 import PomodoroPage from './pages/pomodoro/PomodoroPage'
 import UsersPage from './pages/admin/UsersPage'
 import AdminPage from './pages/admin/AdminPage'
@@ -66,6 +67,7 @@ export default function App() {
           <Route path="flujos/:id" element={<FlowEditorPage />} />
           <Route path="retos" element={<RetosPage />} />
           <Route path="planta" element={<PlantaPage />} />
+          <Route path="tablero" element={<TableroPage />} />
           {/* Pomodoro: accesible como timer, fuera del menú principal */}
           <Route path="pomodoro" element={<PomodoroPage />} />
           <Route

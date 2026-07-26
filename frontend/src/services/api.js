@@ -405,6 +405,8 @@ export const dashboardAPI = {
   gamification: () => api.get('/dashboard/gamification'),
   user360: (userId) => api.get(`/dashboard/user/${userId}/resumen`),
   planta: () => api.get('/dashboard/planta'),
+  board: (userId) => api.get('/dashboard/board', { params: userId ? { user_id: userId } : {} }),
+  boardMove: (data) => api.post('/dashboard/board/move', data),
 }
 
 // ─── Retos gamificados + uso ──────────────────────────────────────────────────
