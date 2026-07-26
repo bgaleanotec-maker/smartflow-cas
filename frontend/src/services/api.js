@@ -400,6 +400,30 @@ export const storiesAPI = {
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 export const dashboardAPI = {
   attention: () => api.get('/dashboard/attention'),
+  gerencial: () => api.get('/dashboard/gerencial'),
+  miEspacio: () => api.get('/dashboard/mi-espacio'),
+  gamification: () => api.get('/dashboard/gamification'),
+}
+
+// ─── Retos gamificados + uso ──────────────────────────────────────────────────
+export const challengesAPI = {
+  list: (params = {}) => api.get('/challenges', { params }),
+  create: (data) => api.post('/challenges', data),
+  get: (id) => api.get(`/challenges/${id}`),
+  update: (id, data) => api.patch(`/challenges/${id}`, data),
+  delete: (id) => api.delete(`/challenges/${id}`),
+  track: (data) => api.post('/challenges/usage/track', data),
+  usageStats: () => api.get('/challenges/usage/stats'),
+}
+
+// ─── Flujos BPMN ──────────────────────────────────────────────────────────────
+export const flowsAPI = {
+  list: (params = {}) => api.get('/flows', { params }),
+  create: (data) => api.post('/flows', data),
+  get: (id) => api.get(`/flows/${id}`),
+  update: (id, data) => api.patch(`/flows/${id}`, data),
+  duplicate: (id) => api.post(`/flows/${id}/duplicate`),
+  delete: (id) => api.delete(`/flows/${id}`),
 }
 
 // ─── Voice Notes ──────────────────────────────────────────────────────────────

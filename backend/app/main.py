@@ -10,10 +10,18 @@ from app.core.database import engine, Base
 import app.models  # noqa: F401
 from app.models import epic  # noqa: F401
 from app.models.quick_task import QuickTask  # noqa: F401
+from app.models.flow import Flow  # noqa: F401
+from app.models.challenge import Challenge, UsageEvent  # noqa: F401
 
-from app.routers import auth, users, projects, tasks, incidents, admin, pomodoro, demands, demand_admin, hechos, premisas, ai_assistant, activities, dashboard_builder, lean_pro, ai_chat, business_plan, bp_financial_ai, executive, voice, reminders, sprints, backup, quick_tasks, novedades
-from app.routers.voice_notes import router as voice_notes_router
-from app.routers.epics import router as epics_router, router2 as stories_router
+# ── SIMPLIFICACIÓN 2026-07-26 ─────────────────────────────────────────────────
+# Módulos activos: auth, users, projects/tasks/sprints (backlog), activities
+# (recurrentes), quick_tasks, flows (BPMN), dashboard, pomodoro, reminders,
+# admin, backup.
+# Módulos desactivados (código y datos conservados, routers no montados):
+# demands, demand_admin, hechos, premisas, ai_assistant, dashboard_builder,
+# lean_pro, ai_chat, business_plan, bp_financial_ai, executive, voice,
+# voice_notes, novedades, incidents, epics/stories.
+from app.routers import auth, users, projects, tasks, admin, pomodoro, activities, reminders, sprints, backup, quick_tasks, flows, challenges
 from app.routers.dashboard import router as dashboard_router
 
 
@@ -565,33 +573,18 @@ app.include_router(users.router, prefix=API_PREFIX)
 app.include_router(projects.router, prefix=API_PREFIX)
 app.include_router(tasks.router, prefix=API_PREFIX)
 app.include_router(sprints.router, prefix=API_PREFIX)
-app.include_router(incidents.router, prefix=API_PREFIX)
 app.include_router(admin.router, prefix=API_PREFIX)
 app.include_router(pomodoro.router, prefix=API_PREFIX)
-app.include_router(demands.router, prefix=API_PREFIX)
-app.include_router(demand_admin.router, prefix=API_PREFIX)
-app.include_router(hechos.router, prefix=API_PREFIX)
-app.include_router(premisas.router, prefix=API_PREFIX)
-app.include_router(ai_assistant.router, prefix=API_PREFIX)
 app.include_router(activities.router, prefix=API_PREFIX)
-app.include_router(dashboard_builder.router, prefix=API_PREFIX)
-app.include_router(lean_pro.router, prefix=API_PREFIX)
-app.include_router(ai_chat.router, prefix=API_PREFIX)
-app.include_router(business_plan.router, prefix=API_PREFIX)
-app.include_router(bp_financial_ai.router, prefix=API_PREFIX)
-app.include_router(executive.router, prefix=API_PREFIX)
-app.include_router(voice.router, prefix=API_PREFIX)
 app.include_router(reminders.router, prefix=API_PREFIX)
-app.include_router(voice_notes_router, prefix=API_PREFIX)
-app.include_router(epics_router, prefix=API_PREFIX)
-app.include_router(stories_router, prefix=API_PREFIX)
 app.include_router(dashboard_router, prefix=API_PREFIX)
 app.include_router(backup.router, prefix=API_PREFIX)
 app.include_router(quick_tasks.router, prefix=API_PREFIX)
-app.include_router(novedades.router, prefix=API_PREFIX)
+app.include_router(flows.router, prefix=API_PREFIX)
+app.include_router(challenges.router, prefix=API_PREFIX)
 
 
-# force redeploy 2026-05-29 — QuickTasks CAS/BO operational system: team_scope, activity_type, participants, blockers, non-delivery, pomodoro time; activity-types catalog; minimal nav defaults
+# force redeploy 2026-07-26 — SIMPLIFICACIÓN: 6 módulos core (Dashboard gerencial, Mi Espacio, Recurrentes, Tareas Rápidas, Proyectos/Backlog, Flujos BPMN). Datos de módulos retirados conservados en BD.
 @app.get("/health")
 async def health():
     return {"status": "ok", "app": settings.APP_NAME, "version": settings.VERSION}
