@@ -150,9 +150,9 @@ async def ask_project_ai(project_id: int, payload: AskRequest, db: DB, current_u
     if not api_key:
         raise HTTPException(400, "Configura la API key de Gemini en Admin → Configuración")
 
-    model = await get_service_config_value(db, "gemini", "model") or "gemini-1.5-flash"
-    if model in ("gemini-pro", "gemini-1.0-pro"):
-        model = "gemini-1.5-flash"
+    model = await get_service_config_value(db, "gemini", "model")
+    if model in ("gemini-pro", "gemini-1.0-pro", "gemini-1.5-flash", "gemini-1.5-pro"):
+        model = None  # modelos retirados por Google — autodescubrir
 
     project, docs, flows, context = await _build_project_context(db, project_id)
 
@@ -176,6 +176,30 @@ async def ask_project_ai(project_id: int, payload: AskRequest, db: DB, current_u
 
     try:
         async with httpx.AsyncClient(timeout=60) as client:
+            # Autodescubrir modelo si no hay uno válido configurado
+            if not model:
+                ml = await client.get(
+                    f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}&pageSize=100"
+                )
+                if ml.status_code == 403:
+                    raise HTTPException(
+                        400,
+                        "La API key de Gemini es inválida o venció. Genera una gratis en "
+                        "https://ai.google.dev y actualízala en Admin → Configuración → Gemini.",
+                    )
+                if ml.status_code != 200:
+                    raise HTTPException(502, f"Gemini ListModels error {ml.status_code}")
+                candidates = [
+                    m["name"].split("/")[-1]
+                    for m in ml.json().get("models", [])
+                    if "generateContent" in m.get("supportedGenerationMethods", [])
+                ]
+                # preferir flash reciente (rápido y barato), luego cualquier otro
+                flash = sorted([c for c in candidates if "flash" in c and "image" not in c and "tts" not in c], reverse=True)
+                model = (flash[0] if flash else (candidates[0] if candidates else None))
+                if not model:
+                    raise HTTPException(502, "No hay modelos Gemini disponibles con esta API key")
+
             resp = await client.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
                 json={
