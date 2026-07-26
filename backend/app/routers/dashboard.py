@@ -443,6 +443,107 @@ async def _gamification_data(db):
     return result
 
 
+@router.get("/planta")
+async def planta_operaciones(db: DB, current_user: CurrentUser):
+    """Planta de Operaciones: cada persona como puesto de trabajo con semáforo
+    industrial (verde / amarillo / rojo), próximas entregas, disponibilidad,
+    backup, último login y nivel de gamificación."""
+    from app.models.user import User
+    from sqlalchemy.orm import selectinload as _sl
+
+    today = date.today()
+    soon = today + timedelta(days=3)
+
+    items, done_week = await _collect_items(db)
+    game = await _gamification_data(db)
+
+    users = (await db.execute(
+        select(User).options(_sl(User.backup_user), _sl(User.main_business))
+        .where(User.is_active == True)  # noqa: E712
+    )).scalars().all()
+
+    # Agrupar items por dueño
+    by_owner = defaultdict(list)
+    for i in items:
+        by_owner[i["owner_id"]].append(i)
+    done_by_owner = defaultdict(int)
+    for d in done_week:
+        done_by_owner[d["owner_id"]] += 1
+
+    stations = []
+    for u in users:
+        mine = by_owner.get(u.id, [])
+        overdue = [i for i in mine if i["days_overdue"] > 0]
+        due_today = [i for i in mine if i["due_date"] == str(today)]
+        # cierre hoy sin estatus (sin_iniciar / pendiente) → rojo
+        closing_no_status = [
+            i for i in due_today if i["status"] in ("sin_iniciar", "pendiente", "Por Hacer")
+        ]
+        due_soon = [
+            i for i in mine
+            if i["due_date"] and str(today) < i["due_date"] <= str(soon)
+        ]
+
+        if overdue or closing_no_status:
+            light = "rojo"
+        elif due_today or due_soon:
+            light = "amarillo"
+        else:
+            light = "verde"
+
+        upcoming = sorted(
+            [i for i in mine if i["due_date"]],
+            key=lambda i: (i["due_date"], -i["days_overdue"]),
+        )[:3]
+
+        g = game.get(u.id) or {}
+        stations.append({
+            "user_id": u.id,
+            "name": u.full_name,
+            "role": str(u.role.value if hasattr(u.role, "value") else u.role),
+            "position_title": u.position_title,
+            "business": u.main_business.name if u.main_business else None,
+            "availability": u.availability or "disponible",
+            "backup": u.backup_user.full_name if u.backup_user else None,
+            "backup_user_id": u.backup_user_id,
+            "avatar_url": u.avatar_url,
+            "last_login": u.last_login.isoformat() if u.last_login else None,
+            "light": light,
+            "pendientes": len(mine),
+            "vencidas": len(overdue),
+            "hoy": len(due_today),
+            "proximas": len(due_soon),
+            "completadas_semana": done_by_owner.get(u.id, 0),
+            "entregas": [
+                {
+                    "title": i["title"],
+                    "due_date": i["due_date"],
+                    "source": i["source"],
+                    "days_overdue": i["days_overdue"],
+                    "status": i["status"],
+                }
+                for i in upcoming
+            ],
+            "level": g.get("level"),
+            "streak": g.get("streak", 0),
+        })
+
+    order = {"rojo": 0, "amarillo": 1, "verde": 2}
+    stations.sort(key=lambda s: (order.get(s["light"], 3), -s["vencidas"], s["name"]))
+
+    return {
+        "date": str(today),
+        "resumen": {
+            "total": len(stations),
+            "rojo": sum(1 for s in stations if s["light"] == "rojo"),
+            "amarillo": sum(1 for s in stations if s["light"] == "amarillo"),
+            "verde": sum(1 for s in stations if s["light"] == "verde"),
+            "vacaciones": sum(1 for s in stations if s["availability"] != "disponible"),
+        },
+        "stations": stations,
+    }
+
+
 @router.get("/user/{user_id}/resumen")
 async def user_360(user_id: int, db: DB, current_user: CurrentUser):
     """Vista 360 de un usuario: tareas por urgencia + perfil de gamificación."""

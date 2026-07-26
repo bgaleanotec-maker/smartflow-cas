@@ -4,7 +4,7 @@ import ErrorBoundary from '../ErrorBoundary'
 import {
   LayoutDashboard, FolderKanban, Users, Settings, LogOut,
   ChevronLeft, ChevronRight, Menu, X, ListTodo, Plus,
-  Plane, Workflow, UserCircle2, Trophy,
+  Plane, Workflow, UserCircle2, Trophy, Factory,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { usePomodoroStore } from '../../stores/pomodoroStore'
@@ -133,6 +133,7 @@ function QuickTaskCreateModal({ onClose }) {
 
 const navItems = [
   { to: '/dashboard',     icon: LayoutDashboard, label: 'Gestión Diaria' },
+  { to: '/planta',        icon: Factory,         label: 'Planta' },
   { to: '/mi-espacio',    icon: UserCircle2,     label: 'Mi Espacio' },
   { to: '/torre-control', icon: Plane,           label: 'Recurrentes' },
   { to: '/quick-tasks',   icon: ListTodo,        label: 'Tareas Rápidas' },

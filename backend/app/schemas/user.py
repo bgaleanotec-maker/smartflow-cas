@@ -41,6 +41,10 @@ class UserUpdate(BaseModel):
     contract_renewal_date: Optional[date] = None
     is_active: Optional[bool] = None
     avatar_url: Optional[str] = None
+    # Puesto de trabajo — Planta de Operaciones
+    position_title: Optional[str] = None
+    availability: Optional[str] = None   # disponible | vacaciones | incapacidad | viaje
+    backup_user_id: Optional[int] = None
 
 
 class BusinessInfo(BaseModel):
@@ -86,6 +90,9 @@ class UserResponse(BaseModel):
     avatar_url: Optional[str] = None
     must_change_password: bool
     last_login: Optional[datetime] = None
+    position_title: Optional[str] = None
+    availability: Optional[str] = "disponible"
+    backup_user_id: Optional[int] = None
     created_at: datetime
 
     class Config:

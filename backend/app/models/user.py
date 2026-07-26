@@ -55,6 +55,13 @@ class User(Base):
     )
     contract_renewal_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
+    # ── Puesto de trabajo (Planta de Operaciones) ──────────────────────────
+    position_title: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)   # ej: "Liquidaciones"
+    availability: Mapped[str] = mapped_column(String(20), default="disponible")          # disponible | vacaciones | incapacidad | viaje
+    backup_user_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=True
+    )
+
     # Estado y meta
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
@@ -79,6 +86,9 @@ class User(Base):
     )
     created_by: Mapped[Optional["User"]] = relationship(
         "User", foreign_keys=[created_by_id], remote_side="User.id"
+    )
+    backup_user: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys=[backup_user_id], remote_side="User.id", lazy="select"
     )
 
     def __repr__(self):

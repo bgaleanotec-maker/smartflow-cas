@@ -237,6 +237,10 @@ async def _run_column_migrations():
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES users(id)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS contract_start_date DATE",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS contract_renewal_date DATE",
+            # Puesto de trabajo — Planta de Operaciones (2026-07-26)
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS position_title VARCHAR(120)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS availability VARCHAR(20) DEFAULT 'disponible'",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS backup_user_id INTEGER REFERENCES users(id)",
             # Convert role column from PostgreSQL native ENUM to VARCHAR so any role value works without ALTER TYPE
             "ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(50) USING role::text",
             # novedades_operativas — new columns added 2026-04-20
