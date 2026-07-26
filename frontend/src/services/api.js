@@ -403,6 +403,7 @@ export const dashboardAPI = {
   gerencial: () => api.get('/dashboard/gerencial'),
   miEspacio: () => api.get('/dashboard/mi-espacio'),
   gamification: () => api.get('/dashboard/gamification'),
+  user360: (userId) => api.get(`/dashboard/user/${userId}/resumen`),
 }
 
 // ─── Retos gamificados + uso ──────────────────────────────────────────────────

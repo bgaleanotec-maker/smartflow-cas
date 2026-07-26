@@ -1,0 +1,81 @@
+/* ── Contraste de controles bpmn-js sobre lienzo claro ─────────────────────
+   La app es dark; los iconos de bpmn-js heredan currentColor y quedaban
+   gris claro (invisibles sobre el lienzo blanco). Forzamos tinta oscura. */
+
+.bjs-container {
+  color: #1e293b;
+}
+
+/* Paleta izquierda */
+.djs-palette {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+}
+.djs-palette .entry {
+  color: #1e293b !important;
+}
+.djs-palette .entry:hover {
+  color: #0284c7 !important;
+}
+.djs-palette .djs-palette-toggle:hover {
+  color: #0284c7 !important;
+}
+
+/* Context pad (cambiar elemento, eliminar, conectar…) */
+.djs-context-pad .entry {
+  background: #ffffff !important;
+  color: #1e293b !important;
+  border-radius: 7px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.25);
+}
+.djs-context-pad .entry:hover {
+  background: #e0f2fe !important;
+  color: #0284c7 !important;
+}
+
+/* Popup "cambiar tipo de elemento" */
+.djs-popup {
+  background: #ffffff !important;
+  color: #1e293b !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+.djs-popup .entry,
+.djs-popup .djs-popup-header .entry,
+.djs-popup-body .entry {
+  color: #1e293b !important;
+}
+.djs-popup .entry:hover {
+  background: #e0f2fe !important;
+  color: #0284c7 !important;
+}
+.djs-popup-search input {
+  background: #f8fafc !important;
+  color: #1e293b !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+/* Edición de texto directa */
+.djs-direct-editing-content {
+  color: #1e293b !important;
+  background: #ffffff !important;
+}
+
+/* Minimap */
+.djs-minimap {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.djs-minimap .toggle {
+  color: #1e293b !important;
+}
+
+/* Tooltips de la paleta */
+.djs-popup-backdrop {
+  background: transparent;
+}

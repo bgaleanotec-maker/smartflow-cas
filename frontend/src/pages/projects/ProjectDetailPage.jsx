@@ -949,6 +949,14 @@ export default function ProjectDetailPage() {
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               <button
+                onClick={() => navigate(`/projects/${id}/docs`)}
+                className="btn-secondary flex items-center gap-1.5 text-sm"
+                title="Documentación del proyecto"
+              >
+                <BookOpen className="w-4 h-4 text-cyan-400" />
+                <span className="hidden sm:inline">Docs</span>
+              </button>
+              <button
                 onClick={() => openCreateTask()}
                 className="btn-primary flex items-center gap-1.5 text-sm"
               >

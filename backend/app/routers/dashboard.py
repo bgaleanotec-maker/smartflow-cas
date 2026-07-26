@@ -443,6 +443,48 @@ async def _gamification_data(db):
     return result
 
 
+@router.get("/user/{user_id}/resumen")
+async def user_360(user_id: int, db: DB, current_user: CurrentUser):
+    """Vista 360 de un usuario: tareas por urgencia + perfil de gamificación."""
+    from app.models.user import User
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    target = result.scalar_one_or_none()
+    if not target:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Usuario no encontrado")
+
+    today = date.today()
+    items, done_week = await _collect_items(db, user_id=user_id)
+    items_sorted = sorted(items, key=lambda i: (
+        0 if i["days_overdue"] > 0 else (1 if i["due_date"] == str(today) else 2),
+        -i["days_overdue"],
+        i["due_date"] or "9999",
+    ))
+
+    game_all = await _gamification_data(db)
+    game = game_all.get(user_id) or {
+        "user_id": user_id, "name": target.full_name,
+        "level": _level_for(0), "streak": 0, "week": 0, "total": 0, "badges": [],
+    }
+
+    return {
+        "date": str(today),
+        "user": {
+            "id": target.id,
+            "name": target.full_name,
+            "email": target.email,
+            "phone": target.phone,
+            "role": str(target.role.value if hasattr(target.role, "value") else target.role),
+            "is_active": target.is_active,
+        },
+        "kpis": _kpis(items, done_week, today),
+        "items": items_sorted[:60],
+        "completadas_semana": done_week[:30],
+        "gamification": game,
+    }
+
+
 @router.get("/gamification")
 async def gamification(db: DB, current_user: CurrentUser):
     """Perfil de gamificación propio + ranking semanal del equipo."""

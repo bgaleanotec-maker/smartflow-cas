@@ -240,7 +240,7 @@ export default function ProjectsPage() {
   const [showCreate, setShowCreate] = useState(false)
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const canCreate = ['admin', 'leader'].includes(user?.role)
+  const canCreate = ['admin', 'leader', 'lider_sr'].includes(user?.role)
 
   const { data: projects, isLoading } = useQuery({
     queryKey: ['projects', search, statusFilter],

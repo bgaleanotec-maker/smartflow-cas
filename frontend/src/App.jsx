@@ -11,6 +11,7 @@ import TorreControlPage from './pages/torre-control/TorreControlPage'
 import QuickTasksPage from './pages/quick-tasks/QuickTasksPage'
 import ProjectsPage from './pages/projects/ProjectsPage'
 import ProjectDetailPage from './pages/projects/ProjectDetailPage'
+import ProjectDocsPage from './pages/projects/ProjectDocsPage'
 import FlowsListPage from './pages/flows/FlowsListPage'
 import FlowEditorPage from './pages/flows/FlowEditorPage'
 import RetosPage from './pages/retos/RetosPage'
@@ -59,6 +60,7 @@ export default function App() {
           <Route path="quick-tasks" element={<QuickTasksPage />} />
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/:id" element={<ProjectDetailPage />} />
+          <Route path="projects/:id/docs" element={<ProjectDocsPage />} />
           <Route path="flujos" element={<FlowsListPage />} />
           <Route path="flujos/:id" element={<FlowEditorPage />} />
           <Route path="retos" element={<RetosPage />} />

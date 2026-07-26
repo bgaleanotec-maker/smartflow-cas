@@ -209,7 +209,7 @@ export default function MainLayout() {
           </NavLink>
         ))}
 
-        {['admin', 'leader'].includes(user?.role) && (
+        {['admin', 'leader', 'lider_sr'].includes(user?.role) && (
           <>
             <div className={clsx('px-3 pt-4 pb-1', collapsed && 'hidden')}>
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -406,7 +406,7 @@ export default function MainLayout() {
                 )
               })}
 
-              {['admin', 'leader'].includes(user?.role) && (
+              {['admin', 'leader', 'lider_sr'].includes(user?.role) && (
                 <>
                   <div className="px-3 pt-3 pb-1">
                     <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Admin</span>

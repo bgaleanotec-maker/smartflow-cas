@@ -519,7 +519,7 @@ function SectionHeader({ icon: Icon, label, count, color, defaultOpen = true }) 
 export default function TorreControlPage() {
   const qc = useQueryClient()
   const { user } = useAuthStore()
-  const isLeaderOrAdmin = ['admin', 'leader'].includes(user?.role)
+  const isLeaderOrAdmin = ['admin', 'leader', 'lider_sr'].includes(user?.role)
   const [scopeFilter, setScopeFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [userFilter, setUserFilter] = useState('')

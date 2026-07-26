@@ -15,6 +15,49 @@ import 'bpmn-js/dist/assets/diagram-js.css'
 import 'bpmn-js/dist/assets/bpmn-js.css'
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css'
 import 'diagram-js-minimap/assets/diagram-js-minimap.css'
+import './bpmn-editor.css'
+
+// ─── Biblioteca multimedia: badges de sistemas empresariales ─────────────────
+function makeBadge(text, bg, fg = '#ffffff') {
+  const w = Math.max(64, text.length * 13 + 24)
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="30">
+    <rect width="${w}" height="30" rx="7" fill="${bg}"/>
+    <text x="50%" y="50%" dominant-baseline="central" text-anchor="middle"
+      font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="${fg}">${text}</text>
+  </svg>`
+  return { src: `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`, w, h: 30 }
+}
+
+const MEDIA_BADGES = [
+  { name: 'SAP',        ...makeBadge('SAP', '#0070c0') },
+  { name: 'Excel',      ...makeBadge('Excel', '#107C41') },
+  { name: 'Power BI',   ...makeBadge('Power BI', '#F2C811', '#1e293b') },
+  { name: 'Outlook',    ...makeBadge('Outlook', '#0F6CBD') },
+  { name: 'Teams',      ...makeBadge('Teams', '#6264A7') },
+  { name: 'WhatsApp',   ...makeBadge('WhatsApp', '#25D366', '#0b3d1e') },
+  { name: 'Salesforce', ...makeBadge('Salesforce', '#00A1E0') },
+  { name: 'Word',       ...makeBadge('Word', '#2B579A') },
+  { name: 'SharePoint', ...makeBadge('SharePoint', '#036C70') },
+  { name: 'Oracle',     ...makeBadge('Oracle', '#C74634') },
+  { name: 'CRM',        ...makeBadge('CRM', '#7c3aed') },
+  { name: 'ERP',        ...makeBadge('ERP', '#0e7490') },
+  { name: 'Base Datos', ...makeBadge('🗄️ BD', '#334155') },
+  { name: 'API',        ...makeBadge('⚙️ API', '#1e293b') },
+  { name: 'Email',      ...makeBadge('✉️ Email', '#b45309') },
+  { name: 'Web',        ...makeBadge('🌐 Web', '#0369a1') },
+  { name: 'Vanti',      ...makeBadge('Vanti', '#e11d48') },
+  { name: 'SmartFlow',  ...makeBadge('SmartFlow', '#4f46e5') },
+]
+
+const RECENT_KEY = 'flow-media-recent'
+function loadRecents() {
+  try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]') } catch { return [] }
+}
+function saveRecent(item) {
+  const list = [item, ...loadRecents().filter(r => r.src !== item.src)].slice(0, 12)
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(list)) } catch { /* lleno */ }
+  return list
+}
 
 // ─── Paleta de colores (psicología del color: llenos suaves, bordes definidos) ─
 const COLORS = [
@@ -65,6 +108,8 @@ export default function FlowEditorPage() {
   const [exportOpen, setExportOpen] = useState(false)
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [nameEdit, setNameEdit] = useState('')
+  const [mediaOpen, setMediaOpen] = useState(false)
+  const [recents, setRecents] = useState(loadRecents)
 
   // ── Overlays de imagen ──────────────────────────────────────────────────────
   const addImageOverlay = useCallback((elementId, data) => {
@@ -233,6 +278,16 @@ export default function FlowEditorPage() {
     setEmojiOpen(false)
   }
 
+  // Aplica una imagen/badge de la biblioteca al elemento seleccionado
+  const attachMedia = (item) => {
+    if (!selected) return toast.error('Selecciona primero un elemento del diagrama')
+    const data = { src: item.src, w: item.w, h: item.h }
+    overlayMapRef.current[selected.id] = data
+    addImageOverlay(selected.id, data)
+    scheduleSave()
+    toast.success(`✨ ${item.name || 'Imagen'} añadido al elemento`)
+  }
+
   const handleImageUpload = (e) => {
     const file = e.target.files?.[0]
     e.target.value = ''
@@ -249,6 +304,7 @@ export default function FlowEditorPage() {
         const data = { src: reader.result, w, h }
         overlayMapRef.current[selected.id] = data
         addImageOverlay(selected.id, data)
+        setRecents(saveRecent({ name: file.name.replace(/\.\w+$/, ''), ...data }))
         scheduleSave()
         toast.success('🖼️ Imagen añadida al elemento')
       }
@@ -402,6 +458,17 @@ export default function FlowEditorPage() {
           <button onClick={zoomIn} className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-700" title="Acercar"><ZoomIn size={15} /></button>
         </div>
 
+        {/* Multimedia */}
+        <button
+          onClick={() => setMediaOpen(o => !o)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            mediaOpen ? 'bg-violet-600 text-white' : 'bg-slate-800/70 text-slate-300 hover:bg-slate-700'
+          }`}
+          title="Biblioteca multimedia: logos de sistemas e imágenes"
+        >
+          <ImageIcon size={14} /> <span className="hidden sm:inline">Multimedia</span>
+        </button>
+
         {/* Export */}
         <div className="relative">
           <button
@@ -534,6 +601,65 @@ export default function FlowEditorPage() {
                       </button>
                     )}
                   </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Panel Multimedia ── */}
+        {mediaOpen && !loading && (
+          <div className="absolute top-3 left-3 lg:left-auto lg:right-3 lg:top-16 z-30 w-72 bg-slate-900/95 backdrop-blur border border-slate-700 rounded-2xl shadow-2xl p-4 max-h-[70vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-slate-300 uppercase tracking-wide flex items-center gap-1.5">
+                <ImageIcon size={13} className="text-violet-400" /> Multimedia
+              </span>
+              <button onClick={() => setMediaOpen(false)} className="text-slate-500 hover:text-slate-300">
+                <X size={14} />
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-500 mb-3">
+              {selected ? 'Clic en un logo para añadirlo al elemento seleccionado' : '⚠️ Selecciona primero un elemento del diagrama'}
+            </p>
+
+            {/* Sistemas empresariales */}
+            <p className="text-[11px] text-slate-400 font-medium mb-1.5">Sistemas</p>
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {MEDIA_BADGES.map(b => (
+                <button
+                  key={b.name}
+                  onClick={() => attachMedia(b)}
+                  className="rounded-lg hover:scale-105 transition-transform ring-1 ring-slate-700 hover:ring-violet-500"
+                  title={b.name}
+                >
+                  <img src={b.src} alt={b.name} style={{ height: 24 }} className="rounded-lg" />
+                </button>
+              ))}
+            </div>
+
+            {/* Subir logo propio */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full py-2 rounded-xl border border-dashed border-slate-600 text-slate-400 text-xs hover:border-violet-500 hover:text-violet-300 transition-colors"
+            >
+              + Subir logo o imagen propia (máx 500 KB)
+            </button>
+
+            {/* Recientes */}
+            {recents.length > 0 && (
+              <>
+                <p className="text-[11px] text-slate-400 font-medium mt-3 mb-1.5">Mis imágenes recientes</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {recents.map((r, i) => (
+                    <button
+                      key={i}
+                      onClick={() => attachMedia(r)}
+                      className="rounded-lg hover:scale-105 transition-transform ring-1 ring-slate-700 hover:ring-violet-500 bg-white/90 p-0.5"
+                      title={r.name}
+                    >
+                      <img src={r.src} alt={r.name} style={{ height: 28, maxWidth: 72, objectFit: 'contain' }} className="rounded" />
+                    </button>
+                  ))}
                 </div>
               </>
             )}
