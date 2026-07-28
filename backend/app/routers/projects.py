@@ -31,10 +31,11 @@ async def list_projects(
         .limit(limit)
     )
 
-    # Filter by access: admin/leaders see all; members only see their projects
-    if current_user.role == UserRole.MEMBER:
+    # Acceso: admin / leader / lider_sr / directivo ven todo;
+    # member / herramientas / negocio SOLO donde participan (líder o miembro)
+    basic_roles = (UserRole.MEMBER, UserRole.HERRAMIENTAS, UserRole.NEGOCIO)
+    if current_user.role in basic_roles:
         query = query.where(
-            (Project.is_private == False) |
             (Project.leader_id == current_user.id) |
             Project.id.in_(
                 select(project_members_table.c.project_id).where(

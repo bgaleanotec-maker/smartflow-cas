@@ -185,8 +185,11 @@ def _kpis(items, done_week, today):
 
 @router.get("/gerencial")
 async def dashboard_gerencial(db: DB, current_user: CurrentUser):
-    """Tablero lean de gerenciamiento diario: estado consolidado del equipo."""
+    """Tablero lean de gerenciamiento diario: estado consolidado del equipo.
+    Solo roles con visión global (admin / leader / lider_sr / directivo)."""
     from app.models.user import User
+
+    _require_view_all(current_user)
 
     today = date.today()
     items, done_week = await _collect_items(db)
@@ -264,11 +267,19 @@ async def mi_espacio(db: DB, current_user: CurrentUser):
 
 # ─── Tablero Kanban personal (Scrum diario) ──────────────────────────────────
 
-PRIVILEGED_ROLES = ("admin", "leader", "lider_sr", "herramientas", "directivo")
+# Roles con visión de TODO el equipo. member / herramientas / negocio solo ven lo propio.
+VIEW_ALL_ROLES = ("admin", "leader", "lider_sr", "directivo")
+PRIVILEGED_ROLES = VIEW_ALL_ROLES  # alias legado
 
 
 def _role_str(user):
     return str(user.role.value if hasattr(user.role, "value") else user.role)
+
+
+def _require_view_all(user):
+    from fastapi import HTTPException
+    if _role_str(user) not in VIEW_ALL_ROLES:
+        raise HTTPException(403, "Esta vista es solo para líderes, SR o administradores")
 
 
 @router.get("/board")
@@ -603,9 +614,12 @@ async def _gamification_data(db):
 async def planta_operaciones(db: DB, current_user: CurrentUser):
     """Planta de Operaciones: cada persona como puesto de trabajo con semáforo
     industrial (verde / amarillo / rojo), próximas entregas, disponibilidad,
-    backup, último login y nivel de gamificación."""
+    backup, último login y nivel de gamificación.
+    Solo roles con visión global."""
     from app.models.user import User
     from sqlalchemy.orm import selectinload as _sl
+
+    _require_view_all(current_user)
 
     today = date.today()
     soon = today + timedelta(days=3)
@@ -702,8 +716,12 @@ async def planta_operaciones(db: DB, current_user: CurrentUser):
 
 @router.get("/user/{user_id}/resumen")
 async def user_360(user_id: int, db: DB, current_user: CurrentUser):
-    """Vista 360 de un usuario: tareas por urgencia + perfil de gamificación."""
+    """Vista 360 de un usuario: tareas por urgencia + perfil de gamificación.
+    Uno mismo siempre puede verse; a otros solo roles con visión global."""
     from app.models.user import User
+
+    if user_id != current_user.id:
+        _require_view_all(current_user)
 
     result = await db.execute(select(User).where(User.id == user_id))
     target = result.scalar_one_or_none()
@@ -755,4 +773,7 @@ async def gamification(db: DB, current_user: CurrentUser):
         {**r, "medal": ["🥇", "🥈", "🥉"][i] if i < 3 else None}
         for i, r in enumerate(ranking)
     ]
+    # Roles básicos: solo el podio (top 3) — no la lista completa del equipo
+    if _role_str(current_user) not in VIEW_ALL_ROLES:
+        podium = podium[:3]
     return {"me": me, "ranking": podium}

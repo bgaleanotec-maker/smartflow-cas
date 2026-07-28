@@ -215,7 +215,11 @@ async def track_usage(payload: TrackEvent, db: DB, current_user: CurrentUser):
 
 @router.get("/usage/stats")
 async def usage_stats(db: DB, current_user: CurrentUser):
-    """Estadísticas de uso de la app (últimos 30 días)."""
+    """Estadísticas de uso de la app (últimos 30 días). Solo visión global."""
+    role = str(current_user.role.value if hasattr(current_user.role, "value") else current_user.role)
+    if role not in ("admin", "leader", "lider_sr", "directivo"):
+        from fastapi import HTTPException
+        raise HTTPException(403, "Solo líderes, SR o administradores")
     now = datetime.now(timezone.utc)
     since_30 = now - timedelta(days=30)
     since_7 = now - timedelta(days=7)

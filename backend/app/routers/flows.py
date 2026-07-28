@@ -79,6 +79,13 @@ def _flow_full(f: Flow) -> dict:
 
 _OPTS = [selectinload(Flow.created_by), selectinload(Flow.project), selectinload(Flow.business)]
 
+VIEW_ALL_ROLES = ("admin", "leader", "lider_sr", "directivo")
+
+
+def _can_modify(flow: Flow, user) -> bool:
+    role = str(user.role.value if hasattr(user.role, "value") else user.role)
+    return flow.created_by_id == user.id or role in VIEW_ALL_ROLES
+
 
 # ─── Endpoints ───────────────────────────────────────────────────────────────
 
@@ -129,6 +136,8 @@ async def update_flow(flow_id: int, payload: FlowUpdate, db: DB, current_user: C
     flow = result.scalar_one_or_none()
     if not flow:
         raise HTTPException(404, "Flujo no encontrado")
+    if not _can_modify(flow, current_user):
+        raise HTTPException(403, "Solo el creador del flujo o un líder puede modificarlo")
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(flow, field, value)
     flow.updated_at = datetime.now(timezone.utc)
@@ -167,6 +176,8 @@ async def delete_flow(flow_id: int, db: DB, current_user: CurrentUser):
     flow = result.scalar_one_or_none()
     if not flow:
         raise HTTPException(404, "Flujo no encontrado")
+    if not _can_modify(flow, current_user):
+        raise HTTPException(403, "Solo el creador del flujo o un líder puede archivarlo")
     flow.is_archived = True
     await db.commit()
     return {"ok": True}

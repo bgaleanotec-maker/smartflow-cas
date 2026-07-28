@@ -148,6 +148,15 @@ async def update_task(task_id: int, payload: TaskUpdate, db: DB, current_user: C
     if not task:
         raise HTTPException(status_code=404, detail="Tarea no encontrada")
 
+    # Permiso: asignado, reportero o rol con visión global
+    _role = str(current_user.role.value if hasattr(current_user.role, "value") else current_user.role)
+    if (
+        task.assignee_id != current_user.id
+        and task.reporter_id != current_user.id
+        and _role not in ("admin", "leader", "lider_sr", "directivo")
+    ):
+        raise HTTPException(status_code=403, detail="Sin permiso para editar esta tarea")
+
     update_data = payload.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(task, field, value)

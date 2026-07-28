@@ -129,11 +129,15 @@ function QuickTaskCreateModal({ onClose }) {
   )
 }
 
-// ─── Nav — 6 módulos core ─────────────────────────────────────────────────────
+// ─── Nav — módulos core ───────────────────────────────────────────────────────
+// roles: si se define, el ítem solo aparece para esos roles.
+// VIEW_ALL = visión global del equipo (admin / leader / lider_sr / directivo).
+
+export const VIEW_ALL_ROLES = ['admin', 'leader', 'lider_sr', 'directivo']
 
 const navItems = [
-  { to: '/dashboard',     icon: LayoutDashboard, label: 'Gestión Diaria' },
-  { to: '/planta',        icon: Factory,         label: 'Planta' },
+  { to: '/dashboard',     icon: LayoutDashboard, label: 'Gestión Diaria', roles: VIEW_ALL_ROLES },
+  { to: '/planta',        icon: Factory,         label: 'Planta',         roles: VIEW_ALL_ROLES },
   { to: '/mi-espacio',    icon: UserCircle2,     label: 'Mi Espacio' },
   { to: '/tablero',       icon: SquareKanban,    label: 'Mi Tablero' },
   { to: '/torre-control', icon: Plane,           label: 'Recurrentes' },
@@ -154,6 +158,8 @@ export default function MainLayout() {
   const [quickTaskOpen, setQuickTaskOpen] = useState(false)
   const { user, logout } = useAuthStore()
   const { isRunning, formatTime, sessionType } = usePomodoroStore()
+  const visibleNavItems = navItems.filter(i => !i.roles || i.roles.includes(user?.role))
+  const hasViewAll = VIEW_ALL_ROLES.includes(user?.role)
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -193,7 +199,7 @@ export default function MainLayout() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {navItems.map(({ to, icon: Icon, label }) => (
+        {visibleNavItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
             to={to}
@@ -326,9 +332,9 @@ export default function MainLayout() {
       {/* ── Mobile bottom navigation ── */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-lg border-t border-slate-800 safe-bottom">
         <div className="flex items-center justify-around h-[60px]">
-          <NavLink to="/dashboard" className={({ isActive }) => clsx('mobile-nav-item', isActive && 'active')}>
-            <LayoutDashboard size={20} />
-            <span>Gestión</span>
+          <NavLink to={hasViewAll ? '/dashboard' : '/tablero'} className={({ isActive }) => clsx('mobile-nav-item', isActive && 'active')}>
+            {hasViewAll ? <LayoutDashboard size={20} /> : <SquareKanban size={20} />}
+            <span>{hasViewAll ? 'Gestión' : 'Tablero'}</span>
           </NavLink>
 
           <NavLink to="/mi-espacio" className={({ isActive }) => clsx('mobile-nav-item', isActive && 'active')}>
@@ -390,7 +396,7 @@ export default function MainLayout() {
             </div>
 
             <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
-              {navItems.map(({ to, icon: Icon, label }) => {
+              {visibleNavItems.map(({ to, icon: Icon, label }) => {
                 const isActive = location.pathname === to || location.pathname.startsWith(to + '/')
                 return (
                   <NavLink

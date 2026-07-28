@@ -13,7 +13,7 @@ import { dashboardAPI, usersAPI } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import { celebrate } from '../mi-espacio/MiEspacioPage'
 
-const PRIVILEGED = ['admin', 'leader', 'lider_sr', 'herramientas', 'directivo']
+const PRIVILEGED = ['admin', 'leader', 'lider_sr', 'directivo']
 
 const SOURCE_META = {
   recurrente: { icon: Repeat, label: 'Recurrente', cls: 'text-violet-400 bg-violet-500/10 border-violet-500/30' },

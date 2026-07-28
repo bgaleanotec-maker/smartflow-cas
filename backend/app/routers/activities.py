@@ -371,10 +371,8 @@ async def list_activities(
                 )
             )
 
-        if role_val == "herramientas":
-            pass  # sees everything after lider_sr exclusion
-
-        elif role_val == "leader":
+        # herramientas ya NO ve todo — cae al filtro de "solo lo propio" (else)
+        if role_val == "leader":
             _team_res = await db.execute(_t(f"SELECT CAST(team AS VARCHAR) FROM users WHERE id = {user.id}"))
             _team_row = _team_res.fetchone()
             team = _team_row[0] if _team_row else None

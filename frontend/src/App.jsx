@@ -21,16 +21,27 @@ import PomodoroPage from './pages/pomodoro/PomodoroPage'
 import UsersPage from './pages/admin/UsersPage'
 import AdminPage from './pages/admin/AdminPage'
 
-function ProtectedRoute({ children, requireAdmin = false, requireLeader = false }) {
+// Roles con visión global del equipo
+const VIEW_ALL = ['admin', 'leader', 'lider_sr', 'directivo']
+
+function ProtectedRoute({ children, requireAdmin = false, requireLeader = false, requireViewAll = false }) {
   const { isAuthenticated, user } = useAuthStore()
 
   if (!isAuthenticated) return <Navigate to="/login" replace />
   if (user?.must_change_password) return <Navigate to="/change-password" replace />
-  if (requireAdmin && user?.role !== 'admin') return <Navigate to="/dashboard" replace />
-  if (requireLeader && !['admin', 'leader', 'herramientas'].includes(user?.role))
-    return <Navigate to="/dashboard" replace />
+  if (requireAdmin && user?.role !== 'admin') return <Navigate to="/mi-espacio" replace />
+  if (requireLeader && !['admin', 'leader', 'lider_sr'].includes(user?.role))
+    return <Navigate to="/mi-espacio" replace />
+  if (requireViewAll && !VIEW_ALL.includes(user?.role))
+    return <Navigate to="/mi-espacio" replace />
 
   return children
+}
+
+// Inicio según rol: visión global → Gestión Diaria; roles básicos → Mi Espacio
+function HomeRedirect() {
+  const { user } = useAuthStore()
+  return <Navigate to={VIEW_ALL.includes(user?.role) ? '/dashboard' : '/mi-espacio'} replace />
 }
 
 export default function App() {
@@ -55,8 +66,15 @@ export default function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<DashboardPage />} />
+          <Route index element={<HomeRedirect />} />
+          <Route
+            path="dashboard"
+            element={
+              <ProtectedRoute requireViewAll>
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="mi-espacio" element={<MiEspacioPage />} />
           <Route path="torre-control" element={<TorreControlPage />} />
           <Route path="quick-tasks" element={<QuickTasksPage />} />
@@ -66,7 +84,14 @@ export default function App() {
           <Route path="flujos" element={<FlowsListPage />} />
           <Route path="flujos/:id" element={<FlowEditorPage />} />
           <Route path="retos" element={<RetosPage />} />
-          <Route path="planta" element={<PlantaPage />} />
+          <Route
+            path="planta"
+            element={
+              <ProtectedRoute requireViewAll>
+                <PlantaPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="tablero" element={<TableroPage />} />
           {/* Pomodoro: accesible como timer, fuera del menú principal */}
           <Route path="pomodoro" element={<PomodoroPage />} />
