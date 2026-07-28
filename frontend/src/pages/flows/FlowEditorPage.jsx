@@ -5,7 +5,7 @@ import minimapModule from 'diagram-js-minimap'
 import {
   ArrowLeft, Download, Undo2, Redo2, ZoomIn, ZoomOut, Maximize,
   Check, Loader2, Image as ImageIcon, Trash2, ChevronDown, Palette,
-  Smile, X,
+  Smile, X, Upload,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { flowsAPI } from '../../services/api'
@@ -100,6 +100,7 @@ export default function FlowEditorPage() {
   const overlayIdsRef = useRef({})          // { elementId: overlayId } (para remover)
   const saveTimerRef = useRef(null)
   const fileInputRef = useRef(null)
+  const bpmnInputRef = useRef(null)
 
   const [flow, setFlow] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -276,6 +277,30 @@ export default function FlowEditorPage() {
     const cleaned = current.replace(/^\p{Extended_Pictographic}️?\s*/u, '')
     m.get('modeling').updateLabel(selected, `${emoji} ${cleaned}`.trim())
     setEmojiOpen(false)
+  }
+
+  // Importar un .bpmn existente reemplazando el lienzo actual
+  const handleBpmnImport = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !modelerRef.current) return
+    const text = await file.text()
+    if (!text.includes('bpmn') || !text.includes('<')) {
+      return toast.error('El archivo no parece un BPMN 2.0 válido')
+    }
+    if (!confirm('Esto reemplaza el diagrama actual con el archivo importado. ¿Continuar?')) return
+    try {
+      await modelerRef.current.importXML(text)
+      modelerRef.current.get('canvas').zoom('fit-viewport', 'auto')
+      overlayMapRef.current = {}
+      overlayIdsRef.current = {}
+      scheduleSave()
+      toast.success('📥 BPMN importado al lienzo')
+    } catch (err) {
+      console.error(err)
+      toast.error('No se pudo importar: XML BPMN inválido')
+    }
+    setExportOpen(false)
   }
 
   // Aplica una imagen/badge de la biblioteca al elemento seleccionado
@@ -490,10 +515,21 @@ export default function FlowEditorPage() {
                 <button onClick={exportBPMN} className="w-full text-left px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-700 flex items-center gap-2">
                   📄 BPMN 2.0 (XML estándar)
                 </button>
+                <div className="border-t border-slate-700" />
+                <button
+                  onClick={() => bpmnInputRef.current?.click()}
+                  className="w-full text-left px-4 py-2.5 text-sm text-cyan-300 hover:bg-slate-700 flex items-center gap-2"
+                >
+                  <Upload size={13} /> Importar .bpmn (reemplaza lienzo)
+                </button>
               </div>
             </>
           )}
         </div>
+        <input
+          ref={bpmnInputRef} type="file" accept=".bpmn,.xml,application/xml,text/xml"
+          className="hidden" onChange={handleBpmnImport}
+        />
       </div>
 
       {/* ── Canvas + panel ── */}

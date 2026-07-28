@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Workflow, Plus, X, Copy, Archive, FolderKanban, Clock, Search,
+  Workflow, Plus, X, Copy, Archive, FolderKanban, Clock, Search, Upload,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { flowsAPI, projectsAPI } from '../../services/api'
@@ -217,8 +217,34 @@ function CreateFlowModal({ onClose, projects }) {
 export default function FlowsListPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [importing, setImporting] = useState(false)
+  const importInputRef = useRef(null)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+
+  // ── Importar .bpmn / .xml existente ─────────────────────────────────────────
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) return toast.error('Archivo muy grande (máx 2 MB)')
+    const text = await file.text()
+    if (!text.includes('bpmn') || !text.includes('<')) {
+      return toast.error('El archivo no parece un BPMN 2.0 válido (.bpmn o .xml)')
+    }
+    setImporting(true)
+    try {
+      const name = file.name.replace(/\.(bpmn|xml)$/i, '').replace(/[_-]+/g, ' ').trim() || 'Flujo importado'
+      const res = await flowsAPI.create({ name, bpmn_xml: text })
+      queryClient.invalidateQueries({ queryKey: ['flows'] })
+      toast.success('📥 Flujo importado — abriendo editor')
+      navigate(`/flujos/${res.data.id}`)
+    } catch {
+      toast.error('No se pudo importar el flujo')
+    } finally {
+      setImporting(false)
+    }
+  }
 
   const { data: flows = [], isLoading } = useQuery({
     queryKey: ['flows'],
@@ -264,9 +290,23 @@ export default function FlowsListPage() {
             Prototipa procesos con BPMN 2.0 — colores, iconos, imágenes y export profesional
           </p>
         </div>
-        <button onClick={() => setCreateOpen(true)} className="btn-primary flex items-center gap-2 self-start">
-          <Plus size={16} /> Nuevo flujo
-        </button>
+        <div className="flex gap-2 self-start">
+          <button
+            onClick={() => importInputRef.current?.click()}
+            disabled={importing}
+            className="btn-secondary flex items-center gap-2"
+            title="Importar un archivo .bpmn o .xml existente (Camunda, Bizagi, Signavio, bpmn.io…)"
+          >
+            <Upload size={15} /> {importing ? 'Importando…' : 'Importar'}
+          </button>
+          <button onClick={() => setCreateOpen(true)} className="btn-primary flex items-center gap-2">
+            <Plus size={16} /> Nuevo flujo
+          </button>
+        </div>
+        <input
+          ref={importInputRef} type="file" accept=".bpmn,.xml,application/xml,text/xml"
+          className="hidden" onChange={handleImportFile}
+        />
       </div>
 
       {/* Search */}
