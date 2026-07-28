@@ -52,6 +52,8 @@ class TaskCreate(BaseModel):
     due_date: Optional[date] = None
     labels: Optional[str] = None
     watcher_ids: Optional[List[int]] = []
+    weight: int = 1
+    progress_pct: int = 0
 
 
 class TaskUpdate(BaseModel):
@@ -67,6 +69,8 @@ class TaskUpdate(BaseModel):
     due_date: Optional[date] = None
     order_index: Optional[int] = None
     labels: Optional[str] = None
+    weight: Optional[int] = None
+    progress_pct: Optional[int] = None
 
 
 class TaskResponse(BaseModel):
@@ -80,6 +84,8 @@ class TaskResponse(BaseModel):
     story_points: Optional[int] = None
     estimated_hours: float
     logged_hours: float
+    weight: int = 1
+    progress_pct: int = 0
     due_date: Optional[date] = None
     order_index: int
     labels: Optional[str] = None

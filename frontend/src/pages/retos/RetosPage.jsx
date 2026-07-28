@@ -5,8 +5,80 @@ import {
   ChevronDown, ChevronUp, Sparkles,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { challengesAPI } from '../../services/api'
+import { challengesAPI, dashboardAPI } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
+
+// ─── Tops públicos (semana / mes) ─────────────────────────────────────────────
+
+function TopList({ title, icon, rows, unit }) {
+  return (
+    <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-3">
+      <p className="text-[11px] font-semibold text-slate-300 mb-2 flex items-center gap-1.5">{icon} {title}</p>
+      {(!rows || rows.length === 0) ? (
+        <p className="text-[10px] text-slate-600 py-2">Aún sin datos</p>
+      ) : (
+        <div className="space-y-1.5">
+          {rows.map(r => (
+            <div key={r.user_id} className={`flex items-center gap-2 px-2 py-1.5 rounded-lg ${
+              r.is_me ? 'bg-cyan-500/10 ring-1 ring-cyan-500/40' : r.medal ? 'bg-slate-800/80' : ''
+            }`}>
+              <span className="w-6 text-center text-sm">{r.medal || <span className="text-[10px] text-slate-600">{rows.indexOf(r) + 1}</span>}</span>
+              <span className={`flex-1 text-xs truncate ${r.is_me ? 'text-cyan-200 font-semibold' : 'text-slate-300'}`}>
+                {r.name}{r.is_me && ' (tú)'}
+              </span>
+              <span className="text-xs font-bold text-white">{r.value}</span>
+              <span className="text-[9px] text-slate-500">{unit}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PublicRanking() {
+  const [period, setPeriod] = useState('semana')
+  const { data, isLoading } = useQuery({
+    queryKey: ['ranking-publico'],
+    queryFn: () => dashboardAPI.rankingPublico().then(r => r.data),
+    refetchInterval: 5 * 60 * 1000,
+  })
+
+  if (isLoading || !data) return null
+  const p = data[period] || {}
+
+  return (
+    <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/50 border border-indigo-800/40 rounded-2xl p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div>
+          <h2 className="font-bold text-white flex items-center gap-2">
+            🏅 Tops del Equipo
+          </h2>
+          <p className="text-[11px] text-slate-500">Compiten los roles operativos — líderes y SR quedan fuera del cómputo</p>
+        </div>
+        <div className="flex rounded-xl bg-slate-800 p-0.5">
+          {[['semana', '📆 Semana'], ['mes', '🗓️ Mes']].map(([k, label]) => (
+            <button
+              key={k}
+              onClick={() => setPeriod(k)}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                period === k ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <TopList title="Más tareas resueltas" icon="✅" rows={p.tareas} unit="tareas" />
+        <TopList title="Más activo en la herramienta" icon="⚡" rows={p.uso} unit="acciones" />
+        <TopList title="Mejores rachas" icon="🔥" rows={data.streaks} unit="días" />
+      </div>
+    </div>
+  )
+}
 
 const EMOJI_OPTIONS = ['🏆', '🚀', '🔥', '💡', '🎯', '⚡', '🧠', '🎮', '📊', '🛠️', '🌟', '🏅']
 const METRICS = [
@@ -271,6 +343,9 @@ export default function RetosPage() {
           </button>
         )}
       </div>
+
+      {/* ── Tops públicos (todos los ven) ── */}
+      <PublicRanking />
 
       {isLoading ? (
         <div className="text-slate-500 text-sm py-10 text-center">Cargando retos…</div>

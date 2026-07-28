@@ -168,9 +168,11 @@ async def update_task(task_id: int, payload: TaskUpdate, db: DB, current_user: C
             select(TaskStatusModel).where(TaskStatusModel.id == payload.status_id)
         )
         task_status = status_result.scalar_one_or_none()
-        if task_status and task_status.is_done_state and not task.completed_at:
-            from datetime import datetime, timezone
-            task.completed_at = datetime.now(timezone.utc)
+        if task_status and task_status.is_done_state:
+            task.progress_pct = 100
+            if not task.completed_at:
+                from datetime import datetime, timezone
+                task.completed_at = datetime.now(timezone.utc)
 
     await db.flush()
     # Reload with eager-loaded relationships to avoid async lazy-load error

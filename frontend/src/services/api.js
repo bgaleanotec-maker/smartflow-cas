@@ -407,6 +407,8 @@ export const dashboardAPI = {
   planta: () => api.get('/dashboard/planta'),
   board: (userId) => api.get('/dashboard/board', { params: userId ? { user_id: userId } : {} }),
   boardMove: (data) => api.post('/dashboard/board/move', data),
+  rankingPublico: () => api.get('/dashboard/ranking-publico'),
+  projectAnalytics: (projectId) => api.get(`/projects/${projectId}/analytics`),
 }
 
 // ─── Retos gamificados + uso ──────────────────────────────────────────────────

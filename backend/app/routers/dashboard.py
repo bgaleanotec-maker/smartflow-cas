@@ -422,6 +422,7 @@ async def board_move(payload: BoardMove, db: DB, current_user: CurrentUser):
                 raise HTTPException(500, "El proyecto no tiene columna de finalizado")
             t.status_id = done_sts[0].id
             t.completed_at = now
+            t.progress_pct = 100
     else:
         raise HTTPException(400, "Origen inválido")
 
@@ -757,6 +758,77 @@ async def user_360(user_id: int, db: DB, current_user: CurrentUser):
         "items": items_sorted[:60],
         "completadas_semana": done_week[:30],
         "gamification": game,
+    }
+
+
+@router.get("/ranking-publico")
+async def ranking_publico(db: DB, current_user: CurrentUser):
+    """Ranking VISIBLE PARA TODOS. Computa solo roles operativos
+    (excluye admin / leader / lider_sr / directivo).
+    Tops de la semana y del mes: más tareas resueltas y más activo en la herramienta."""
+    from app.models.user import User
+    from app.models.challenge import UsageEvent
+    from sqlalchemy import func as sa_func
+    from datetime import datetime, timezone
+
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+    month_start = today.replace(day=1)
+
+    # Usuarios que compiten (roles operativos)
+    users = (await db.execute(
+        select(User).where(User.is_active == True)  # noqa: E712
+    )).scalars().all()
+    competing = {
+        u.id: u.full_name for u in users
+        if str(u.role.value if hasattr(u.role, "value") else u.role)
+        not in ("admin", "leader", "lider_sr", "directivo")
+    }
+
+    # Completadas por usuario (semana / mes) desde el histórico consolidado
+    game = await _gamification_data(db)
+    week_counts = {uid: g["week"] for uid, g in game.items() if uid in competing}
+
+    # Mes: recontar con la ventana mensual (reutiliza _challenge_scores)
+    from app.routers.challenges import _challenge_scores
+    month_rows = await _challenge_scores(db, month_start, today)
+    month_counts = {r["user_id"]: r["completadas"] for r in month_rows if r["user_id"] in competing}
+
+    # Uso de la herramienta (eventos últimos 7 y 30 días)
+    now = datetime.now(timezone.utc)
+    usage_week = dict((await db.execute(
+        select(UsageEvent.user_id, sa_func.count(UsageEvent.id))
+        .where(UsageEvent.created_at >= now - timedelta(days=7))
+        .group_by(UsageEvent.user_id)
+    )).all())
+    usage_month = dict((await db.execute(
+        select(UsageEvent.user_id, sa_func.count(UsageEvent.id))
+        .where(UsageEvent.created_at >= now - timedelta(days=30))
+        .group_by(UsageEvent.user_id)
+    )).all())
+
+    def top(counts, limit=5):
+        rows = sorted(
+            [{"user_id": uid, "name": competing[uid], "value": v}
+             for uid, v in counts.items() if uid in competing and v > 0],
+            key=lambda r: -r["value"],
+        )[:limit]
+        for i, r in enumerate(rows):
+            r["medal"] = ["🥇", "🥈", "🥉"][i] if i < 3 else None
+            r["is_me"] = r["user_id"] == current_user.id
+        return rows
+
+    return {
+        "date": str(today),
+        "semana": {
+            "tareas": top(week_counts),
+            "uso": top(usage_week),
+        },
+        "mes": {
+            "tareas": top(month_counts),
+            "uso": top(usage_month),
+        },
+        "streaks": top({uid: g["streak"] for uid, g in game.items() if uid in competing and g["streak"] > 0}),
     }
 
 
