@@ -318,7 +318,8 @@ function ChallengeCard({ challenge, isAdmin }) {
 
 export default function RetosPage() {
   const { user } = useAuthStore()
-  const isAdmin = user?.role === 'admin'
+  // Líderes y SR también pueden lanzar/gestionar retos (QA 2026-07)
+  const isAdmin = ['admin', 'leader', 'lider_sr'].includes(user?.role)
   const [createOpen, setCreateOpen] = useState(false)
 
   const { data: challenges = [], isLoading } = useQuery({

@@ -54,6 +54,9 @@ class TaskCreate(BaseModel):
     watcher_ids: Optional[List[int]] = []
     weight: int = 1
     progress_pct: int = 0
+    difficulty: Optional[str] = None
+    will_not_deliver: Optional[bool] = None
+    not_deliver_reason: Optional[str] = None
 
 
 class TaskUpdate(BaseModel):
@@ -71,6 +74,9 @@ class TaskUpdate(BaseModel):
     labels: Optional[str] = None
     weight: Optional[int] = None
     progress_pct: Optional[int] = None
+    difficulty: Optional[str] = None
+    will_not_deliver: Optional[bool] = None
+    not_deliver_reason: Optional[str] = None
 
 
 class TaskResponse(BaseModel):
@@ -86,6 +92,9 @@ class TaskResponse(BaseModel):
     logged_hours: float
     weight: int = 1
     progress_pct: int = 0
+    difficulty: Optional[str] = None
+    will_not_deliver: bool = False
+    not_deliver_reason: Optional[str] = None
     due_date: Optional[date] = None
     order_index: int
     labels: Optional[str] = None

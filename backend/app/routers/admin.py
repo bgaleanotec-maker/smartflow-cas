@@ -54,7 +54,9 @@ async def update_business(biz_id: int, payload: BusinessUpdate, db: DB, admin: L
 # ─── Priorities ───────────────────────────────────────────────────────────────
 
 @router.get("/priorities")
-async def list_priorities(db: DB, admin: LeaderOrAdmin):
+async def list_priorities(db: DB, admin: CurrentUser):
+    # Lectura abierta a todo usuario autenticado: los selects de crear/editar
+    # tareas y el tablero Kanban los necesitan (QA 2026-07: members bloqueados)
     result = await db.execute(select(Priority).order_by(Priority.order_index))
     return result.scalars().all()
 
@@ -71,7 +73,7 @@ async def create_priority(name: str, color: str, order_index: int, db: DB, admin
 # ─── Task Statuses ────────────────────────────────────────────────────────────
 
 @router.get("/task-statuses")
-async def list_task_statuses(db: DB, admin: LeaderOrAdmin, project_id: Optional[int] = None):
+async def list_task_statuses(db: DB, admin: CurrentUser, project_id: Optional[int] = None):
     query = select(TaskStatus).where(TaskStatus.is_active == True)
     if project_id:
         query = query.where(

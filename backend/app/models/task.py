@@ -57,6 +57,11 @@ class Task(Base):
     weight: Mapped[int] = mapped_column(Integer, default=1)          # peso relativo 1-5
     progress_pct: Mapped[int] = mapped_column(Integer, default=0)    # 0-100 (auto 100 al completar)
 
+    # Dificultades / bloqueos y no-entrega (paridad con tareas rápidas — QA 2026-07)
+    difficulty: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    will_not_deliver: Mapped[bool] = mapped_column(Boolean, default=False)
+    not_deliver_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     # Fechas
     due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

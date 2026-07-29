@@ -281,6 +281,10 @@ async def _run_column_migrations():
             # Avance ponderado (2026-07-26)
             "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS weight INTEGER DEFAULT 1",
             "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS progress_pct INTEGER DEFAULT 0",
+            # Bloqueos y no-entrega en tareas de proyecto (QA 2026-07)
+            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS difficulty TEXT",
+            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS will_not_deliver BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS not_deliver_reason TEXT",
             # pomodoro_sessions new FK columns (added 2026-04-15)
             "ALTER TABLE pomodoro_sessions ADD COLUMN IF NOT EXISTS activity_id INTEGER REFERENCES recurring_activities(id)",
             "ALTER TABLE pomodoro_sessions ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES projects(id)",

@@ -358,6 +358,15 @@ async def create_quick_task(
     db: DB = None,
     current_user: CurrentUser = None,
 ):
+    # Roles básicos solo pueden crearse tareas a sí mismos (QA 2026-07)
+    role_val = await _get_role(current_user)
+    if role_val not in ("admin", "leader", "lider_sr", "directivo"):
+        if data.assigned_to_id and data.assigned_to_id != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="Tu rol no permite asignar tareas a otras personas",
+            )
+
     category = data.category or "general"
     task = QuickTask(
         user_id=current_user.id,
@@ -509,6 +518,14 @@ async def update_quick_task(
     )
     if not can_edit:
         raise HTTPException(status_code=403, detail="Sin permiso para editar esta tarea")
+
+    # Roles básicos no pueden reasignar a otras personas
+    if (
+        role_val not in ("admin", "leader", "lider_sr", "directivo")
+        and data.assigned_to_id is not None
+        and data.assigned_to_id != current_user.id
+    ):
+        raise HTTPException(status_code=403, detail="Tu rol no permite asignar tareas a otras personas")
 
     for field, val in data.model_dump(exclude_none=True).items():
         setattr(task, field, val)

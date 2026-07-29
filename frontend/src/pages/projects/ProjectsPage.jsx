@@ -97,6 +97,11 @@ function CreateProjectModal({ onClose }) {
     queryFn: () => usersAPI.list({ is_active: true, limit: 100 }).then(r => r.data),
   })
 
+  const { data: bizList } = useQuery({
+    queryKey: ['businesses'],
+    queryFn: () => adminAPI.businesses().then(r => Array.isArray(r.data) ? r.data : r.data?.items || []),
+  })
+
   const { register, handleSubmit, formState: { isSubmitting } } = useForm({
     defaultValues: { color: '#6366f1' },
   })
@@ -107,6 +112,7 @@ function CreateProjectModal({ onClose }) {
       const payload = {
         name: data.name,
         description: data.description || null,
+        business_id: data.business_id ? parseInt(data.business_id) : null,
         start_date: data.start_date || null,
         due_date: data.due_date || null,
         leader_id: data.leader_id ? parseInt(data.leader_id) : null,
@@ -169,14 +175,25 @@ function CreateProjectModal({ onClose }) {
               <input {...register('due_date')} type="date" className="input" />
             </div>
           </div>
-          <div>
-            <label className="label">Líder del proyecto</label>
-            <select {...register('leader_id')} className="input">
-              <option value="">Seleccionar líder...</option>
-              {users?.map(u => (
-                <option key={u.id} value={u.id}>{u.full_name} ({u.role})</option>
-              ))}
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Líder del proyecto</label>
+              <select {...register('leader_id')} className="input">
+                <option value="">Seleccionar líder...</option>
+                {users?.map(u => (
+                  <option key={u.id} value={u.id}>{u.full_name} ({u.role})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Negocio</label>
+              <select {...register('business_id')} className="input">
+                <option value="">Sin negocio</option>
+                {bizList?.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Participantes */}

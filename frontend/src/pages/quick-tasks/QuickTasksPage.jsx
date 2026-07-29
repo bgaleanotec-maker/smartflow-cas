@@ -87,12 +87,15 @@ function TaskFormFields({ form, setForm, businesses, users, activityTypes, isEdi
   const isReunion = form.category === 'reunion'
   const scopeTypes = activityTypes?.[form.team_scope] || []
 
-  // Responsables: filtrado por equipo salvo admin/lider_sr; participants = everyone
+  // Responsables: roles básicos SOLO a sí mismos (QA 2026-07); líderes a su equipo;
+  // admin/lider_sr a cualquiera
+  const isBasicRole = !['admin', 'leader', 'lider_sr', 'directivo'].includes(user?.role)
   const responsables = useMemo(() => {
     if (!users) return []
+    if (isBasicRole) return users.filter(u => u.id === user?.id)
     if (canAssignAnyone || !form.team_scope) return users
     return users.filter(u => u.team === form.team_scope)
-  }, [users, form.team_scope, canAssignAnyone])
+  }, [users, form.team_scope, canAssignAnyone, isBasicRole, user?.id])
 
   const toggleParticipant = (uid) => {
     setForm(f => {
@@ -808,6 +811,7 @@ export default function QuickTasksPage() {
   const [categoryFilter, setCategoryFilter] = useState('')
   const [teamFilter, setTeamFilter] = useState('')
   const [includeDone, setIncludeDone] = useState(false)
+  const [periodFilter, setPeriodFilter] = useState('')   // hoy | semana | mes | vencidas
   const [userIdFilter, setUserIdFilter] = useState('')
   const [leaderView, setLeaderView] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
@@ -820,7 +824,8 @@ export default function QuickTasksPage() {
       business_id: businessFilter || undefined,
       status: statusFilter || undefined,
       category: categoryFilter || undefined,
-      include_done: includeDone,
+      // Al filtrar "completada" hay que incluir las hechas (QA 2026-07)
+      include_done: includeDone || statusFilter === 'completada',
       all_users: isLeaderOrAdmin ? true : undefined,
       assigned_to_id: userIdFilter || undefined,
     }).then(r => r.data),
@@ -861,12 +866,27 @@ export default function QuickTasksPage() {
     onError: () => toast.error('Error al eliminar tarea'),
   })
 
-  // Client-side team filter (team_scope)
+  // Client-side filters: equipo + periodo de tiempo (QA 2026-07)
   const visibleTasks = useMemo(() => {
     if (!tasks) return []
-    if (!teamFilter) return tasks
-    return tasks.filter(t => t.team_scope === teamFilter)
-  }, [tasks, teamFilter])
+    let list = teamFilter ? tasks.filter(t => t.team_scope === teamFilter) : tasks
+    if (periodFilter) {
+      const today = new Date(); today.setHours(0, 0, 0, 0)
+      const todayStr = today.toISOString().slice(0, 10)
+      const weekEnd = new Date(today); weekEnd.setDate(weekEnd.getDate() + (7 - today.getDay()) % 7 || 7)
+      const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+      list = list.filter(t => {
+        if (!t.due_date) return false
+        const d = t.due_date.slice(0, 10)
+        if (periodFilter === 'hoy') return d === todayStr
+        if (periodFilter === 'vencidas') return d < todayStr && !t.is_done
+        if (periodFilter === 'semana') return d >= todayStr && d <= weekEnd.toISOString().slice(0, 10)
+        if (periodFilter === 'mes') return d >= todayStr && d <= monthEnd.toISOString().slice(0, 10)
+        return true
+      })
+    }
+    return list
+  }, [tasks, teamFilter, periodFilter])
 
   const activeTasks = visibleTasks.filter(t => !t.is_done)
   const overdueTasks = activeTasks.filter(t => isOverdue(t.due_date))
@@ -934,6 +954,13 @@ export default function QuickTasksPage() {
             <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="input w-auto text-sm">
               <option value="">Todas las categorías</option>
               {Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => <option key={key} value={key}>{cfg.icon} {cfg.label}</option>)}
+            </select>
+            <select value={periodFilter} onChange={e => setPeriodFilter(e.target.value)} className="input w-auto text-sm">
+              <option value="">Todo el tiempo</option>
+              <option value="hoy">📅 Hoy</option>
+              <option value="semana">Esta semana</option>
+              <option value="mes">Este mes</option>
+              <option value="vencidas">🔴 Vencidas</option>
             </select>
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="input w-auto text-sm">
               <option value="">Todos los estados</option>

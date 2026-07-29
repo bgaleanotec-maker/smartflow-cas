@@ -15,6 +15,142 @@ import {
 } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 
+// ─── EditProjectModal (QA 2026-07: permitir editar proyecto ya creado) ────────
+function EditProjectModal({ project, onClose }) {
+  const qc = useQueryClient()
+  const [form, setForm] = useState({
+    name: project.name || '',
+    description: project.description || '',
+    status: project.status || 'planificacion',
+    start_date: project.start_date || '',
+    due_date: project.due_date || '',
+    business_id: project.business_id ? String(project.business_id) : '',
+    leader_id: project.leader?.id ? String(project.leader.id) : '',
+  })
+  const [selectedMembers, setSelectedMembers] = useState(
+    (project.members || []).map(m => m.id)
+  )
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const { data: users } = useQuery({
+    queryKey: ['users-list'],
+    queryFn: () => usersAPI.list({ is_active: true, limit: 100 }).then(r =>
+      Array.isArray(r.data) ? r.data : r.data?.items || []),
+  })
+  const { data: bizList } = useQuery({
+    queryKey: ['businesses'],
+    queryFn: () => adminAPI.businesses().then(r => Array.isArray(r.data) ? r.data : r.data?.items || []),
+  })
+
+  const saveMut = useMutation({
+    mutationFn: () => projectsAPI.update(project.id, {
+      name: form.name.trim(),
+      description: form.description.trim() || null,
+      status: form.status,
+      start_date: form.start_date || null,
+      due_date: form.due_date || null,
+      business_id: form.business_id ? parseInt(form.business_id) : null,
+      leader_id: form.leader_id ? parseInt(form.leader_id) : null,
+      member_ids: selectedMembers,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project'] })
+      qc.invalidateQueries({ queryKey: ['projects'] })
+      toast.success('✅ Proyecto actualizado')
+      onClose()
+    },
+    onError: (e) => toast.error(e.response?.data?.detail || 'Error al actualizar el proyecto'),
+  })
+
+  const toggleMember = (uid) => setSelectedMembers(prev =>
+    prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid])
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 sticky top-0 bg-slate-900 z-10">
+          <h2 className="font-semibold text-white">Editar proyecto</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+        </div>
+        <form onSubmit={e => { e.preventDefault(); if (form.name.trim()) saveMut.mutate() }} className="p-6 space-y-4">
+          <div>
+            <label className="label">Nombre *</label>
+            <input value={form.name} onChange={e => set('name', e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="label">Descripción</label>
+            <textarea value={form.description} onChange={e => set('description', e.target.value)} className="input h-20 resize-none" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Estado</label>
+              <select value={form.status} onChange={e => set('status', e.target.value)} className="input">
+                <option value="planificacion">Planificación</option>
+                <option value="activo">Activo</option>
+                <option value="pausado">Pausado</option>
+                <option value="cerrado">Cerrado</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Negocio</label>
+              <select value={form.business_id} onChange={e => set('business_id', e.target.value)} className="input">
+                <option value="">Sin negocio</option>
+                {bizList?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Fecha inicio</label>
+              <input type="date" value={form.start_date} onChange={e => set('start_date', e.target.value)} className="input" />
+            </div>
+            <div>
+              <label className="label">Fecha límite</label>
+              <input type="date" value={form.due_date} onChange={e => set('due_date', e.target.value)} className="input" />
+            </div>
+          </div>
+          <div>
+            <label className="label">Líder</label>
+            <select value={form.leader_id} onChange={e => set('leader_id', e.target.value)} className="input">
+              <option value="">Sin líder</option>
+              {users?.map(u => <option key={u.id} value={u.id}>{u.full_name} ({u.role})</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Integrantes del equipo</label>
+            <div className="max-h-40 overflow-y-auto border border-slate-700 rounded-lg divide-y divide-slate-800">
+              {users?.map(u => {
+                const selected = selectedMembers.includes(u.id)
+                return (
+                  <button
+                    key={u.id} type="button" onClick={() => toggleMember(u.id)}
+                    className={clsx('w-full flex items-center gap-3 px-3 py-2 text-left transition-colors',
+                      selected ? 'bg-brand-900/40' : 'hover:bg-slate-800')}
+                  >
+                    <div className={clsx('w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0',
+                      selected ? 'bg-brand-600 border-brand-600' : 'border-slate-600')}>
+                      {selected && <span className="text-white text-[10px] font-bold">✓</span>}
+                    </div>
+                    <span className="text-sm text-slate-300">{u.full_name}</span>
+                    <span className="text-xs text-slate-500 ml-auto">{u.role}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-xs text-brand-400 mt-1">{selectedMembers.length} integrante(s)</p>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancelar</button>
+            <button type="submit" disabled={saveMut.isPending} className="btn-primary flex-1">
+              {saveMut.isPending ? 'Guardando...' : 'Guardar cambios'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getInitials(name = '') {
@@ -349,6 +485,38 @@ function TaskDetailPanel({ task, statuses, priorities, users, epics, sprints, on
               placeholder="Agregar descripción…"
               onBlur={e => updateMutation.mutate({ description: e.target.value })}
             />
+          </div>
+
+          {/* Dificultades / Bloqueos (QA 2026-07: paridad con tareas rápidas) */}
+          <div className="bg-amber-950/20 border border-amber-900/30 rounded-xl p-3 space-y-3">
+            <div>
+              <label className="label text-xs mb-1 flex items-center gap-1.5 text-amber-300">
+                <AlertTriangle className="w-3 h-3" /> Dificultades / Bloqueos
+              </label>
+              <textarea
+                className="input text-sm w-full h-16 resize-none"
+                defaultValue={task.difficulty || ''}
+                placeholder="¿Algo está bloqueando esta tarea? Descríbelo aquí…"
+                onBlur={e => updateMutation.mutate({ difficulty: e.target.value || null })}
+              />
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="w-4 h-4 rounded accent-red-500"
+                defaultChecked={task.will_not_deliver || false}
+                onChange={e => updateMutation.mutate({ will_not_deliver: e.target.checked })}
+              />
+              <span className="text-sm text-slate-300">No se va a entregar</span>
+            </label>
+            {task.will_not_deliver && (
+              <textarea
+                className="input text-sm w-full h-14 resize-none"
+                defaultValue={task.not_deliver_reason || ''}
+                placeholder="Motivo de la no entrega…"
+                onBlur={e => updateMutation.mutate({ not_deliver_reason: e.target.value || null })}
+              />
+            )}
           </div>
 
           {/* Subtasks */}
@@ -773,6 +941,7 @@ export default function ProjectDetailPage() {
   const [quickAddSprint, setQuickAddSprint] = useState(null)
   const [showSettingsMenu, setShowSettingsMenu] = useState(false)
   const [showConfirm, setShowConfirm] = useState(null) // 'delete' | 'archive' | null
+  const [showEditProject, setShowEditProject] = useState(false)
   const [editingEpic, setEditingEpic] = useState(null)
   const [deletingEpicId, setDeletingEpicId] = useState(null)
 
@@ -884,7 +1053,9 @@ export default function ProjectDetailPage() {
   })
 
   // Only THE project's leader (or admin) can delete/archive
-  const canManageProject = project && (user?.role === 'admin' || user?.id === project?.leader_id)
+  const canManageProject = project && (
+    ['admin', 'lider_sr'].includes(user?.role) || user?.id === project?.leader_id
+  )
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
@@ -984,6 +1155,14 @@ export default function ProjectDetailPage() {
                       {/* Backdrop */}
                       <div className="fixed inset-0 z-40" onClick={() => setShowSettingsMenu(false)} />
                       <div className="absolute right-0 top-full mt-1 z-50 w-52 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden">
+                        <button
+                          className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-slate-200 hover:bg-slate-700 transition-colors"
+                          onClick={() => { setShowSettingsMenu(false); setShowEditProject(true) }}
+                        >
+                          <Pencil className="w-4 h-4 text-cyan-400" />
+                          <span>Editar proyecto</span>
+                        </button>
+                        <div className="border-t border-slate-700" />
                         <button
                           className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-slate-200 hover:bg-slate-700 transition-colors"
                           onClick={() => { setShowSettingsMenu(false); setShowConfirm('archive') }}
@@ -1587,6 +1766,10 @@ export default function ProjectDetailPage() {
       )}
 
       {/* ── Confirm Delete / Archive Modal ───────────────────────────────────── */}
+      {showEditProject && project && (
+        <EditProjectModal project={project} onClose={() => setShowEditProject(false)} />
+      )}
+
       {showConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-sm p-6">

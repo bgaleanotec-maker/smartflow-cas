@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, func as sa_func
 from sqlalchemy.orm import selectinload
 
-from app.core.deps import DB, CurrentUser, AdminUser
+from app.core.deps import DB, CurrentUser, AdminUser, LeaderOrAdmin
 from app.models.challenge import Challenge, UsageEvent
 
 router = APIRouter(prefix="/challenges", tags=["Retos y Uso"])
@@ -150,7 +150,7 @@ async def list_challenges(db: DB, current_user: CurrentUser, all: bool = False):
 
 
 @router.post("", status_code=201)
-async def create_challenge(payload: ChallengeCreate, db: DB, admin: AdminUser):
+async def create_challenge(payload: ChallengeCreate, db: DB, admin: LeaderOrAdmin):
     if payload.end_date < payload.start_date:
         raise HTTPException(400, "La fecha fin debe ser posterior al inicio")
     c = Challenge(**payload.model_dump(), created_by_id=admin.id)
@@ -173,7 +173,7 @@ async def get_challenge(challenge_id: int, db: DB, current_user: CurrentUser):
 
 
 @router.patch("/{challenge_id}")
-async def update_challenge(challenge_id: int, payload: ChallengeUpdate, db: DB, admin: AdminUser):
+async def update_challenge(challenge_id: int, payload: ChallengeUpdate, db: DB, admin: LeaderOrAdmin):
     result = await db.execute(select(Challenge).options(*_OPTS).where(Challenge.id == challenge_id))
     c = result.scalar_one_or_none()
     if not c:
@@ -186,7 +186,7 @@ async def update_challenge(challenge_id: int, payload: ChallengeUpdate, db: DB, 
 
 
 @router.delete("/{challenge_id}")
-async def delete_challenge(challenge_id: int, db: DB, admin: AdminUser):
+async def delete_challenge(challenge_id: int, db: DB, admin: LeaderOrAdmin):
     result = await db.execute(select(Challenge).where(Challenge.id == challenge_id))
     c = result.scalar_one_or_none()
     if not c:

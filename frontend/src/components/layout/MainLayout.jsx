@@ -15,6 +15,9 @@ import { quickTasksAPI, adminAPI, usersAPI, challengesAPI } from '../../services
 // ─── QuickTaskCreateModal ─────────────────────────────────────────────────────
 
 function QuickTaskCreateModal({ onClose }) {
+  const { user: me } = useAuthStore()
+  // Roles básicos solo se asignan tareas a sí mismos (QA 2026-07)
+  const canAssignOthers = VIEW_ALL_ROLES.includes(me?.role)
   const [form, setForm] = useState({
     title: '', business_id: '', priority: 'media', due_date: '',
     assigned_to_id: '', estimated_minutes: '',
@@ -28,10 +31,12 @@ function QuickTaskCreateModal({ onClose }) {
       const data = Array.isArray(r.data) ? r.data : r.data?.items || []
       setBusinesses(data)
     }).catch(() => {})
-    usersAPI.list({ is_active: true, limit: 100 }).then(r => {
-      setUsers(Array.isArray(r.data) ? r.data : r.data?.items || [])
-    }).catch(() => {})
-  }, [])
+    if (canAssignOthers) {
+      usersAPI.list({ is_active: true, limit: 100 }).then(r => {
+        setUsers(Array.isArray(r.data) ? r.data : r.data?.items || [])
+      }).catch(() => {})
+    }
+  }, [canAssignOthers])
 
   const handleSubmit = async (e) => {
     e.preventDefault()

@@ -45,7 +45,13 @@ async def list_projects(
         )
 
     if status:
-        query = query.where(Project.status == status)
+        # El filtro llega como valor ("activo"); la columna Enum compara por miembro
+        from app.models.project import ProjectStatus
+        try:
+            status_enum = ProjectStatus(status)
+            query = query.where(Project.status == status_enum)
+        except ValueError:
+            pass  # estado desconocido: no filtrar
     if search:
         query = query.where(Project.name.ilike(f"%{search}%"))
 
