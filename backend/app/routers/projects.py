@@ -60,6 +60,37 @@ async def list_projects(
     return projects
 
 
+@router.get("/_debug-serialize")
+async def debug_serialize(db: DB, current_user: CurrentUser, project_id: int = 31):
+    """TEMPORAL: diagnostica por qué falla la serialización de un proyecto.
+    Solo admin. Eliminar cuando se resuelva el bug del listado."""
+    import traceback
+    if str(current_user.role.value if hasattr(current_user.role, "value") else current_user.role) != "admin":
+        raise HTTPException(403, "Solo admin")
+    steps = {}
+    try:
+        result = await db.execute(
+            select(Project)
+            .options(
+                selectinload(Project.leader).selectinload(User.main_business),
+                selectinload(Project.members).selectinload(User.main_business),
+            )
+            .where(Project.id == project_id)
+        )
+        project = result.scalar_one_or_none()
+        steps["load"] = "ok" if project else "not found"
+        if project:
+            steps["leader_loaded"] = str(project.leader)
+            try:
+                ProjectResponse.model_validate(project)
+                steps["serialize"] = "ok"
+            except Exception:
+                steps["serialize"] = traceback.format_exc()[-2500:]
+    except Exception:
+        steps["load"] = traceback.format_exc()[-2500:]
+    return steps
+
+
 @router.get("/{project_id}/analytics")
 async def project_analytics(project_id: int, db: DB, current_user: CurrentUser):
     """Avance ponderado del proyecto: cada tarea aporta según su peso (1-5)
