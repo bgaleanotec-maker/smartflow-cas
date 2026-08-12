@@ -15,6 +15,113 @@ import {
 } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 
+// ─── MembersManagerModal — flujo PMO: agregar/quitar participantes ────────────
+function MembersManagerModal({ project, canManage, onClose }) {
+  const qc = useQueryClient()
+  const [adding, setAdding] = useState('')
+
+  const { data: users } = useQuery({
+    queryKey: ['users-list'],
+    queryFn: () => usersAPI.list({ is_active: true, limit: 100 }).then(r =>
+      Array.isArray(r.data) ? r.data : r.data?.items || []),
+  })
+
+  const memberIds = (project.members || []).map(m => m.id)
+  const available = (users || []).filter(
+    u => !memberIds.includes(u.id) && u.id !== project.leader?.id
+  )
+
+  const saveMut = useMutation({
+    mutationFn: (newIds) => projectsAPI.update(project.id, { member_ids: newIds }),
+    onSuccess: (_r, newIds) => {
+      qc.invalidateQueries({ queryKey: ['project'] })
+      qc.invalidateQueries({ queryKey: ['projects'] })
+      toast.success(newIds.length > memberIds.length ? '👥 Participante agregado' : 'Participante removido')
+      setAdding('')
+    },
+    onError: (e) => toast.error(e.response?.data?.detail || 'No se pudo actualizar el equipo'),
+  })
+
+  const addMember = () => {
+    if (!adding) return
+    saveMut.mutate([...memberIds, parseInt(adding)])
+  }
+  const removeMember = (uid) => saveMut.mutate(memberIds.filter(id => id !== uid))
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+          <h2 className="font-semibold text-white flex items-center gap-2">
+            <Users className="w-4 h-4 text-indigo-400" /> Equipo del proyecto
+            <span className="text-xs text-slate-500 font-normal">({memberIds.length + (project.leader ? 1 : 0)})</span>
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-200"><X size={16} /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-1.5">
+          {/* Líder */}
+          {project.leader && (
+            <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-amber-950/30 border border-amber-900/40">
+              <div className="w-8 h-8 rounded-full bg-amber-700 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+                {project.leader.full_name?.slice(0, 2).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-slate-200 truncate">{project.leader.full_name}</p>
+                <p className="text-[10px] text-amber-400">👑 Líder del proyecto</p>
+              </div>
+            </div>
+          )}
+          {/* Miembros */}
+          {(project.members || []).map(m => (
+            <div key={m.id} className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/50">
+              <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+                {m.full_name?.slice(0, 2).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-slate-200 truncate">{m.full_name}</p>
+                <p className="text-[10px] text-slate-500 capitalize">{m.role}</p>
+              </div>
+              {canManage && (
+                <button
+                  onClick={() => removeMember(m.id)}
+                  disabled={saveMut.isPending}
+                  className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-900/30 opacity-0 group-hover:opacity-100 transition-all"
+                  title="Quitar del proyecto"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          ))}
+          {(project.members || []).length === 0 && (
+            <p className="text-xs text-slate-600 text-center py-4">Aún no hay participantes además del líder</p>
+          )}
+        </div>
+
+        {/* Agregar */}
+        {canManage && (
+          <div className="p-4 border-t border-slate-800 flex gap-2">
+            <select value={adding} onChange={e => setAdding(e.target.value)} className="input flex-1 text-sm">
+              <option value="">Agregar participante…</option>
+              {available.map(u => (
+                <option key={u.id} value={u.id}>{u.full_name} ({u.role})</option>
+              ))}
+            </select>
+            <button
+              onClick={addMember}
+              disabled={!adding || saveMut.isPending}
+              className="btn-primary px-4 disabled:opacity-40"
+            >
+              <Plus size={15} />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── EditProjectModal (QA 2026-07: permitir editar proyecto ya creado) ────────
 function EditProjectModal({ project, onClose }) {
   const qc = useQueryClient()
@@ -942,6 +1049,7 @@ export default function ProjectDetailPage() {
   const [showSettingsMenu, setShowSettingsMenu] = useState(false)
   const [showConfirm, setShowConfirm] = useState(null) // 'delete' | 'archive' | null
   const [showEditProject, setShowEditProject] = useState(false)
+  const [showMembers, setShowMembers] = useState(false)
   const [editingEpic, setEditingEpic] = useState(null)
   const [deletingEpicId, setDeletingEpicId] = useState(null)
 
@@ -1198,8 +1306,12 @@ export default function ProjectDetailPage() {
               </div>
               <span className="text-xs text-slate-400 flex-shrink-0">{progress}%</span>
             </div>
-            {/* Members avatars */}
-            <div className="flex items-center -space-x-2">
+            {/* Members avatars — clic para gestionar el equipo (flujo PMO) */}
+            <button
+              onClick={() => setShowMembers(true)}
+              className="flex items-center -space-x-2 hover:scale-105 transition-transform"
+              title="Ver y gestionar participantes"
+            >
               {project.leader && (
                 <AvatarCircle
                   name={project.leader.full_name || project.leader_name}
@@ -1222,7 +1334,12 @@ export default function ProjectDetailPage() {
                   +{project.members.length - 4}
                 </div>
               )}
-            </div>
+              {canManageProject && (
+                <div className="w-7 h-7 rounded-full bg-indigo-600/30 border border-dashed border-indigo-500 ring-2 ring-slate-900 flex items-center justify-center text-indigo-300 hover:bg-indigo-600/60 transition-colors">
+                  <Plus className="w-3.5 h-3.5" />
+                </div>
+              )}
+            </button>
             {project.due_date && (
               <div className={clsx('flex items-center gap-1 text-xs flex-shrink-0', isOverdue(project.due_date) ? 'text-red-400' : 'text-slate-400')}>
                 <Calendar className="w-3.5 h-3.5" />
@@ -1768,6 +1885,14 @@ export default function ProjectDetailPage() {
       {/* ── Confirm Delete / Archive Modal ───────────────────────────────────── */}
       {showEditProject && project && (
         <EditProjectModal project={project} onClose={() => setShowEditProject(false)} />
+      )}
+
+      {showMembers && project && (
+        <MembersManagerModal
+          project={project}
+          canManage={canManageProject}
+          onClose={() => setShowMembers(false)}
+        />
       )}
 
       {showConfirm && (

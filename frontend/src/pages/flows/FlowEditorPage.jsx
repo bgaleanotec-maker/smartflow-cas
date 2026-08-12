@@ -28,25 +28,72 @@ function makeBadge(text, bg, fg = '#ffffff') {
   return { src: `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`, w, h: 30 }
 }
 
-const MEDIA_BADGES = [
-  { name: 'SAP',        ...makeBadge('SAP', '#0070c0') },
-  { name: 'Excel',      ...makeBadge('Excel', '#107C41') },
-  { name: 'Power BI',   ...makeBadge('Power BI', '#F2C811', '#1e293b') },
-  { name: 'Outlook',    ...makeBadge('Outlook', '#0F6CBD') },
-  { name: 'Teams',      ...makeBadge('Teams', '#6264A7') },
-  { name: 'WhatsApp',   ...makeBadge('WhatsApp', '#25D366', '#0b3d1e') },
-  { name: 'Salesforce', ...makeBadge('Salesforce', '#00A1E0') },
-  { name: 'Word',       ...makeBadge('Word', '#2B579A') },
-  { name: 'SharePoint', ...makeBadge('SharePoint', '#036C70') },
-  { name: 'Oracle',     ...makeBadge('Oracle', '#C74634') },
-  { name: 'CRM',        ...makeBadge('CRM', '#7c3aed') },
-  { name: 'ERP',        ...makeBadge('ERP', '#0e7490') },
-  { name: 'Base Datos', ...makeBadge('🗄️ BD', '#334155') },
-  { name: 'API',        ...makeBadge('⚙️ API', '#1e293b') },
-  { name: 'Email',      ...makeBadge('✉️ Email', '#b45309') },
-  { name: 'Web',        ...makeBadge('🌐 Web', '#0369a1') },
-  { name: 'Vanti',      ...makeBadge('Vanti', '#e11d48') },
-  { name: 'SmartFlow',  ...makeBadge('SmartFlow', '#4f46e5') },
+const MEDIA_CATEGORIES = [
+  {
+    name: '📊 Ofimática y Microsoft',
+    badges: [
+      { name: 'Excel',          ...makeBadge('Excel', '#107C41') },
+      { name: 'Word',           ...makeBadge('Word', '#2B579A') },
+      { name: 'PowerPoint',     ...makeBadge('PowerPoint', '#C43E1C') },
+      { name: 'Outlook',        ...makeBadge('Outlook', '#0F6CBD') },
+      { name: 'Teams',          ...makeBadge('Teams', '#6264A7') },
+      { name: 'OneDrive',       ...makeBadge('OneDrive', '#0364B8') },
+      { name: 'SharePoint',     ...makeBadge('SharePoint', '#036C70') },
+      { name: 'Power BI',       ...makeBadge('Power BI', '#F2C811', '#1e293b') },
+      { name: 'Power Apps',     ...makeBadge('Power Apps', '#742774') },
+      { name: 'Power Automate', ...makeBadge('P. Automate', '#0066FF') },
+    ],
+  },
+  {
+    name: '🏢 Sistemas empresariales',
+    badges: [
+      { name: 'SAP',        ...makeBadge('SAP', '#0070c0') },
+      { name: 'Salesforce', ...makeBadge('Salesforce', '#00A1E0') },
+      { name: 'Oracle',     ...makeBadge('Oracle', '#C74634') },
+      { name: 'Jira',       ...makeBadge('Jira', '#0052CC') },
+      { name: 'ServiceNow', ...makeBadge('ServiceNow', '#62D84E', '#0b3d1e') },
+      { name: 'Bizagi',     ...makeBadge('Bizagi', '#EA4B1F') },
+      { name: 'Camunda',    ...makeBadge('Camunda', '#FC5D0D') },
+      { name: 'CRM',        ...makeBadge('CRM', '#7c3aed') },
+      { name: 'ERP',        ...makeBadge('ERP', '#0e7490') },
+    ],
+  },
+  {
+    name: '🗄️ Datos y desarrollo',
+    badges: [
+      { name: 'SQL',       ...makeBadge('SQL', '#CC2927') },
+      { name: 'Python',    ...makeBadge('Python', '#3776AB') },
+      { name: 'Base Datos', ...makeBadge('🗄️ BD', '#334155') },
+      { name: 'API',       ...makeBadge('⚙️ API', '#1e293b') },
+      { name: 'GitHub',    ...makeBadge('GitHub', '#24292F') },
+      { name: 'AWS',       ...makeBadge('AWS', '#FF9900', '#1e293b') },
+      { name: 'Azure',     ...makeBadge('Azure', '#0078D4') },
+      { name: 'n8n',       ...makeBadge('n8n', '#EA4B71') },
+      { name: 'IA',        ...makeBadge('🤖 IA', '#6d28d9') },
+    ],
+  },
+  {
+    name: '💬 Comunicación',
+    badges: [
+      { name: 'WhatsApp', ...makeBadge('WhatsApp', '#25D366', '#0b3d1e') },
+      { name: 'Gmail',    ...makeBadge('Gmail', '#EA4335') },
+      { name: 'Email',    ...makeBadge('✉️ Email', '#b45309') },
+      { name: 'Slack',    ...makeBadge('Slack', '#4A154B') },
+      { name: 'Zoom',     ...makeBadge('Zoom', '#2D8CFF') },
+      { name: 'Llamada',  ...makeBadge('📞 Llamada', '#0369a1') },
+      { name: 'Web',      ...makeBadge('🌐 Web', '#0369a1') },
+    ],
+  },
+  {
+    name: '⭐ Marca propia',
+    badges: [
+      { name: 'Vanti',      ...makeBadge('Vanti', '#e11d48') },
+      { name: 'Vantilisto', ...makeBadge('Vantilisto', '#6366f1') },
+      { name: 'SmartFlow',  ...makeBadge('SmartFlow', '#4f46e5') },
+      { name: 'CAS',        ...makeBadge('CAS', '#0891b2') },
+      { name: 'BO',         ...makeBadge('BO', '#7c3aed') },
+    ],
+  },
 ]
 
 const RECENT_KEY = 'flow-media-recent'
@@ -72,9 +119,12 @@ const COLORS = [
   { name: 'Gris',     fill: '#f1f5f9', stroke: '#475569' },
 ]
 
-const EMOJIS = [
-  '✅','📋','📧','📞','💰','⚠️','🔁','👤','👥','🏦','📊','📁','🕐','🔔','💡','🚀',
-  '🔒','📝','🖥️','📱','🤝','🎯','⭐','❗','🔍','⚙️','📦','🧾','💳','🏷️',
+const EMOJI_CATEGORIES = [
+  { name: 'Estados',    list: ['✅','❌','⚠️','🔴','🟡','🟢','⏳','🔒','🔓','⛔','❗','❓'] },
+  { name: 'Acciones',   list: ['🔁','🔍','✍️','📤','📥','🖨️','✂️','🔧','⚙️','🚀','🧮','🗑️'] },
+  { name: 'Documentos', list: ['📄','📋','📁','🗂️','🧾','📑','📚','💳','🏷️','📦','✉️','📊'] },
+  { name: 'Personas',   list: ['👤','👥','🤝','🧑‍💻','👔','🙋','📞','💬','🗣️','🏦','🏢','🏭'] },
+  { name: 'Otros',      list: ['🕐','📅','⏰','💰','💵','📈','📉','🎯','⭐','💡','🔔','🌐'] },
 ]
 
 const TYPE_NAMES = {
@@ -601,10 +651,17 @@ export default function FlowEditorPage() {
                     <Smile size={12} /> Icono
                   </div>
                   {emojiOpen ? (
-                    <div className="grid grid-cols-8 gap-1 max-h-28 overflow-y-auto pr-1">
-                      {EMOJIS.map(e => (
-                        <button key={e} onClick={() => applyEmoji(e)}
-                          className="text-lg hover:scale-125 transition-transform">{e}</button>
+                    <div className="max-h-44 overflow-y-auto pr-1 space-y-1.5">
+                      {EMOJI_CATEGORIES.map(cat => (
+                        <div key={cat.name}>
+                          <p className="text-[9px] text-slate-500 uppercase font-semibold mb-0.5">{cat.name}</p>
+                          <div className="grid grid-cols-8 gap-1">
+                            {cat.list.map(e => (
+                              <button key={e} onClick={() => applyEmoji(e)}
+                                className="text-lg hover:scale-125 transition-transform">{e}</button>
+                            ))}
+                          </div>
+                        </div>
                       ))}
                     </div>
                   ) : (
@@ -658,20 +715,24 @@ export default function FlowEditorPage() {
               {selected ? 'Clic en un logo para añadirlo al elemento seleccionado' : '⚠️ Selecciona primero un elemento del diagrama'}
             </p>
 
-            {/* Sistemas empresariales */}
-            <p className="text-[11px] text-slate-400 font-medium mb-1.5">Sistemas</p>
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              {MEDIA_BADGES.map(b => (
-                <button
-                  key={b.name}
-                  onClick={() => attachMedia(b)}
-                  className="rounded-lg hover:scale-105 transition-transform ring-1 ring-slate-700 hover:ring-violet-500"
-                  title={b.name}
-                >
-                  <img src={b.src} alt={b.name} style={{ height: 24 }} className="rounded-lg" />
-                </button>
-              ))}
-            </div>
+            {/* Biblioteca de sistemas por categoría */}
+            {MEDIA_CATEGORIES.map(cat => (
+              <div key={cat.name} className="mb-3">
+                <p className="text-[11px] text-slate-400 font-medium mb-1.5">{cat.name}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {cat.badges.map(b => (
+                    <button
+                      key={b.name}
+                      onClick={() => attachMedia(b)}
+                      className="rounded-lg hover:scale-105 transition-transform ring-1 ring-slate-700 hover:ring-violet-500"
+                      title={b.name}
+                    >
+                      <img src={b.src} alt={b.name} style={{ height: 24 }} className="rounded-lg" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
 
             {/* Subir logo propio */}
             <button
