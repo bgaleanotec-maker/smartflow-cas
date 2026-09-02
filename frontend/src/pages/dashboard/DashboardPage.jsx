@@ -10,7 +10,7 @@ import {
   Tooltip, AreaChart, Area,
 } from 'recharts'
 import toast from 'react-hot-toast'
-import { dashboardAPI, challengesAPI, quickTasksAPI } from '../../services/api'
+import api, { dashboardAPI, challengesAPI, quickTasksAPI } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 
 import User360Drawer from '../../components/User360Drawer'
@@ -58,6 +58,14 @@ export default function DashboardPage() {
     queryKey: ['challenges-active'],
     queryFn: () => challengesAPI.list().then(r =>
       (r.data || []).filter(c => c.status === 'en_curso')
+    ),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: keyDates = [] } = useQuery({
+    queryKey: ['cronograma'],
+    queryFn: () => api.get('/cronograma').then(r =>
+      (r.data || []).filter(e => e.days_left >= 0).slice(0, 4)
     ),
     staleTime: 5 * 60 * 1000,
   })
@@ -133,6 +141,30 @@ export default function DashboardPage() {
             <ChevronRight size={18} className="text-amber-500 group-hover:translate-x-1 transition-transform" />
           </div>
         </button>
+      )}
+
+      {/* ── Próximas fechas clave (cronograma) ── */}
+      {keyDates.length > 0 && (
+        <div className="flex gap-2.5 overflow-x-auto pb-1">
+          {keyDates.map(e => (
+            <button
+              key={e.id}
+              onClick={() => navigate('/cronograma')}
+              className={`flex-shrink-0 flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl border transition-all hover:scale-[1.02] ${
+                e.is_today ? 'bg-red-950/40 border-red-800/60' : 'bg-slate-900 border-slate-800 hover:border-cyan-800/60'
+              }`}
+            >
+              <span className="text-xl">{e.emoji}</span>
+              <div className="text-left">
+                <p className="text-xs font-semibold text-white truncate max-w-[160px]">{e.title}</p>
+                <p className={`text-[10px] ${e.is_today ? 'text-red-300 font-bold' : 'text-slate-500'}`}>
+                  {e.is_today ? '🔥 HOY' : e.days_left === 1 ? 'Mañana' : `${e.date.slice(5)} · en ${e.days_left} días`}
+                  {e.time ? ` · ${e.time}` : ''}
+                </p>
+              </div>
+            </button>
+          ))}
+        </div>
       )}
 
       {/* ── KPIs ── */}

@@ -4,7 +4,7 @@ import ErrorBoundary from '../ErrorBoundary'
 import {
   LayoutDashboard, FolderKanban, Users, Settings, LogOut,
   ChevronLeft, ChevronRight, Menu, X, ListTodo, Plus,
-  Plane, Workflow, UserCircle2, Trophy, Factory, SquareKanban,
+  Plane, Workflow, UserCircle2, Trophy, Factory, SquareKanban, CalendarDays,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { usePomodoroStore } from '../../stores/pomodoroStore'
@@ -20,8 +20,12 @@ function QuickTaskCreateModal({ onClose }) {
   const canAssignOthers = VIEW_ALL_ROLES.includes(me?.role)
   const [form, setForm] = useState({
     title: '', business_id: '', priority: 'media', due_date: '',
-    assigned_to_id: '', estimated_minutes: '',
+    // Por defecto la tarea queda asignada a quien la crea
+    assigned_to_id: me?.id ? String(me.id) : '',
+    estimated_minutes: '',
   })
+  const [participants, setParticipants] = useState([])
+  const [showParticipants, setShowParticipants] = useState(false)
   const [businesses, setBusinesses] = useState([])
   const [users, setUsers] = useState([])
   const [saving, setSaving] = useState(false)
@@ -31,12 +35,14 @@ function QuickTaskCreateModal({ onClose }) {
       const data = Array.isArray(r.data) ? r.data : r.data?.items || []
       setBusinesses(data)
     }).catch(() => {})
-    if (canAssignOthers) {
-      usersAPI.list({ is_active: true, limit: 100 }).then(r => {
-        setUsers(Array.isArray(r.data) ? r.data : r.data?.items || [])
-      }).catch(() => {})
-    }
-  }, [canAssignOthers])
+    // Lista de usuarios: para reasignar (roles con permiso) y para participantes (todos)
+    usersAPI.list({ is_active: true, limit: 100 }).then(r => {
+      setUsers(Array.isArray(r.data) ? r.data : r.data?.items || [])
+    }).catch(() => {})
+  }, [])
+
+  const toggleParticipant = (uid) => setParticipants(prev =>
+    prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -46,7 +52,9 @@ function QuickTaskCreateModal({ onClose }) {
       await quickTasksAPI.create({
         title: form.title.trim(),
         business_id: form.business_id ? parseInt(form.business_id) : null,
-        assigned_to_id: form.assigned_to_id ? parseInt(form.assigned_to_id) : null,
+        // Si no se elige a nadie, queda asignada al creador
+        assigned_to_id: form.assigned_to_id ? parseInt(form.assigned_to_id) : me?.id || null,
+        participants: participants.length > 0 ? participants : null,
         priority: form.priority,
         estimated_minutes: form.estimated_minutes ? parseInt(form.estimated_minutes) : null,
         due_date: form.due_date || null,
@@ -104,15 +112,46 @@ function QuickTaskCreateModal({ onClose }) {
               </select>
             </div>
           )}
-          {users.length > 0 && (
+          {/* Asignar: por defecto yo; roles con permiso pueden reasignar */}
+          {canAssignOthers ? (
             <div>
               <label className="label">Asignar a</label>
               <select value={form.assigned_to_id} onChange={e => setForm(f => ({ ...f, assigned_to_id: e.target.value }))} className="input">
-                <option value="">Sin asignar</option>
-                {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                {me && <option value={me.id}>🙋 Yo — {me.full_name}</option>}
+                {users.filter(u => u.id !== me?.id).map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
               </select>
             </div>
+          ) : (
+            <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
+              🙋 La tarea quedará asignada a ti ({me?.full_name?.split(' ')[0]})
+            </p>
           )}
+
+          {/* Participantes opcionales */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowParticipants(o => !o)}
+              className="text-xs text-slate-400 hover:text-brand-300 transition-colors"
+            >
+              {showParticipants ? '▾' : '▸'} Participantes {participants.length > 0 && <span className="text-brand-400">({participants.length})</span>}
+            </button>
+            {showParticipants && (
+              <div className="mt-1.5 max-h-28 overflow-y-auto rounded-lg border border-slate-700 bg-slate-800/40 p-2 space-y-0.5">
+                {users.filter(u => u.id !== me?.id).map(u => (
+                  <label key={u.id} className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer hover:bg-slate-700/40 rounded px-1.5 py-1">
+                    <input
+                      type="checkbox"
+                      checked={participants.includes(u.id)}
+                      onChange={() => toggleParticipant(u.id)}
+                      className="rounded accent-brand-500"
+                    />
+                    {u.full_name}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
           <div>
             <label className="label">Tiempo estimado (min)</label>
             <input
@@ -145,6 +184,7 @@ const navItems = [
   { to: '/planta',        icon: Factory,         label: 'Planta',         roles: VIEW_ALL_ROLES },
   { to: '/mi-espacio',    icon: UserCircle2,     label: 'Mi Espacio' },
   { to: '/tablero',       icon: SquareKanban,    label: 'Mi Tablero' },
+  { to: '/cronograma',    icon: CalendarDays,    label: 'Cronograma' },
   { to: '/torre-control', icon: Plane,           label: 'Recurrentes' },
   { to: '/quick-tasks',   icon: ListTodo,        label: 'Tareas Rápidas' },
   { to: '/projects',      icon: FolderKanban,    label: 'Backlog / Proyectos' },

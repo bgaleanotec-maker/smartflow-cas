@@ -313,7 +313,9 @@ function TaskFormFields({ form, setForm, businesses, users, activityTypes, isEdi
 const blankForm = (user, parentTask) => ({
   title: '', description: '',
   business_id: parentTask?.business_id ? String(parentTask.business_id) : '',
-  assigned_to_id: '', priority: 'media', category: 'general',
+  // Por defecto la tarea queda asignada a quien la crea
+  assigned_to_id: user?.id ? String(user.id) : '',
+  priority: 'media', category: 'general',
   estimated_minutes: '', due_date: '', meeting_start: '', meeting_end: '',
   team_scope: parentTask?.team_scope || user?.team || '',
   activity_type: '', participants: [],
