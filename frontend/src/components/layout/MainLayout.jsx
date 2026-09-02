@@ -5,6 +5,7 @@ import {
   LayoutDashboard, FolderKanban, Users, Settings, LogOut,
   ChevronLeft, ChevronRight, Menu, X, ListTodo, Plus,
   Plane, Workflow, UserCircle2, Trophy, Factory, SquareKanban, CalendarDays,
+  NotebookPen,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { usePomodoroStore } from '../../stores/pomodoroStore'
@@ -185,6 +186,7 @@ const navItems = [
   { to: '/mi-espacio',    icon: UserCircle2,     label: 'Mi Espacio' },
   { to: '/tablero',       icon: SquareKanban,    label: 'Mi Tablero' },
   { to: '/cronograma',    icon: CalendarDays,    label: 'Cronograma' },
+  { to: '/notas',         icon: NotebookPen,     label: 'Notas' },
   { to: '/torre-control', icon: Plane,           label: 'Recurrentes' },
   { to: '/quick-tasks',   icon: ListTodo,        label: 'Tareas Rápidas' },
   { to: '/projects',      icon: FolderKanban,    label: 'Backlog / Proyectos' },

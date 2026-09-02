@@ -19,6 +19,7 @@ import RetosPage from './pages/retos/RetosPage'
 import PlantaPage from './pages/planta/PlantaPage'
 import TableroPage from './pages/tablero/TableroPage'
 import CronogramaPage from './pages/cronograma/CronogramaPage'
+import NotasPage from './pages/notas/NotasPage'
 import PomodoroPage from './pages/pomodoro/PomodoroPage'
 import UsersPage from './pages/admin/UsersPage'
 import AdminPage from './pages/admin/AdminPage'
@@ -97,6 +98,7 @@ export default function App() {
           />
           <Route path="tablero" element={<TableroPage />} />
           <Route path="cronograma" element={<CronogramaPage />} />
+          <Route path="notas" element={<NotasPage />} />
           {/* Pomodoro: accesible como timer, fuera del menú principal */}
           <Route path="pomodoro" element={<PomodoroPage />} />
           <Route
