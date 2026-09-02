@@ -282,6 +282,9 @@ async def _run_column_migrations():
             # Avance ponderado (2026-07-26)
             "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS weight INTEGER DEFAULT 1",
             "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS progress_pct INTEGER DEFAULT 0",
+            # Cronograma: recurrencia flexible (2026-07-27)
+            "ALTER TABLE key_dates ADD COLUMN IF NOT EXISTS recurrence VARCHAR(20) DEFAULT 'puntual'",
+            "UPDATE key_dates SET recurrence = 'mensual' WHERE repeat_monthly = TRUE AND recurrence = 'puntual'",
             # Bloqueos y no-entrega en tareas de proyecto (QA 2026-07)
             "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS difficulty TEXT",
             "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS will_not_deliver BOOLEAN DEFAULT FALSE",

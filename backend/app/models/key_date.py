@@ -17,7 +17,9 @@ class KeyDate(Base):
     time: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)      # HH:MM
     category: Mapped[str] = mapped_column(String(30), default="otro")          # junta | comite | liquidacion | entrega | capacitacion | otro
     emoji: Mapped[str] = mapped_column(String(10), default="📌")
-    repeat_monthly: Mapped[bool] = mapped_column(Boolean, default=False)       # mismo día cada mes (ej. liquidación el 15)
+    repeat_monthly: Mapped[bool] = mapped_column(Boolean, default=False)       # legado — usar recurrence
+    # puntual | semanal | quincenal | mensual | bimestral | trimestral | semestral | anual
+    recurrence: Mapped[str] = mapped_column(String(20), default="puntual")
 
     business_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("businesses.id"), nullable=True)
     created_by_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)

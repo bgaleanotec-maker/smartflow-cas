@@ -15,6 +15,9 @@ from app.models.key_date import KeyDate
 router = APIRouter(prefix="/cronograma", tags=["Cronograma"])
 
 
+RECURRENCES = ("puntual", "semanal", "quincenal", "mensual", "bimestral", "trimestral", "semestral", "anual")
+
+
 class KeyDateCreate(BaseModel):
     title: str
     description: Optional[str] = None
@@ -22,7 +25,8 @@ class KeyDateCreate(BaseModel):
     time: Optional[str] = None
     category: str = "otro"
     emoji: str = "📌"
-    repeat_monthly: bool = False
+    recurrence: str = "puntual"
+    repeat_monthly: bool = False   # legado
     business_id: Optional[int] = None
 
 
@@ -33,28 +37,43 @@ class KeyDateUpdate(BaseModel):
     time: Optional[str] = None
     category: Optional[str] = None
     emoji: Optional[str] = None
-    repeat_monthly: Optional[bool] = None
+    recurrence: Optional[str] = None
     business_id: Optional[int] = None
     is_active: Optional[bool] = None
 
 
-def _next_occurrence(base: date, today: date) -> date:
-    """Para eventos mensuales: la próxima ocurrencia del mismo día del mes."""
-    day = base.day
-    y, m = today.year, today.month
-    for _ in range(24):
-        last = calendar.monthrange(y, m)[1]
-        candidate = date(y, m, min(day, last))
+def _add_months(base: date, day: int, months_ahead: int) -> date:
+    y = base.year + (base.month - 1 + months_ahead) // 12
+    m = (base.month - 1 + months_ahead) % 12 + 1
+    return date(y, m, min(day, calendar.monthrange(y, m)[1]))
+
+
+def _next_occurrence(base: date, today: date, recurrence: str) -> date:
+    """Próxima ocurrencia según la frecuencia. Puntual: la fecha tal cual."""
+    if recurrence in ("puntual", None, "") or base >= today:
+        return base
+
+    if recurrence in ("semanal", "quincenal"):
+        step = 7 if recurrence == "semanal" else 14
+        diff = (today - base).days
+        k = (diff + step - 1) // step
+        return base + timedelta(days=k * step)
+
+    month_steps = {"mensual": 1, "bimestral": 2, "trimestral": 3, "semestral": 6, "anual": 12}
+    step = month_steps.get(recurrence)
+    if not step:
+        return base
+    for i in range(0, 400, step):
+        candidate = _add_months(base, base.day, i)
         if candidate >= today:
             return candidate
-        m += 1
-        if m > 12:
-            m, y = 1, y + 1
     return base
 
 
 def _serialize(k: KeyDate, today: date) -> dict:
-    effective = _next_occurrence(k.date, today) if k.repeat_monthly else k.date
+    # compat: filas viejas con repeat_monthly sin recurrence
+    recurrence = k.recurrence or ("mensual" if k.repeat_monthly else "puntual")
+    effective = _next_occurrence(k.date, today, recurrence)
     days_left = (effective - today).days
     return {
         "id": k.id,
@@ -65,7 +84,8 @@ def _serialize(k: KeyDate, today: date) -> dict:
         "time": k.time,
         "category": k.category,
         "emoji": k.emoji,
-        "repeat_monthly": k.repeat_monthly,
+        "recurrence": recurrence,
+        "repeat_monthly": recurrence == "mensual",
         "business": k.business.name if k.business else None,
         "business_color": k.business.color if k.business else None,
         "business_id": k.business_id,
@@ -96,7 +116,13 @@ async def list_key_dates(db: DB, current_user: CurrentUser, include_past: bool =
 
 @router.post("", status_code=201)
 async def create_key_date(payload: KeyDateCreate, db: DB, admin: LeaderOrAdmin):
-    k = KeyDate(**payload.model_dump(), created_by_id=admin.id)
+    data = payload.model_dump()
+    if data.get("repeat_monthly") and data.get("recurrence") == "puntual":
+        data["recurrence"] = "mensual"   # compat con clientes viejos
+    if data.get("recurrence") not in RECURRENCES:
+        raise HTTPException(400, f"Recurrencia inválida. Opciones: {', '.join(RECURRENCES)}")
+    data["repeat_monthly"] = data["recurrence"] == "mensual"
+    k = KeyDate(**data, created_by_id=admin.id)
     db.add(k)
     await db.commit()
     await db.refresh(k)

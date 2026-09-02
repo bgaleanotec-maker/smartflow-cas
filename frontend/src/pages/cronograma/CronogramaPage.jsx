@@ -25,6 +25,18 @@ export const CATEGORIES = {
 
 const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
+const RECURRENCES = [
+  { value: 'puntual',    label: '📍 Puntual (una sola vez)' },
+  { value: 'semanal',    label: '🔁 Semanal' },
+  { value: 'quincenal',  label: '🔁 Quincenal' },
+  { value: 'mensual',    label: '🔁 Mensual (mismo día)' },
+  { value: 'bimestral',  label: '🔁 Bimestral' },
+  { value: 'trimestral', label: '🔁 Trimestral' },
+  { value: 'semestral',  label: '🔁 Semestral' },
+  { value: 'anual',      label: '🔁 Anual' },
+]
+const REC_LABEL = Object.fromEntries(RECURRENCES.map(r => [r.value, r.label.replace('🔁 ', '').replace('📍 ', '').toLowerCase()]))
+
 function countdown(d) {
   if (d === 0) return { text: '🔥 HOY', cls: 'bg-red-500/20 text-red-300 border-red-500/50 animate-pulse font-bold' }
   if (d === 1) return { text: 'Mañana', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/40 font-semibold' }
@@ -41,7 +53,7 @@ function EventModal({ event, onClose }) {
     date: event?.original_date || event?.date || '',
     time: event?.time || '',
     category: event?.category || 'junta',
-    repeat_monthly: event?.repeat_monthly || false,
+    recurrence: event?.recurrence || 'puntual',
     business_id: event?.business_id ? String(event.business_id) : '',
   })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -60,7 +72,7 @@ function EventModal({ event, onClose }) {
         time: form.time || null,
         category: form.category,
         emoji: CATEGORIES[form.category]?.emoji || '📌',
-        repeat_monthly: form.repeat_monthly,
+        recurrence: form.recurrence,
         business_id: form.business_id ? parseInt(form.business_id) : null,
       }
       return event ? cronogramaAPI.update(event.id, payload) : cronogramaAPI.create(payload)
@@ -113,11 +125,17 @@ function EventModal({ event, onClose }) {
               <input type="time" value={form.time} onChange={e => set('time', e.target.value)} className="input" />
             </div>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={form.repeat_monthly} onChange={e => set('repeat_monthly', e.target.checked)}
-              className="w-4 h-4 rounded accent-cyan-500" />
-            <span className="text-sm text-slate-300">🔁 Se repite el mismo día cada mes</span>
-          </label>
+          <div>
+            <label className="label">Repetición</label>
+            <select value={form.recurrence} onChange={e => set('recurrence', e.target.value)} className="input">
+              {RECURRENCES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+            {form.recurrence !== 'puntual' && (
+              <p className="text-[10px] text-cyan-400/70 mt-1">
+                El cronograma mostrará siempre la próxima ocurrencia automáticamente
+              </p>
+            )}
+          </div>
           <div>
             <label className="label">Negocio (opcional)</label>
             <select value={form.business_id} onChange={e => set('business_id', e.target.value)} className="input">
@@ -230,8 +248,10 @@ export default function CronogramaPage() {
                         {e.time && (
                           <span className="text-[10px] text-slate-400 flex items-center gap-0.5"><Clock size={9} /> {e.time}</span>
                         )}
-                        {e.repeat_monthly && (
-                          <span className="text-[10px] text-cyan-400/80 flex items-center gap-0.5"><Repeat size={9} /> cada mes</span>
+                        {e.recurrence && e.recurrence !== 'puntual' && (
+                          <span className="text-[10px] text-cyan-400/80 flex items-center gap-0.5">
+                            <Repeat size={9} /> {REC_LABEL[e.recurrence] || e.recurrence}
+                          </span>
                         )}
                         {e.business && (
                           <span className="text-[10px]" style={{ color: e.business_color || '#94a3b8' }}>● {e.business}</span>
