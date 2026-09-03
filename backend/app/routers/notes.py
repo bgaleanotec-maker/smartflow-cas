@@ -146,6 +146,64 @@ async def delete_space(space_id: int, db: DB, current_user: CurrentUser):
     return {"ok": True, "notas_movidas": len(notes)}
 
 
+# ─── Grafo (estilo Obsidian): [[wiki-links]] + #tags ─────────────────────────
+
+@router.get("/graph")
+async def notes_graph(db: DB, current_user: CurrentUser, space_id: Optional[int] = None):
+    """Grafo de conocimiento del usuario: nodos = notas y #tags;
+    aristas = [[enlaces]] entre notas y pertenencia a tags."""
+    import re
+
+    q = select(Note).where(Note.user_id == current_user.id)
+    if space_id:
+        q = q.where(Note.space_id == space_id)
+    notes = (await db.execute(q)).scalars().all()
+
+    by_title = {n.title.strip().lower(): n.id for n in notes}
+    nodes = [
+        {"id": f"n{n.id}", "note_id": n.id, "label": n.title, "type": "note", "space_id": n.space_id}
+        for n in notes
+    ]
+    edges = []
+    tags = {}
+
+    link_re = re.compile(r"\[\[([^\[\]|#]+?)(?:\|[^\[\]]*)?\]\]")
+    tag_re = re.compile(r"(?:^|\s)#([\wáéíóúñÁÉÍÓÚÑ][\w\-áéíóúñÁÉÍÓÚÑ]{1,40})")
+
+    for n in notes:
+        content = n.content or ""
+        # [[Wiki-links]] → arista nota→nota (si el destino existe)
+        for m in link_re.finditer(content):
+            target = m.group(1).strip().lower()
+            tid = by_title.get(target)
+            if tid and tid != n.id:
+                edges.append({"from": f"n{n.id}", "to": f"n{tid}", "type": "link"})
+        # #tags → nodo tag + arista
+        for m in tag_re.finditer(content):
+            tag = m.group(1).lower()
+            key = f"t_{tag}"
+            if key not in tags:
+                tags[key] = {"id": key, "label": f"#{tag}", "type": "tag"}
+            edges.append({"from": f"n{n.id}", "to": key, "type": "tag"})
+
+    nodes.extend(tags.values())
+    return {"nodes": nodes, "edges": edges, "notes_count": len(notes), "tags_count": len(tags)}
+
+
+@router.get("/resolve")
+async def resolve_wikilink(title: str, db: DB, current_user: CurrentUser):
+    """Resuelve un [[wiki-link]] por título (case-insensitive). 404 si no existe."""
+    n = (await db.execute(
+        select(Note).where(
+            Note.user_id == current_user.id,
+            sa_func.lower(Note.title) == title.strip().lower(),
+        )
+    )).scalar_one_or_none()
+    if not n:
+        raise HTTPException(404, "No existe una nota con ese título")
+    return {"id": n.id, "title": n.title}
+
+
 # ─── Notas ───────────────────────────────────────────────────────────────────
 
 @router.get("")

@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import {
   NotebookPen, Plus, X, Search, Loader2, Check, Pin, Trash2,
   Mic, Eye, Pencil, Bot, Sparkles, FolderOpen, ChevronLeft,
+  Network, Link2, ArrowDownToLine, RefreshCw,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api, { projectsAPI } from '../../services/api'
@@ -22,6 +23,159 @@ const notesAPI = {
     headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000,
   }),
   ask: (d) => api.post('/notes/ask', d, { timeout: 90000 }),
+  graph: (params = {}) => api.get('/notes/graph', { params }),
+  resolve: (title) => api.get('/notes/resolve', { params: { title } }),
+}
+
+// ─── Wiki-links y #tags en el markdown (estilo Obsidian) ─────────────────────
+function preprocessObsidian(md) {
+  if (!md) return md
+  return md
+    .replace(/\[\[([^\[\]|#]+?)(?:\|([^\[\]]*))?\]\]/g, (_, target, alias) =>
+      `[${(alias || target).trim()}](#wikilink=${encodeURIComponent(target.trim())})`)
+    .replace(/(^|\s)#([\wáéíóúñÁÉÍÓÚÑ][\w\-áéíóúñÁÉÍÓÚÑ]{1,40})/g,
+      (_, pre, tag) => `${pre}[#${tag}](#notetag=${encodeURIComponent(tag)})`)
+}
+
+// ─── Grafo de conocimiento (fuerzas, estilo Obsidian) ────────────────────────
+function computeLayout(nodes, edges, W, H) {
+  const pos = new Map()
+  const idx = new Map(nodes.map((n, i) => [n.id, i]))
+  nodes.forEach((n, i) => {
+    const a = (i / Math.max(1, nodes.length)) * Math.PI * 2
+    pos.set(n.id, {
+      x: W / 2 + Math.cos(a) * Math.min(W, H) * 0.32 + (Math.random() - 0.5) * 40,
+      y: H / 2 + Math.sin(a) * Math.min(W, H) * 0.32 + (Math.random() - 0.5) * 40,
+      vx: 0, vy: 0,
+    })
+  })
+  const links = edges.filter(e => idx.has(e.from) && idx.has(e.to))
+  for (let iter = 0; iter < 260; iter++) {
+    const t = 1 - iter / 260
+    // repulsión
+    for (const a of nodes) {
+      const pa = pos.get(a.id)
+      for (const b of nodes) {
+        if (a.id === b.id) continue
+        const pb = pos.get(b.id)
+        let dx = pa.x - pb.x, dy = pa.y - pb.y
+        let d2 = dx * dx + dy * dy
+        if (d2 < 1) d2 = 1
+        const f = 2600 / d2
+        pa.vx += dx * f * 0.01
+        pa.vy += dy * f * 0.01
+      }
+      // gravedad al centro
+      pa.vx += (W / 2 - pa.x) * 0.004
+      pa.vy += (H / 2 - pa.y) * 0.004
+    }
+    // resortes
+    for (const e of links) {
+      const pa = pos.get(e.from), pb = pos.get(e.to)
+      const dx = pb.x - pa.x, dy = pb.y - pa.y
+      const d = Math.sqrt(dx * dx + dy * dy) || 1
+      const f = (d - 110) * 0.012
+      pa.vx += (dx / d) * f; pa.vy += (dy / d) * f
+      pb.vx -= (dx / d) * f; pb.vy -= (dy / d) * f
+    }
+    for (const n of nodes) {
+      const p = pos.get(n.id)
+      p.x += Math.max(-14, Math.min(14, p.vx)) * t
+      p.y += Math.max(-14, Math.min(14, p.vy)) * t
+      p.vx *= 0.6; p.vy *= 0.6
+      p.x = Math.max(30, Math.min(W - 30, p.x))
+      p.y = Math.max(24, Math.min(H - 24, p.y))
+    }
+  }
+  return pos
+}
+
+function GraphView({ spaceId, onOpenNote }) {
+  const [data, setData] = useState(null)
+  const [view, setView] = useState({ x: 0, y: 0, k: 1 })
+  const dragRef = useRef(null)
+  const W = 1200, H = 800
+
+  const load = useCallback(() => {
+    notesAPI.graph(spaceId ? { space_id: spaceId } : {}).then(r => setData(r.data)).catch(() => {})
+  }, [spaceId])
+  useEffect(() => { load() }, [load])
+
+  const layout = data ? computeLayout(data.nodes, data.edges, W, H) : null
+  const degree = {}
+  data?.edges.forEach(e => {
+    degree[e.from] = (degree[e.from] || 0) + 1
+    degree[e.to] = (degree[e.to] || 0) + 1
+  })
+
+  const onWheel = (e) => {
+    const k = Math.max(0.4, Math.min(3, view.k * (e.deltaY < 0 ? 1.12 : 0.9)))
+    setView(v => ({ ...v, k }))
+  }
+  const onDown = (e) => { dragRef.current = { sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y } }
+  const onMove = (e) => {
+    if (!dragRef.current) return
+    setView(v => ({ ...v, x: dragRef.current.ox + (e.clientX - dragRef.current.sx) / v.k, y: dragRef.current.oy + (e.clientY - dragRef.current.sy) / v.k }))
+  }
+  const onUp = () => { dragRef.current = null }
+
+  if (!data) {
+    return <div className="flex-1 flex items-center justify-center"><Loader2 size={24} className="animate-spin text-emerald-400" /></div>
+  }
+  if (data.nodes.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-center">
+        <div>
+          <Network size={40} className="mx-auto text-slate-700 mb-3" />
+          <p className="text-slate-500 text-sm">Tu grafo está vacío</p>
+          <p className="text-slate-600 text-xs mt-1">Escribe notas con [[enlaces]] y #tags y aparecerán conectadas aquí</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex-1 relative overflow-hidden bg-slate-950 select-none">
+      <div className="absolute top-3 left-3 z-10 flex items-center gap-2 text-[10px] text-slate-500 bg-slate-900/80 rounded-lg px-2.5 py-1.5 border border-slate-800">
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-400" /> {data.notes_count} notas</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400" /> {data.tags_count} tags</span>
+        <button onClick={load} className="text-slate-400 hover:text-white ml-1" title="Actualizar"><RefreshCw size={11} /></button>
+      </div>
+      <p className="absolute bottom-2 left-3 z-10 text-[9px] text-slate-600">Rueda = zoom · arrastra = mover · clic en nodo = abrir nota</p>
+      <svg
+        viewBox={`0 0 ${W} ${H}`} className="w-full h-full cursor-grab active:cursor-grabbing"
+        onWheel={onWheel} onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
+      >
+        <g transform={`translate(${W / 2},${H / 2}) scale(${view.k}) translate(${-W / 2 + view.x},${-H / 2 + view.y})`}>
+          {data.edges.map((e, i) => {
+            const a = layout.get(e.from), b = layout.get(e.to)
+            if (!a || !b) return null
+            return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+              stroke={e.type === 'tag' ? '#14532d' : '#334155'} strokeWidth={0.8} opacity={0.55} />
+          })}
+          {data.nodes.map(n => {
+            const p = layout.get(n.id)
+            const r = Math.min(26, 7 + (degree[n.id] || 0) * 2.2)
+            const isTag = n.type === 'tag'
+            return (
+              <g key={n.id} transform={`translate(${p.x},${p.y})`}
+                className={n.note_id ? 'cursor-pointer' : ''}
+                onClick={() => n.note_id && onOpenNote(n.note_id)}>
+                <circle r={r} fill={isTag ? '#10b981' : '#94a3b8'}
+                  stroke={isTag ? '#065f46' : '#475569'} strokeWidth={1.5}
+                  opacity={0.92} />
+                <text y={r + 13} textAnchor="middle"
+                  fill={isTag ? '#6ee7b7' : '#cbd5e1'} fontSize={11.5}
+                  style={{ pointerEvents: 'none' }}>
+                  {n.label.length > 26 ? n.label.slice(0, 25) + '…' : n.label}
+                </text>
+              </g>
+            )
+          })}
+        </g>
+      </svg>
+    </div>
+  )
 }
 
 const SPACE_EMOJIS = ['📓', '📁', '🚀', '💡', '🏦', '📊', '🧠', '🎯', '🔧', '📌', '⭐', '🗂️']
@@ -107,7 +261,7 @@ function useDictation(onText) {
 }
 
 // ─── Panel IA ────────────────────────────────────────────────────────────────
-function AiPanel({ noteId, spaceId, noteTitle, onClose }) {
+function AiPanel({ noteId, spaceId, noteTitle, onClose, onInsert }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [thinking, setThinking] = useState(false)
@@ -140,8 +294,9 @@ function AiPanel({ noteId, spaceId, noteTitle, onClose }) {
 
   const QUICK = [
     { label: '📝 Resumir', q: 'Haz un resumen claro y corto' },
+    { label: '🪄 Dar formato .md', q: 'Reescribe el contenido con estructura markdown impecable: títulos ##, listas, checklists - [ ], negritas en lo clave. Conserva TODO el contenido. Devuelve SOLO el markdown, sin comentarios.' },
+    { label: '✅ Pendientes', q: 'Extrae todos los pendientes, acuerdos y compromisos como checklist markdown - [ ]' },
     { label: '🔍 Analizar', q: 'Analiza el contenido: temas clave, riesgos y oportunidades' },
-    { label: '✅ Pendientes', q: 'Extrae todos los pendientes, acuerdos y compromisos como checklist' },
     { label: '🧠 Recordar', q: '¿Qué datos importantes debo recordar de aquí?' },
   ]
 
@@ -183,9 +338,23 @@ function AiPanel({ noteId, spaceId, noteTitle, onClose }) {
               m.role === 'user' ? 'bg-violet-600 text-white rounded-br-sm' : 'bg-slate-800 text-slate-200 rounded-bl-sm border border-slate-700/60'
             }`}>
               {m.role === 'model'
-                ? <article className="prose prose-invert prose-xs max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:text-white prose-code:text-amber-300">
-                    <ReactMarkdown>{m.content}</ReactMarkdown>
-                  </article>
+                ? <>
+                    <article className="prose prose-invert prose-xs max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:text-white prose-code:text-amber-300">
+                      <ReactMarkdown>{m.content}</ReactMarkdown>
+                    </article>
+                    {onInsert && !m.content.startsWith('⚠️') && (
+                      <div className="flex gap-1.5 mt-1.5 pt-1.5 border-t border-slate-700/50">
+                        <button onClick={() => onInsert(m.content, 'append')}
+                          className="flex items-center gap-1 text-[10px] text-emerald-300 hover:text-emerald-200">
+                          <ArrowDownToLine size={10} /> Insertar en la nota
+                        </button>
+                        <button onClick={() => onInsert(m.content, 'replace')}
+                          className="flex items-center gap-1 text-[10px] text-amber-300/80 hover:text-amber-200 ml-2">
+                          <RefreshCw size={10} /> Reemplazar nota
+                        </button>
+                      </div>
+                    )}
+                  </>
                 : m.content}
             </div>
           </div>
@@ -220,6 +389,8 @@ export default function NotasPage() {
   const [content, setContent] = useState('')
   const [saveState, setSaveState] = useState('saved')
   const [mobilePane, setMobilePane] = useState('list')  // list | editor (móvil)
+  const [view, setView] = useState('editor')            // editor | graph
+  const [linkPickerOpen, setLinkPickerOpen] = useState(false)
   const saveTimer = useRef(null)
   const textareaRef = useRef(null)
 
@@ -322,6 +493,82 @@ export default function NotasPage() {
     if (spaceId === s.id) setSpaceId(null)
   }
 
+  const renameSpace = async (s) => {
+    const name = window.prompt('Nuevo nombre del espacio (ej: "10 - Legal"):', s.name)
+    if (!name?.trim() || name === s.name) return
+    await notesAPI.updateSpace(s.id, { name: name.trim() })
+    qc.invalidateQueries({ queryKey: ['note-spaces'] })
+  }
+
+  // IA → aplicar respuesta directamente a la nota
+  const applyAiText = useCallback((text, mode) => {
+    setContent(prev => {
+      const next = mode === 'replace' ? text : (prev ? prev.replace(/\s*$/, '') + '\n\n' + text : text)
+      scheduleSave(title, next)
+      return next
+    })
+    setMode('edit')
+    toast.success(mode === 'replace' ? '↺ Nota reemplazada con la versión de la IA' : '⤵ Insertado en la nota')
+  }, [scheduleSave, title])
+
+  // Clic en [[wiki-link]] del preview: abrir la nota (o crearla si no existe)
+  const openWikiLink = useCallback(async (target) => {
+    try {
+      const res = await notesAPI.resolve(target)
+      setNoteId(res.data.id)
+      setMode('preview')
+    } catch {
+      if (confirm(`La nota "${target}" no existe. ¿Crearla?`)) {
+        const res = await notesAPI.create({ title: target, content: '', space_id: spaceId })
+        qc.invalidateQueries({ queryKey: ['notes'] })
+        setNoteId(res.data.id)
+        setMode('edit')
+      }
+    }
+  }, [spaceId, qc])
+
+  const insertWikiLink = (n) => {
+    const text = `[[${n.title}]]`
+    setContent(prev => {
+      const ta = textareaRef.current
+      let next
+      if (ta && mode === 'edit') {
+        const s = ta.selectionStart
+        next = prev.slice(0, s) + text + prev.slice(ta.selectionEnd)
+        setTimeout(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = s + text.length }, 0)
+      } else {
+        next = (prev || '') + text
+      }
+      scheduleSave(title, next)
+      return next
+    })
+    setLinkPickerOpen(false)
+  }
+
+  const mdComponents = {
+    a: ({ href, children }) => {
+      if (href?.startsWith('#wikilink=')) {
+        const target = decodeURIComponent(href.slice(10))
+        return (
+          <a onClick={e => { e.preventDefault(); openWikiLink(target) }}
+            className="text-cyan-300 underline decoration-dotted cursor-pointer hover:text-cyan-200">
+            {children}
+          </a>
+        )
+      }
+      if (href?.startsWith('#notetag=')) {
+        const tag = decodeURIComponent(href.slice(9))
+        return (
+          <a onClick={e => { e.preventDefault(); setSearch('#' + tag); setMobilePane('list') }}
+            className="text-emerald-300 no-underline cursor-pointer bg-emerald-500/10 px-1 rounded hover:bg-emerald-500/20">
+            {children}
+          </a>
+        )
+      }
+      return <a href={href} target="_blank" rel="noreferrer">{children}</a>
+    },
+  }
+
   const currentNote = notes.find(n => n.id === noteId)
 
   return (
@@ -336,20 +583,29 @@ export default function NotasPage() {
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
           <button
-            onClick={() => { setSpaceId(null); setNoteId(null) }}
-            className={`w-full text-left px-2.5 py-2 rounded-lg text-xs transition-colors ${!spaceId ? 'bg-amber-600/20 text-amber-200 font-medium' : 'text-slate-400 hover:bg-slate-800'}`}
+            onClick={() => { setSpaceId(null); setNoteId(null); setView('editor') }}
+            className={`w-full text-left px-2.5 py-2 rounded-lg text-xs transition-colors ${!spaceId && view === 'editor' ? 'bg-amber-600/20 text-amber-200 font-medium' : 'text-slate-400 hover:bg-slate-800'}`}
           >
             🗒️ Todas las notas
+          </button>
+          <button
+            onClick={() => { setView('graph'); setMobilePane('editor') }}
+            className={`w-full text-left px-2.5 py-2 rounded-lg text-xs transition-colors flex items-center gap-1.5 ${view === 'graph' ? 'bg-emerald-600/20 text-emerald-200 font-medium' : 'text-slate-400 hover:bg-slate-800'}`}
+          >
+            <Network size={12} /> Grafo {spaceId ? '(espacio)' : ''}
           </button>
           {spaces.map(s => (
             <div key={s.id} className={`group flex items-center rounded-lg ${spaceId === s.id ? 'bg-amber-600/20' : 'hover:bg-slate-800'}`}>
               <button
-                onClick={() => { setSpaceId(s.id); setNoteId(null) }}
+                onClick={() => { setSpaceId(s.id); setNoteId(null); setView('editor') }}
                 className={`flex-1 text-left px-2.5 py-2 text-xs truncate ${spaceId === s.id ? 'text-amber-200 font-medium' : 'text-slate-400'}`}
                 title={s.project_name ? `Vinculado a ${s.project_name}` : s.name}
               >
                 {s.emoji} {s.name}
                 <span className="text-slate-600 ml-1">{s.notes_count}</span>
+              </button>
+              <button onClick={() => renameSpace(s)} className="p-1 text-slate-700 hover:text-amber-300 opacity-0 group-hover:opacity-100" title="Renombrar">
+                <Pencil size={10} />
               </button>
               <button onClick={() => deleteSpace(s)} className="p-1 text-slate-700 hover:text-red-400 opacity-0 group-hover:opacity-100">
                 <Trash2 size={10} />
@@ -433,9 +689,14 @@ export default function NotasPage() {
         </div>
       </div>
 
-      {/* ── Panel 3: Editor ── */}
+      {/* ── Panel 3: Editor / Grafo ── */}
       <div className={`flex-1 min-w-0 flex-col ${mobilePane === 'editor' ? 'flex' : 'hidden lg:flex'}`}>
-        {!noteId ? (
+        {view === 'graph' ? (
+          <GraphView
+            spaceId={spaceId}
+            onOpenNote={(id) => { setNoteId(id); setView('editor'); setMode('preview') }}
+          />
+        ) : !noteId ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <NotebookPen size={40} className="mx-auto text-slate-700 mb-3" />
@@ -470,6 +731,29 @@ export default function NotasPage() {
                 {transcribing ? <Loader2 size={12} className="animate-spin" /> : <Mic size={12} />}
                 {recording ? 'Detener' : transcribing ? 'Transcribiendo…' : 'Dictar'}
               </button>
+
+              {/* Insertar [[wiki-link]] */}
+              <div className="relative">
+                <button onClick={() => setLinkPickerOpen(o => !o)}
+                  className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-slate-800 text-cyan-300 hover:bg-slate-700 text-[11px]"
+                  title="Insertar enlace a otra nota [[así]]">
+                  <Link2 size={11} /> [[·]]
+                </button>
+                {linkPickerOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setLinkPickerOpen(false)} />
+                    <div className="absolute left-0 top-full mt-1 z-50 w-56 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden max-h-52 overflow-y-auto">
+                      {notes.filter(n => n.id !== noteId).map(n => (
+                        <button key={n.id} onClick={() => insertWikiLink(n)}
+                          className="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-slate-700 truncate">
+                          🔗 {n.title}
+                        </button>
+                      ))}
+                      {notes.length <= 1 && <p className="text-[10px] text-slate-500 p-3">Crea más notas para enlazarlas</p>}
+                    </div>
+                  </>
+                )}
+              </div>
 
               <div className="flex items-center rounded-lg bg-slate-800/70 p-0.5">
                 <button onClick={() => setMode('edit')}
@@ -514,7 +798,9 @@ export default function NotasPage() {
                     prose-headings:text-white prose-a:text-amber-400 prose-code:text-amber-300
                     prose-pre:bg-slate-900 prose-pre:border prose-pre:border-slate-800
                     prose-blockquote:border-amber-600 prose-li:my-0.5">
-                    <ReactMarkdown>{content || '_Nota vacía — cambia a Editar o pulsa Dictar_'}</ReactMarkdown>
+                    <ReactMarkdown components={mdComponents}>
+                      {preprocessObsidian(content) || '_Nota vacía — cambia a Editar o pulsa Dictar_'}
+                    </ReactMarkdown>
                   </article>
                 </div>
               )}
@@ -525,6 +811,7 @@ export default function NotasPage() {
                   spaceId={spaceId}
                   noteTitle={title}
                   onClose={() => setAiOpen(false)}
+                  onInsert={applyAiText}
                 />
               )}
             </div>
