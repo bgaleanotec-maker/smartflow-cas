@@ -37,6 +37,22 @@ class Flow(Base):
         return f"<Flow {self.name[:40]}>"
 
 
+class FlowTask(Base):
+    """Tarea propia del flujo (checklist de prototipado) — no toca proyectos."""
+    __tablename__ = "flow_tasks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    flow_id: Mapped[int] = mapped_column(Integer, ForeignKey("flows.id"), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    responsible_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    participants: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # JSON de user ids
+    is_done: Mapped[bool] = mapped_column(Boolean, default=False)
+    order_index: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    responsible: Mapped[Optional["User"]] = relationship("User", lazy="select")
+
+
 # Forward imports
 from app.models.user import User  # noqa: E402
 from app.models.project import Project  # noqa: E402

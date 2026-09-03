@@ -15,6 +15,8 @@ from app.models.challenge import Challenge, UsageEvent  # noqa: F401
 from app.models.project_doc import ProjectDoc  # noqa: F401
 from app.models.key_date import KeyDate  # noqa: F401
 from app.models.note import Note, NoteSpace  # noqa: F401
+from app.models.comment import WorkComment  # noqa: F401
+from app.models.flow import FlowTask  # noqa: F401
 
 # ── SIMPLIFICACIÓN 2026-07-26 ─────────────────────────────────────────────────
 # Módulos activos: auth, users, projects/tasks/sprints (backlog), activities
@@ -24,7 +26,7 @@ from app.models.note import Note, NoteSpace  # noqa: F401
 # demands, demand_admin, hechos, premisas, ai_assistant, dashboard_builder,
 # lean_pro, ai_chat, business_plan, bp_financial_ai, executive, voice,
 # voice_notes, novedades, incidents, epics/stories.
-from app.routers import auth, users, projects, tasks, admin, pomodoro, activities, reminders, sprints, backup, quick_tasks, flows, challenges, project_docs, cronograma, notes
+from app.routers import auth, users, projects, tasks, admin, pomodoro, activities, reminders, sprints, backup, quick_tasks, flows, challenges, project_docs, cronograma, notes, comments
 from app.routers.dashboard import router as dashboard_router
 
 
@@ -602,6 +604,7 @@ app.include_router(challenges.router, prefix=API_PREFIX)
 app.include_router(project_docs.router, prefix=API_PREFIX)
 app.include_router(cronograma.router, prefix=API_PREFIX)
 app.include_router(notes.router, prefix=API_PREFIX)
+app.include_router(comments.router, prefix=API_PREFIX)
 
 
 # force redeploy 2026-07-26 — SIMPLIFICACIÓN: 6 módulos core (Dashboard gerencial, Mi Espacio, Recurrentes, Tareas Rápidas, Proyectos/Backlog, Flujos BPMN). Datos de módulos retirados conservados en BD.

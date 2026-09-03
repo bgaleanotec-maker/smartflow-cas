@@ -354,6 +354,19 @@ export default function FlowsListPage() {
               {/* Info */}
               <div className="p-4">
                 <h3 className="font-semibold text-white text-sm truncate">{f.name}</h3>
+                {f.progress_pct != null && (
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${f.progress_pct === 100 ? 'bg-emerald-500' : 'bg-cyan-500'}`}
+                        style={{ width: `${f.progress_pct}%` }}
+                      />
+                    </div>
+                    <span className={`text-[10px] font-bold ${f.progress_pct === 100 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                      {f.progress_pct}% · {f.tasks_done}/{f.tasks_total}
+                    </span>
+                  </div>
+                )}
                 {f.description && (
                   <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{f.description}</p>
                 )}

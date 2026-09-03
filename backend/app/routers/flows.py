@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import DB, CurrentUser
-from app.models.flow import Flow
+from app.models.flow import Flow, FlowTask
 
 router = APIRouter(prefix="/flows", tags=["Flujos BPMN"])
 
@@ -95,13 +95,33 @@ async def list_flows(
     project_id: Optional[int] = None,
     include_archived: bool = False,
 ):
+    from sqlalchemy import func as sa_func, cast, Integer as SAInteger
     q = select(Flow).options(*_OPTS).order_by(Flow.updated_at.desc())
     if project_id:
         q = q.where(Flow.project_id == project_id)
     if not include_archived:
         q = q.where(Flow.is_archived == False)  # noqa: E712
     flows = (await db.execute(q)).scalars().all()
-    return [_flow_summary(f) for f in flows]
+
+    # Progreso por flujo: tareas hechas / total
+    counts = {}
+    rows = (await db.execute(
+        select(FlowTask.flow_id, sa_func.count(FlowTask.id),
+               sa_func.sum(cast(FlowTask.is_done, SAInteger)))
+        .group_by(FlowTask.flow_id)
+    )).all()
+    for fid, total, done in rows:
+        counts[fid] = (total or 0, int(done or 0))
+
+    out = []
+    for f in flows:
+        d = _flow_summary(f)
+        total, done = counts.get(f.id, (0, 0))
+        d["tasks_total"] = total
+        d["tasks_done"] = done
+        d["progress_pct"] = round(done / total * 100) if total else None
+        out.append(d)
+    return out
 
 
 @router.post("", status_code=201)
@@ -167,6 +187,106 @@ async def duplicate_flow(flow_id: int, db: DB, current_user: CurrentUser):
     await db.refresh(copy)
     result = await db.execute(select(Flow).options(*_OPTS).where(Flow.id == copy.id))
     return _flow_full(result.scalar_one())
+
+
+# ─── Tareas del flujo (checklist con responsable y % de avance) ──────────────
+
+import json as _json
+
+
+class FlowTaskCreate(BaseModel):
+    title: str
+    responsible_id: Optional[int] = None
+    participants: Optional[list] = None
+
+
+class FlowTaskUpdate(BaseModel):
+    title: Optional[str] = None
+    responsible_id: Optional[int] = None
+    participants: Optional[list] = None
+    is_done: Optional[bool] = None
+    order_index: Optional[int] = None
+
+
+def _ftask(t: FlowTask) -> dict:
+    try:
+        participants = _json.loads(t.participants) if t.participants else []
+    except Exception:
+        participants = []
+    return {
+        "id": t.id,
+        "flow_id": t.flow_id,
+        "title": t.title,
+        "responsible_id": t.responsible_id,
+        "responsible": t.responsible.full_name if t.responsible else None,
+        "participants": participants,
+        "is_done": t.is_done,
+        "order_index": t.order_index,
+    }
+
+
+@router.get("/{flow_id}/tasks")
+async def list_flow_tasks(flow_id: int, db: DB, current_user: CurrentUser):
+    tasks = (await db.execute(
+        select(FlowTask).options(selectinload(FlowTask.responsible))
+        .where(FlowTask.flow_id == flow_id)
+        .order_by(FlowTask.is_done, FlowTask.order_index, FlowTask.id)
+    )).scalars().all()
+    total = len(tasks)
+    done = sum(1 for t in tasks if t.is_done)
+    return {
+        "tasks": [_ftask(t) for t in tasks],
+        "total": total,
+        "done": done,
+        "progress_pct": round(done / total * 100) if total else 0,
+    }
+
+
+@router.post("/{flow_id}/tasks", status_code=201)
+async def create_flow_task(flow_id: int, payload: FlowTaskCreate, db: DB, current_user: CurrentUser):
+    flow = (await db.execute(select(Flow).where(Flow.id == flow_id))).scalar_one_or_none()
+    if not flow:
+        raise HTTPException(404, "Flujo no encontrado")
+    t = FlowTask(
+        flow_id=flow_id,
+        title=payload.title.strip(),
+        responsible_id=payload.responsible_id,
+        participants=_json.dumps(payload.participants) if payload.participants else None,
+    )
+    db.add(t)
+    await db.commit()
+    await db.refresh(t)
+    row = (await db.execute(
+        select(FlowTask).options(selectinload(FlowTask.responsible)).where(FlowTask.id == t.id)
+    )).scalar_one()
+    return _ftask(row)
+
+
+@router.patch("/{flow_id}/tasks/{task_id}")
+async def update_flow_task(flow_id: int, task_id: int, payload: FlowTaskUpdate, db: DB, current_user: CurrentUser):
+    t = (await db.execute(
+        select(FlowTask).options(selectinload(FlowTask.responsible)).where(FlowTask.id == task_id)
+    )).scalar_one_or_none()
+    if not t:
+        raise HTTPException(404, "Tarea de flujo no encontrada")
+    data = payload.model_dump(exclude_unset=True)
+    if "participants" in data:
+        data["participants"] = _json.dumps(data["participants"]) if data["participants"] else None
+    for f, v in data.items():
+        setattr(t, f, v)
+    await db.commit()
+    await db.refresh(t)
+    return _ftask(t)
+
+
+@router.delete("/{flow_id}/tasks/{task_id}")
+async def delete_flow_task(flow_id: int, task_id: int, db: DB, current_user: CurrentUser):
+    t = (await db.execute(select(FlowTask).where(FlowTask.id == task_id))).scalar_one_or_none()
+    if not t:
+        raise HTTPException(404, "Tarea de flujo no encontrada")
+    await db.delete(t)
+    await db.commit()
+    return {"ok": True}
 
 
 @router.delete("/{flow_id}")

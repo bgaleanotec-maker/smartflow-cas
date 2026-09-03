@@ -430,6 +430,11 @@ export const flowsAPI = {
   update: (id, data) => api.patch(`/flows/${id}`, data),
   duplicate: (id) => api.post(`/flows/${id}/duplicate`),
   delete: (id) => api.delete(`/flows/${id}`),
+  // Tareas del flujo (checklist con responsable y % de avance)
+  listTasks: (flowId) => api.get(`/flows/${flowId}/tasks`),
+  createTask: (flowId, data) => api.post(`/flows/${flowId}/tasks`, data),
+  updateTask: (flowId, taskId, data) => api.patch(`/flows/${flowId}/tasks/${taskId}`, data),
+  deleteTask: (flowId, taskId) => api.delete(`/flows/${flowId}/tasks/${taskId}`),
 }
 
 // ─── Voice Notes ──────────────────────────────────────────────────────────────

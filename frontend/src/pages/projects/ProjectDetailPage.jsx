@@ -14,6 +14,7 @@ import {
   epicsAPI, storiesAPI, usersAPI, sprintsAPI
 } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
+import CommentsBox from '../../components/CommentsBox'
 
 // ─── MembersManagerModal — flujo PMO: agregar/quitar participantes ────────────
 function MembersManagerModal({ project, canManage, onClose }) {
@@ -626,6 +627,9 @@ function TaskDetailPanel({ task, statuses, priorities, users, epics, sprints, on
             )}
           </div>
 
+          {/* Comentarios + push al responsable */}
+          <CommentsBox taskId={task.id} />
+
           {/* Subtasks */}
           {totalSubs > 0 && (
             <div>
@@ -692,6 +696,15 @@ function CreateTaskModal({ projectId, onClose, statuses, priorities, users, epic
     story_points: '', due_date: '', estimated_hours: '',
   })
 
+  // Si los catálogos llegan después de abrir el modal, fijar defaults
+  useEffect(() => {
+    setForm(f => ({
+      ...f,
+      status_id: f.status_id || statuses?.[0]?.id || '',
+      priority_id: f.priority_id || priorities?.find(p => p.name === 'Media')?.id || priorities?.[0]?.id || '',
+    }))
+  }, [statuses, priorities])
+
   const mutation = useMutation({
     mutationFn: (data) => tasksAPI.create(data),
     onSuccess: () => {
@@ -699,7 +712,10 @@ function CreateTaskModal({ projectId, onClose, statuses, priorities, users, epic
       toast.success('Tarea creada')
       onClose()
     },
-    onError: () => toast.error('Error al crear tarea'),
+    onError: (err) => {
+      const d = err.response?.data?.detail
+      toast.error(Array.isArray(d) ? d.map(x => x.msg).join(', ') : d || 'Error al crear tarea')
+    },
   })
 
   const handleSubmit = (e) => {
@@ -708,11 +724,14 @@ function CreateTaskModal({ projectId, onClose, statuses, priorities, users, epic
     mutation.mutate({
       ...form,
       project_id: projectId,
+      // '' rompe la validación (Optional[int]) — convertir siempre a número o null
+      status_id: form.status_id ? Number(form.status_id) : null,
+      priority_id: form.priority_id ? Number(form.priority_id) : null,
       story_points: form.story_points ? Number(form.story_points) : null,
       estimated_hours: form.estimated_hours ? Number(form.estimated_hours) : null,
-      assignee_id: form.assignee_id || null,
-      epic_id: form.epic_id || null,
-      sprint_id: form.sprint_id || null,
+      assignee_id: form.assignee_id ? Number(form.assignee_id) : null,
+      epic_id: form.epic_id ? Number(form.epic_id) : null,
+      sprint_id: form.sprint_id ? Number(form.sprint_id) : null,
       due_date: form.due_date || null,
     })
   }
@@ -1050,6 +1069,7 @@ export default function ProjectDetailPage() {
   const [showConfirm, setShowConfirm] = useState(null) // 'delete' | 'archive' | null
   const [showEditProject, setShowEditProject] = useState(false)
   const [showMembers, setShowMembers] = useState(false)
+  const [showComments, setShowComments] = useState(false)
   const [editingEpic, setEditingEpic] = useState(null)
   const [deletingEpicId, setDeletingEpicId] = useState(null)
 
@@ -1227,6 +1247,14 @@ export default function ProjectDetailPage() {
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => setShowComments(true)}
+                className="btn-secondary flex items-center gap-1.5 text-sm"
+                title="Comentarios del proyecto"
+              >
+                <CheckCheck className="w-4 h-4 text-emerald-400" />
+                <span className="hidden sm:inline">💬</span>
+              </button>
               <button
                 onClick={() => navigate(`/projects/${id}/analitica`)}
                 className="btn-secondary flex items-center gap-1.5 text-sm"
@@ -1893,6 +1921,15 @@ export default function ProjectDetailPage() {
           canManage={canManageProject}
           onClose={() => setShowMembers(false)}
         />
+      )}
+
+      {showComments && project && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowComments(false)}>
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
+            <h2 className="font-semibold text-white text-sm mb-3">💬 Comentarios — {project.name}</h2>
+            <CommentsBox projectId={project.id} />
+          </div>
+        </div>
       )}
 
       {showConfirm && (

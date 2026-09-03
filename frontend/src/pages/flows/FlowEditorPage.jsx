@@ -5,10 +5,10 @@ import minimapModule from 'diagram-js-minimap'
 import {
   ArrowLeft, Download, Undo2, Redo2, ZoomIn, ZoomOut, Maximize,
   Check, Loader2, Image as ImageIcon, Trash2, ChevronDown, Palette,
-  Smile, X, Upload,
+  Smile, X, Upload, ListTodo, Plus,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { flowsAPI } from '../../services/api'
+import { flowsAPI, usersAPI } from '../../services/api'
 
 // Estilos de bpmn-js
 import 'bpmn-js/dist/assets/diagram-js.css'
@@ -161,6 +161,50 @@ export default function FlowEditorPage() {
   const [nameEdit, setNameEdit] = useState('')
   const [mediaOpen, setMediaOpen] = useState(false)
   const [recents, setRecents] = useState(loadRecents)
+  // Tareas del flujo (checklist con responsable y % de avance)
+  const [tasksOpen, setTasksOpen] = useState(false)
+  const [flowTasks, setFlowTasks] = useState({ tasks: [], total: 0, done: 0, progress_pct: 0 })
+  const [taskForm, setTaskForm] = useState({ title: '', responsible_id: '' })
+  const [flowUsers, setFlowUsers] = useState([])
+
+  const loadFlowTasks = useCallback(() => {
+    flowsAPI.listTasks(id).then(r => setFlowTasks(r.data)).catch(() => {})
+  }, [id])
+
+  useEffect(() => {
+    loadFlowTasks()
+    usersAPI.list({ is_active: true, limit: 100 }).then(r => {
+      setFlowUsers(Array.isArray(r.data) ? r.data : r.data?.items || [])
+    }).catch(() => {})
+  }, [loadFlowTasks])
+
+  const addFlowTask = async (e) => {
+    e?.preventDefault()
+    if (!taskForm.title.trim()) return
+    try {
+      await flowsAPI.createTask(id, {
+        title: taskForm.title.trim(),
+        responsible_id: taskForm.responsible_id ? parseInt(taskForm.responsible_id) : null,
+      })
+      setTaskForm({ title: '', responsible_id: '' })
+      loadFlowTasks()
+    } catch { toast.error('No se pudo crear la tarea') }
+  }
+
+  const toggleFlowTask = async (t) => {
+    try {
+      await flowsAPI.updateTask(id, t.id, { is_done: !t.is_done })
+      if (!t.is_done) toast.success('✅ Tarea del flujo completada')
+      loadFlowTasks()
+    } catch { toast.error('No se pudo actualizar') }
+  }
+
+  const removeFlowTask = async (t) => {
+    try {
+      await flowsAPI.deleteTask(id, t.id)
+      loadFlowTasks()
+    } catch { toast.error('No se pudo eliminar') }
+  }
 
   // ── Overlays de imagen ──────────────────────────────────────────────────────
   const addImageOverlay = useCallback((elementId, data) => {
@@ -533,6 +577,25 @@ export default function FlowEditorPage() {
           <button onClick={zoomIn} className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-700" title="Acercar"><ZoomIn size={15} /></button>
         </div>
 
+        {/* Tareas del flujo */}
+        <button
+          onClick={() => setTasksOpen(o => !o)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            tasksOpen ? 'bg-emerald-600 text-white' : 'bg-slate-800/70 text-slate-300 hover:bg-slate-700'
+          }`}
+          title="Tareas del flujo con responsables y % de avance"
+        >
+          <ListTodo size={14} />
+          <span className="hidden sm:inline">Tareas</span>
+          {flowTasks.total > 0 && (
+            <span className={`text-[10px] font-bold px-1.5 rounded-full ${
+              flowTasks.progress_pct === 100 ? 'bg-emerald-500/30 text-emerald-200' : 'bg-slate-700 text-slate-300'
+            }`}>
+              {flowTasks.progress_pct}%
+            </span>
+          )}
+        </button>
+
         {/* Multimedia */}
         <button
           onClick={() => setMediaOpen(o => !o)}
@@ -697,6 +760,94 @@ export default function FlowEditorPage() {
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* ── Panel Tareas del flujo ── */}
+        {tasksOpen && !loading && (
+          <div className="absolute top-3 left-3 lg:left-auto lg:right-3 z-30 w-80 bg-slate-900/95 backdrop-blur border border-slate-700 rounded-2xl shadow-2xl p-4 max-h-[75vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-slate-300 uppercase tracking-wide flex items-center gap-1.5">
+                <ListTodo size={13} className="text-emerald-400" /> Tareas del flujo
+              </span>
+              <button onClick={() => setTasksOpen(false)} className="text-slate-500 hover:text-slate-300"><X size={14} /></button>
+            </div>
+
+            {/* Avance */}
+            <div className="mb-3">
+              <div className="flex items-center justify-between text-[11px] mb-1">
+                <span className="text-slate-400">{flowTasks.done}/{flowTasks.total} completadas</span>
+                <span className={`font-bold ${flowTasks.progress_pct === 100 ? 'text-emerald-300' : 'text-white'}`}>
+                  {flowTasks.progress_pct}%
+                </span>
+              </div>
+              <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-700 ${
+                    flowTasks.progress_pct === 100 ? 'bg-emerald-500' : 'bg-gradient-to-r from-cyan-500 to-emerald-400'
+                  }`}
+                  style={{ width: `${flowTasks.progress_pct}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Lista */}
+            <div className="space-y-1.5 mb-3">
+              {flowTasks.tasks.map(t => (
+                <div key={t.id} className={`group flex items-center gap-2 px-2.5 py-2 rounded-xl border ${
+                  t.is_done ? 'bg-emerald-950/25 border-emerald-900/40' : 'bg-slate-800/50 border-slate-700/50'
+                }`}>
+                  <button
+                    onClick={() => toggleFlowTask(t)}
+                    className={`w-4.5 h-4.5 w-[18px] h-[18px] rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                      t.is_done ? 'bg-emerald-600 border-emerald-600' : 'border-slate-600 hover:border-emerald-400'
+                    }`}
+                  >
+                    {t.is_done && <Check size={11} className="text-white" />}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs ${t.is_done ? 'text-slate-500 line-through decoration-emerald-500/50' : 'text-slate-200'}`}>
+                      {t.title}
+                    </p>
+                    {t.responsible && (
+                      <p className="text-[10px] text-cyan-400/80">👤 {t.responsible}</p>
+                    )}
+                  </div>
+                  <button onClick={() => removeFlowTask(t)}
+                    className="text-slate-700 hover:text-red-400 opacity-0 group-hover:opacity-100 flex-shrink-0">
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+              {flowTasks.tasks.length === 0 && (
+                <p className="text-[11px] text-slate-600 text-center py-3">
+                  Agrega las tareas para ejecutar este flujo
+                </p>
+              )}
+            </div>
+
+            {/* Agregar */}
+            <form onSubmit={addFlowTask} className="space-y-1.5">
+              <input
+                value={taskForm.title}
+                onChange={e => setTaskForm(f => ({ ...f, title: e.target.value }))}
+                className="input py-1.5 text-xs" placeholder="Nueva tarea del flujo…"
+              />
+              <div className="flex gap-1.5">
+                <select
+                  value={taskForm.responsible_id}
+                  onChange={e => setTaskForm(f => ({ ...f, responsible_id: e.target.value }))}
+                  className="input py-1.5 text-[11px] flex-1"
+                >
+                  <option value="">Sin responsable</option>
+                  {flowUsers.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                </select>
+                <button type="submit" disabled={!taskForm.title.trim()}
+                  className="px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white">
+                  <Plus size={14} />
+                </button>
+              </div>
+            </form>
           </div>
         )}
 
