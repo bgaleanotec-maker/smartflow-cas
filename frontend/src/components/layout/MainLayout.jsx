@@ -221,6 +221,22 @@ export default function MainLayout() {
     navigate('/login')
   }
 
+  // Actualización forzada: elimina service workers y cachés, y recarga limpio
+  const forceUpdate = async () => {
+    toast('⟳ Buscando la última versión…', { icon: '⟳' })
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations()
+        await Promise.all(regs.map(r => r.unregister()))
+      }
+      if (window.caches?.keys) {
+        const keys = await caches.keys()
+        await Promise.all(keys.map(k => caches.delete(k)))
+      }
+    } catch { /* continuar igual */ }
+    window.location.reload()
+  }
+
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       {/* Logo */}
@@ -315,6 +331,16 @@ export default function MainLayout() {
           <LogOut size={16} />
           {!collapsed && 'Cerrar sesión'}
         </button>
+        {/* Versión del build + actualización forzada (limpia SW y caché) */}
+        {!collapsed && (
+          <button
+            onClick={forceUpdate}
+            className="w-full text-center text-[9px] text-slate-600 hover:text-cyan-400 mt-1 transition-colors"
+            title="Toca para buscar y forzar la última versión"
+          >
+            v{typeof __BUILD_VERSION__ !== 'undefined' ? __BUILD_VERSION__ : 'dev'} · actualizar ⟳
+          </button>
+        )}
       </div>
     </div>
   )

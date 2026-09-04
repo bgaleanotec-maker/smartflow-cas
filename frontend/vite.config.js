@@ -3,6 +3,12 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  define: {
+    // Sello de versión visible en la UI (sidebar) para diagnosticar caché de PWA
+    __BUILD_VERSION__: JSON.stringify(
+      new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
+    ),
+  },
   plugins: [
     react(),
     VitePWA({
